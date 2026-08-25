@@ -1,44 +1,59 @@
-import SkeletonProductGrid from "@/modules/skeletons/templates/skeleton-product-grid"
-import RefinementList from "@/modules/store/components/refinement-list"
-import { SortOptions } from "@/modules/store/components/refinement-list/sort-products"
-import StoreBreadcrumb from "@/modules/store/components/store-breadcrumb"
-import PaginatedProducts from "@/modules/store/templates/paginated-products"
-import { HttpTypes } from "@medusajs/types"
 import { Suspense } from "react"
 
-const StoreTemplate = ({
+import { listCategories } from "@/lib/data/categories"
+import { OptionValueIds } from "@/lib/util/product-option-filters"
+import SkeletonProductGrid from "@/modules/skeletons/templates/skeleton-product-grid"
+import CatalogSidebar from "@/modules/store/components/catalog-sidebar"
+import { SortOptions } from "@/modules/store/components/refinement-list/sort-products"
+
+import PaginatedProducts from "./paginated-products"
+
+const StoreTemplate = async ({
   sortBy,
   page,
   countryCode,
-  categories,
+  optionValueIds,
+  categoryIds,
 }: {
   sortBy?: SortOptions
   page?: string
   countryCode: string
-  categories?: HttpTypes.StoreProductCategory[]
+  optionValueIds?: OptionValueIds
+  categoryIds?: string[]
 }) => {
   const pageNumber = page ? parseInt(page) : 1
   const sort = sortBy || "created_at"
 
+  const categories = await listCategories().catch(() => [])
+  const topLevelCategories = (categories ?? []).filter(
+    (category) => !category.parent_category
+  )
+
   return (
-    <div className="bg-neutral-100">
-      <div
-        className="flex flex-col py-6 content-container gap-4"
-        data-testid="category-container"
-      >
-        <StoreBreadcrumb />
-        <div className="flex flex-col small:flex-row small:items-start gap-3">
-          <RefinementList sortBy={sort} categories={categories} />
-          <div className="w-full">
-            <Suspense fallback={<SkeletonProductGrid />}>
-              <PaginatedProducts
-                sortBy={sort}
-                page={pageNumber}
-                countryCode={countryCode}
-              />
-            </Suspense>
-          </div>
+    <div
+      className="content-container flex flex-col gap-y-6 py-6 small:flex-row small:items-start small:gap-x-8"
+      data-testid="category-container"
+    >
+      <CatalogSidebar
+        categories={topLevelCategories}
+        selectedCategoryIds={categoryIds ?? []}
+      />
+      <div className="w-full">
+        <div className="mb-6 hidden small:block">
+          <h1 className="text-2xl-semi" data-testid="store-page-title">
+            Catálogo de productos
+          </h1>
         </div>
+        <Suspense fallback={<SkeletonProductGrid />}>
+          <PaginatedProducts
+            sortBy={sort}
+            page={pageNumber}
+            countryCode={countryCode}
+            optionValueIds={optionValueIds}
+            categoryIds={categoryIds}
+            categories={topLevelCategories}
+          />
+        </Suspense>
       </div>
     </div>
   )

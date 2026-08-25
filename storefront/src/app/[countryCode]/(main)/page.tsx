@@ -1,3 +1,5 @@
+import { listCollections } from "@/lib/data/collections"
+import { getRegion } from "@/lib/data/regions"
 import { listRegions } from "@/lib/data/regions"
 import FeaturedProducts from "@/modules/home/components/featured-products"
 import Hero from "@/modules/home/components/hero"
@@ -24,6 +26,32 @@ export async function generateStaticParams() {
   return countryCodes.map((countryCode) => ({ countryCode }))
 }
 
+const FeaturedProductsSection = async ({
+  countryCode,
+}: {
+  countryCode: string
+}) => {
+  const region = await getRegion(countryCode)
+
+  const { collections } = await listCollections({
+    fields: "id, handle, title",
+  })
+
+  if (!collections || !region) {
+    return null
+  }
+
+  return (
+    <ul className="flex flex-col gap-x-6">
+      <FeaturedProducts
+        collections={collections}
+        region={region}
+        countryCode={countryCode}
+      />
+    </ul>
+  )
+}
+
 export default async function Home(props: {
   params: Promise<{ countryCode: string }>
 }) {
@@ -35,7 +63,7 @@ export default async function Home(props: {
     <div className="flex flex-col gap-y-2 m-2">
       <Hero />
       <Suspense fallback={<SkeletonFeaturedProducts />}>
-        <FeaturedProducts countryCode={countryCode} />
+        <FeaturedProductsSection countryCode={countryCode} />
       </Suspense>
     </div>
   )

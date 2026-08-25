@@ -37,6 +37,19 @@ const nextConfig = {
         protocol: "https",
         hostname: "github.com",
       },
+      {
+        // Ilustraciones/banners tomados directamente del sitio de
+        // referencia de diseño (ver hero, nav, footer, login).
+        protocol: "https",
+        hostname: "sonrie.youorder.me",
+      },
+      {
+        // Bucket S3 donde viven esas mismas imágenes de referencia (logo,
+        // banners del hero, etc. — ver LOGO_URL en nav/footer/mobile-menu
+        // y SLIDES en modules/home/components/hero).
+        protocol: "https",
+        hostname: "s3.amazonaws.com",
+      },
     ],
   },
 }

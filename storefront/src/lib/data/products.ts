@@ -55,8 +55,11 @@ export const getProductByHandle = async (handle: string, regionId: string) => {
       query: {
         handle,
         region_id: regionId,
+        // *categories y *collection se agregan para el breadcrumb
+        // ("Catálogo > <categoría>") y la "marca" bajo el título de la
+        // ficha de producto (ver modules/products/templates/index.tsx).
         fields:
-          "*variants.calculated_price,+variants.inventory_quantity,+metadata,+tags",
+          "*variants.calculated_price,+variants.inventory_quantity,+metadata,+tags,*categories,*collection",
       },
       headers,
       next,
@@ -139,11 +142,18 @@ export const listProductsWithSort = async ({
   queryParams,
   sortBy = "created_at",
   countryCode,
+  optionValueIds,
 }: {
   page?: number
   queryParams?: HttpTypes.FindParams & HttpTypes.StoreProductParams
   sortBy?: SortOptions
   countryCode: string
+  // Filtro por valor de opción (ej. sabor/formato) usado por el sidebar de
+  // catálogo — ver lib/util/product-option-filters.ts. Se manda como
+  // query param suelto (`option_value_id`) porque StoreProductParams no lo
+  // tipa explícitamente, igual que category_id/id más abajo en
+  // paginated-products.tsx.
+  optionValueIds?: string[]
 }): Promise<{
   response: { products: HttpTypes.StoreProduct[]; count: number }
   nextPage: number | null
@@ -151,14 +161,22 @@ export const listProductsWithSort = async ({
 }> => {
   const limit = queryParams?.limit || 12
 
+  const mergedQueryParams: Record<string, unknown> = {
+    ...queryParams,
+    limit: 100,
+  }
+
+  const optionFilters = Array.from(new Set((optionValueIds || []).filter(Boolean)))
+  if (optionFilters.length) {
+    mergedQueryParams["option_value_id"] = optionFilters
+  }
+
   const {
     response: { products, count },
   } = await listProducts({
     pageParam: 0,
-    queryParams: {
-      ...queryParams,
-      limit: 100,
-    },
+    queryParams: mergedQueryParams as HttpTypes.FindParams &
+      HttpTypes.StoreProductParams,
     countryCode,
   })
 

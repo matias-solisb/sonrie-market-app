@@ -1,15 +1,13 @@
-import { sdk } from "@/lib/config"
-import { getAuthHeaders } from "@/lib/data/cookies"
+import { Metadata } from "next"
+import { notFound } from "next/navigation"
 import { getProductByHandle } from "@/lib/data/products"
 import { getRegion, listRegions } from "@/lib/data/regions"
 import ProductTemplate from "@/modules/products/templates"
-import { Metadata } from "next"
-import { notFound } from "next/navigation"
 
 export const dynamicParams = true
 
 type Props = {
-  params: { countryCode: string; handle: string }
+  params: Promise<{ countryCode: string; handle: string }>
 }
 
 export async function generateStaticParams() {
@@ -22,19 +20,33 @@ export async function generateStaticParams() {
       return []
     }
 
-    const { products } = await sdk.store.product.list(
-      { fields: "handle" },
-      { next: { tags: ["products"] }, ...(await getAuthHeaders()) }
-    )
+    const { listProducts } = await import("@/lib/data/products")
 
-    return countryCodes
-      .map((countryCode) =>
-        products.map((product) => ({
-          countryCode,
+    const promises = countryCodes.map(async (country) => {
+      if (!country) {
+        return { country, products: [] }
+      }
+
+      const { response } = await listProducts({
+        countryCode: country,
+        queryParams: { limit: 100, fields: "handle" },
+      })
+
+      return {
+        country,
+        products: response.products,
+      }
+    })
+
+    const countryProducts = await Promise.all(promises)
+
+    return countryProducts
+      .flatMap((countryData) =>
+        countryData.products.map((product) => ({
+          countryCode: countryData.country,
           handle: product.handle,
         }))
       )
-      .flat()
       .filter((param) => param.handle)
   } catch (error) {
     console.error(
@@ -62,10 +74,10 @@ export async function generateMetadata(props: Props): Promise<Metadata> {
   }
 
   return {
-    title: `${product.title} | Medusa Store`,
+    title: `${product.title} | Sonríe Market`,
     description: `${product.title}`,
     openGraph: {
-      title: `${product.title} | Medusa Store`,
+      title: `${product.title} | Sonríe Market`,
       description: `${product.title}`,
       images: product.thumbnail ? [product.thumbnail] : [],
     },
@@ -81,6 +93,7 @@ export default async function ProductPage(props: Props) {
   }
 
   const pricedProduct = await getProductByHandle(params.handle, region.id)
+
   if (!pricedProduct) {
     notFound()
   }

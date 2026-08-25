@@ -1,15 +1,17 @@
 "use client"
 
-import { clx } from "@medusajs/ui"
+import { clx } from "@/modules/common/components/ui"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 
 export function Pagination({
   page,
   totalPages,
+  className,
   'data-testid': dataTestid
 }: {
   page: number
   totalPages: number
+  className?: string
   'data-testid'?: string
 }) {
   const router = useRouter()
@@ -107,7 +109,7 @@ export function Pagination({
 
   // Render the component
   return (
-    <div className="flex justify-center w-full mt-12">
+    <div className={clx("flex justify-center w-full mt-12", className)}>
       <div className="flex gap-3 items-end" data-testid={dataTestid}>{renderPageButtons()}</div>
     </div>
   )

@@ -1,70 +1,133 @@
 import { login } from "@/lib/data/customer"
 import { LOGIN_VIEW } from "@/modules/account/templates/login-template"
 import ErrorMessage from "@/modules/checkout/components/error-message"
-import { SubmitButton } from "@/modules/checkout/components/submit-button"
-import Button from "@/modules/common/components/button"
-import Input from "@/modules/common/components/input"
-import { Checkbox, Text } from "@medusajs/ui"
-import { useActionState } from "react"
+import Eye from "@/modules/common/icons/eye"
+import EyeOff from "@/modules/common/icons/eye-off"
+import Image from "next/image"
+import { useActionState, useState } from "react"
+import { useFormStatus } from "react-dom"
+
+const LOGO_URL =
+  "https://s3.amazonaws.com/production-clients-images/sonrie.youorder.me/others/LOGO-Sonri%CC%81e-Market%20%28002%29.png"
 
 type Props = {
+  // Ya no hay un link a "registrarse" en este diseño (las cuentas vienen de
+  // YouOrder.me, no de un registro directo en la tienda) — se sigue
+  // recibiendo el setter para mantener la misma interfaz que usa
+  // login-template.tsx, pero no se usa acá.
   setCurrentView: (view: LOGIN_VIEW) => void
 }
 
-const Login = ({ setCurrentView }: Props) => {
+const inputClassName =
+  "h-11 w-full rounded-md border border-ui-border-base px-4 text-base-regular text-ui-fg-base placeholder:text-ui-fg-subtle focus:border-ui-border-interactive focus:outline-none focus:ring-0"
+
+const LoginSubmitButton = () => {
+  const { pending } = useFormStatus()
+
+  return (
+    <button
+      type="submit"
+      disabled={pending}
+      className="mt-6 flex h-11 w-full items-center justify-center rounded-md bg-blue-900 font-semibold text-white hover:bg-blue-800 disabled:opacity-60"
+      data-testid="sign-in-button"
+    >
+      {pending ? "Ingresando..." : "Iniciar sesión"}
+    </button>
+  )
+}
+
+const Login = ({ setCurrentView: _setCurrentView }: Props) => {
   const [message, formAction] = useActionState(login, null)
+  const [showPassword, setShowPassword] = useState(false)
 
   return (
     <div
-      className="max-w-sm w-full h-full flex flex-col justify-center gap-6 my-auto"
+      className="w-full max-w-md rounded-md border border-ui-border-base p-6 sm:p-8"
       data-testid="login-page"
     >
-      <Text className="text-4xl text-neutral-950 text-left">
-        Log in for faster
-        <br />
-        checkout.
-      </Text>
-      <form className="w-full" action={formAction}>
-        <div className="flex flex-col w-full gap-y-2">
-          <Input
-            label="Email"
-            name="email"
+      {/* Todo el contenido visible (logo, textos y campos) queda encerrado
+          en un único <form>, en vez de tener el logo/título/subtítulo fuera
+          y solo los inputs adentro. */}
+      <form className="flex w-full flex-col" action={formAction}>
+        <Image
+          src={LOGO_URL}
+          alt="Sonríe Market"
+          width={320}
+          height={88}
+          className="mx-auto mb-6 h-16 w-auto sm:mb-8 sm:h-24"
+        />
+
+        <h1 className="text-xl-semi text-ui-fg-base sm:text-2xl-semi">
+          Bienvenido a Sonríe Market Store
+        </h1>
+        <p className="mt-3 text-base-regular text-ui-fg-subtle">
+          Utiliza tu cuenta YouOrder.me para acceder al catálogo de Sonríe
+          Market Store.
+        </p>
+
+        {message?.state === "verification_required" && (
+          <div
+            className="mt-6 w-full rounded-md border border-ui-border-base bg-ui-bg-subtle p-4 text-center text-base-regular text-ui-fg-base"
+            data-testid="login-verification-message"
+          >
+            Te enviamos un link de verificación a{" "}
+            <strong>{message.email}</strong>. Verifica tu correo y luego
+            inicia sesión.
+          </div>
+        )}
+
+        <div className="mt-6 flex flex-col gap-y-3">
+          <input
             type="email"
-            title="Enter a valid email address."
+            name="email"
+            placeholder="Correo"
+            title="Ingresa un correo válido."
             autoComplete="email"
             required
+            className={inputClassName}
             data-testid="email-input"
           />
-          <Input
-            label="Password"
-            name="password"
-            type="password"
-            autoComplete="current-password"
-            required
-            data-testid="password-input"
-          />
-          <div className="flex flex-col gap-2 w-full border-b border-neutral-200 my-6" />
-          <div className="flex items-center gap-2">
-            <Checkbox name="remember_me" data-testid="remember-me-checkbox" />
-            <Text className="text-neutral-950 text-base-regular">
-              Remember me
-            </Text>
+          <div className="relative">
+            <input
+              type={showPassword ? "text" : "password"}
+              name="password"
+              placeholder="Contraseña"
+              autoComplete="current-password"
+              required
+              className={`${inputClassName} pr-11`}
+              data-testid="password-input"
+            />
+            <button
+              type="button"
+              onClick={() => setShowPassword((prev) => !prev)}
+              aria-label={
+                showPassword ? "Ocultar contraseña" : "Mostrar contraseña"
+              }
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-ui-fg-subtle hover:text-ui-fg-base"
+            >
+              {showPassword ? <Eye /> : <EyeOff />}
+            </button>
           </div>
         </div>
-        <ErrorMessage error={message} data-testid="login-error-message" />
-        <div className="flex flex-col gap-2">
-          <SubmitButton data-testid="sign-in-button" className="w-full mt-6">
-            Log in
-          </SubmitButton>
-          <Button
-            variant="secondary"
-            onClick={() => setCurrentView(LOGIN_VIEW.REGISTER)}
-            className="w-full h-10"
-            data-testid="register-button"
+
+        <div className="mt-3 text-right">
+          {/* TODO: no existe todavía un flujo de "olvidé mi contraseña" —
+              placeholder hasta que se construya esa página. */}
+          <a
+            href="#"
+            className="text-small-regular text-blue-900 hover:underline"
+            data-testid="forgot-password-link"
           >
-            Register
-          </Button>
+            ¿Olvidaste la contraseña?
+          </a>
         </div>
+
+        <ErrorMessage
+          error={message?.state === "error" ? message.error : null}
+          data-testid="login-error-message"
+        />
+
+        <LoginSubmitButton />
       </form>
     </div>
   )

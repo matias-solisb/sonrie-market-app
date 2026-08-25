@@ -1,159 +1,176 @@
-import { listCategories } from "@/lib/data/categories"
-import { listCollections } from "@/lib/data/collections"
-import { Text, clx } from "@medusajs/ui"
+import { ChevronDown } from "@medusajs/icons"
+import Image from "next/image"
 
+import { retrieveCustomer } from "@/lib/data/customer"
 import LocalizedClientLink from "@/modules/common/components/localized-client-link"
-import MedusaCTA from "@/modules/layout/components/medusa-cta"
 
-export default async function Footer() {
-  const { collections } = await listCollections({
-    offset: "0",
-    limit: "6",
-  })
-  const product_categories = await listCategories({
-    offset: 0,
-    limit: 6,
-  })
+const LOGO_URL =
+  "https://s3.amazonaws.com/production-clients-images/sonrie.youorder.me/others/LOGO-Sonri%CC%81e-Market%20%28002%29.png"
+
+type FooterLink = {
+  label: string
+  href: string
+}
+
+type FooterColumn = {
+  title: string
+  links: FooterLink[]
+}
+
+// TODO: several of these links don't have a real page yet (Pagos, Nuevos
+// Productos, Destacados, Contacto, Preguntas Frecuentes, Condiciones de
+// Despacho, Terminos y Condiciones). They point to "#" as a placeholder
+// until those routes exist — swap in the real href once they're built.
+const ACCOUNT_COLUMN: FooterColumn = {
+  title: "Cuenta",
+  links: [
+    { label: "Mis Datos", href: "/account/profile" },
+    { label: "Carrito de Compra", href: "/cart" },
+    { label: "Mis pedidos", href: "/account/orders" },
+  ],
+}
+
+const OTHER_COLUMNS: FooterColumn[] = [
+  {
+    title: "Enlaces útiles",
+    links: [
+      { label: "Pagos", href: "#" },
+      { label: "Ofertas", href: "/products" },
+      { label: "Nuevos Productos", href: "#" },
+      { label: "Destacados", href: "#" },
+    ],
+  },
+  {
+    title: "Centro de ayuda",
+    links: [
+      { label: "Contacto", href: "#" },
+      { label: "Preguntas Frecuentes", href: "#" },
+      { label: "Condiciones de Despacho", href: "#" },
+      { label: "Terminos y Condiciones", href: "#" },
+    ],
+  },
+]
+
+const FooterLinkItem = ({ label, href }: FooterLink) => {
+  if (href.startsWith("/")) {
+    return (
+      <LocalizedClientLink href={href} className="hover:text-ui-fg-base">
+        {label}
+      </LocalizedClientLink>
+    )
+  }
 
   return (
-    <footer className="border-t border-ui-border-base w-full">
+    <a href={href} className="hover:text-ui-fg-base">
+      {label}
+    </a>
+  )
+}
+
+// Todas las columnas, en el orden fijo que define la posición en el grid de
+// escritorio (Cuenta siempre es la primera). Sin sesión, la columna Cuenta
+// se oculta pero "Enlaces útiles" y "Centro de ayuda" deben quedarse en su
+// misma posición — no correrse un puesto a la izquierda.
+const ALL_COLUMNS = [ACCOUNT_COLUMN, ...OTHER_COLUMNS]
+
+export default async function Footer() {
+  // La columna "Cuenta" (Mis Datos, Carrito, Mis pedidos) solo tiene sentido
+  // si hay una sesión activa — sin login no hay datos, ni pedidos, y el
+  // carrito sigue siendo accesible desde el ícono del header.
+  const customer = await retrieveCustomer().catch(() => null)
+
+  return (
+    <footer className="bg-gray-50 border-t border-ui-border-base w-full">
       <div className="content-container flex flex-col w-full">
-        <div className="flex flex-col gap-y-6 xsmall:flex-row items-start justify-between py-40">
+        {/* Desktop / tablet layout: logo on the left, columns on the right */}
+        <div className="hidden small:flex items-start justify-between py-20 xsmall:py-28">
           <div>
             <LocalizedClientLink
               href="/"
-              className="txt-compact-xlarge-plus text-ui-fg-subtle hover:text-ui-fg-base uppercase"
+              className="flex items-center shrink-0"
+              data-testid="footer-store-link"
             >
-              Medusa Store
+              <Image
+                src={LOGO_URL}
+                alt="Sonríe Market"
+                width={220}
+                height={60}
+                className="h-14 w-auto"
+              />
             </LocalizedClientLink>
           </div>
-          <div className="text-small-regular gap-10 md:gap-x-16 grid grid-cols-2 sm:grid-cols-3">
-            {product_categories && product_categories?.length > 0 && (
-              <div className="flex flex-col gap-y-2">
-                <span className="txt-small-plus txt-ui-fg-base">
-                  Categories
-                </span>
-                <ul
-                  className="grid grid-cols-1 gap-2"
-                  data-testid="footer-categories"
-                >
-                  {product_categories?.slice(0, 6).map((c) => {
-                    if (c.parent_category) {
-                      return
-                    }
+          <div className="text-large-regular gap-x-20 gap-y-10 grid grid-cols-2 sm:grid-cols-3">
+            {ALL_COLUMNS.map((column) => {
+              // Sin sesión, la columna "Cuenta" se oculta pero sigue
+              // ocupando su celda del grid (div vacío) para que las otras
+              // dos columnas no se corran de posición.
+              if (column === ACCOUNT_COLUMN && !customer) {
+                return <div key={column.title} aria-hidden="true" />
+              }
 
-                    const children =
-                      c.category_children?.map((child) => ({
-                        name: child.name,
-                        handle: child.handle,
-                        id: child.id,
-                      })) || null
-
-                    return (
-                      <li
-                        className="flex flex-col gap-2 text-ui-fg-subtle txt-small"
-                        key={c.id}
-                      >
-                        <LocalizedClientLink
-                          className={clx(
-                            "hover:text-ui-fg-base",
-                            children && "txt-small-plus"
-                          )}
-                          href={`/categories/${c.handle}`}
-                          data-testid="category-link"
-                        >
-                          {c.name}
-                        </LocalizedClientLink>
-                        {children && (
-                          <ul className="grid grid-cols-1 ml-3 gap-2">
-                            {children &&
-                              children.map((child) => (
-                                <li key={child.id}>
-                                  <LocalizedClientLink
-                                    className="hover:text-ui-fg-base"
-                                    href={`/categories/${child.handle}`}
-                                    data-testid="category-link"
-                                  >
-                                    {child.name}
-                                  </LocalizedClientLink>
-                                </li>
-                              ))}
-                          </ul>
-                        )}
+              return (
+                <div key={column.title} className="flex flex-col gap-y-5">
+                  <span className="text-large-semi uppercase text-ui-fg-base">
+                    {column.title}
+                  </span>
+                  <ul
+                    className="grid grid-cols-1 gap-4 text-ui-fg-subtle text-large-regular"
+                    data-testid={`footer-column-${column.title}`}
+                  >
+                    {column.links.map((link) => (
+                      <li key={link.label}>
+                        <FooterLinkItem {...link} />
                       </li>
-                    )
-                  })}
-                </ul>
-              </div>
-            )}
-            {collections && collections.length > 0 && (
-              <div className="flex flex-col gap-y-2">
-                <span className="txt-small-plus txt-ui-fg-base">
-                  Collections
-                </span>
-                <ul
-                  className={clx(
-                    "grid grid-cols-1 gap-2 text-ui-fg-subtle txt-small",
-                    {
-                      "grid-cols-2": (collections?.length || 0) > 3,
-                    }
-                  )}
-                >
-                  {collections?.slice(0, 6).map((c) => (
-                    <li key={c.id}>
-                      <LocalizedClientLink
-                        className="hover:text-ui-fg-base"
-                        href={`/collections/${c.handle}`}
-                      >
-                        {c.title}
-                      </LocalizedClientLink>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-            <div className="flex flex-col gap-y-2">
-              <span className="txt-small-plus txt-ui-fg-base">Medusa</span>
-              <ul className="grid grid-cols-1 gap-y-2 text-ui-fg-subtle txt-small">
-                <li>
-                  <a
-                    href="https://github.com/medusajs"
-                    target="_blank"
-                    rel="noreferrer"
-                    className="hover:text-ui-fg-base"
-                  >
-                    GitHub
-                  </a>
-                </li>
-                <li>
-                  <a
-                    href="https://docs.medusajs.com"
-                    target="_blank"
-                    rel="noreferrer"
-                    className="hover:text-ui-fg-base"
-                  >
-                    Documentation
-                  </a>
-                </li>
-                <li>
-                  <a
-                    href="https://github.com/medusajs/b2b-starter-medusa"
-                    target="_blank"
-                    rel="noreferrer"
-                    className="hover:text-ui-fg-base"
-                  >
-                    Source code
-                  </a>
-                </li>
-              </ul>
-            </div>
+                    ))}
+                  </ul>
+                </div>
+              )
+            })}
           </div>
         </div>
-        <div className="flex w-full mb-16 justify-between text-ui-fg-muted">
-          <Text className="txt-compact-small">
-            © {new Date().getFullYear()} Medusa Store. All rights reserved.
-          </Text>
-          <MedusaCTA />
+
+        {/* Mobile layout: collapsible accordion per column, logo at the bottom */}
+        <div className="small:hidden">
+          {ALL_COLUMNS.filter(
+            (column) => column !== ACCOUNT_COLUMN || customer
+          ).map((column) => (
+            <details
+              key={column.title}
+              className="group border-b border-ui-border-base"
+            >
+              <summary className="flex items-center justify-between py-4 cursor-pointer list-none marker:hidden [&::-webkit-details-marker]:hidden">
+                <span className="text-base-regular text-ui-fg-base">
+                  {column.title}
+                </span>
+                <ChevronDown className="shrink-0 transition-transform duration-200 group-open:rotate-180" />
+              </summary>
+              <ul
+                className="flex flex-col gap-y-4 pb-4 text-ui-fg-subtle text-base-regular"
+                data-testid={`footer-column-mobile-${column.title}`}
+              >
+                {column.links.map((link) => (
+                  <li key={link.label}>
+                    <FooterLinkItem {...link} />
+                  </li>
+                ))}
+              </ul>
+            </details>
+          ))}
+          <div className="py-6">
+            <LocalizedClientLink
+              href="/"
+              className="flex items-center shrink-0"
+              data-testid="footer-store-link-mobile"
+            >
+              <Image
+                src={LOGO_URL}
+                alt="Sonríe Market"
+                width={160}
+                height={44}
+                className="h-9 w-auto"
+              />
+            </LocalizedClientLink>
+          </div>
         </div>
       </div>
     </footer>
