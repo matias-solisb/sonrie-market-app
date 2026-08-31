@@ -132,6 +132,15 @@ export async function signup(_currentState: unknown, formData: FormData) {
   }
 }
 
+// Evita open redirects: solo se sigue una ruta interna que empiece con "/"
+// (y no "//", que el navegador puede interpretar como otro host).
+function getSafeRedirect(value: FormDataEntryValue | null): string | null {
+  if (typeof value !== "string" || !value) return null
+  if (!value.startsWith("/") || value.startsWith("//")) return null
+  if (value.includes("://")) return null
+  return value
+}
+
 export async function login(_currentState: unknown, formData: FormData) {
   const email = formData.get("email") as string
   const password = formData.get("password") as string
@@ -168,13 +177,33 @@ export async function login(_currentState: unknown, formData: FormData) {
         revalidateTag(cartsCacheTag)
       })
   } catch (error: any) {
-    return error.toString()
+    // No mostramos el MedusaError crudo ("MedusaError: Invalid email or
+    // password") en pantalla: es texto interno en inglés. Si es un error de
+    // credenciales lo traducimos a un mensaje claro; cualquier otra falla
+    // (backend caído, red, etc.) muestra un mensaje genérico.
+    const rawMessage = (error?.message ?? error?.toString() ?? "").toLowerCase()
+
+    if (rawMessage.includes("invalid email or password")) {
+      return "Correo o contraseña incorrectos. Verifica tus datos e intenta de nuevo."
+    }
+
+    return "No pudimos iniciar tu sesión. Intenta nuevamente en unos minutos."
   }
 
   try {
     await transferCart()
   } catch (error: any) {
     return error.toString()
+  }
+
+  // Si el middleware nos mandó acá por falta de sesión (home o catálogo
+  // protegidos), volvemos a la página que se quería visitar. Va fuera de
+  // los try/catch de arriba: redirect() lanza NEXT_REDIRECT y no debe ser
+  // capturado como si fuera un error de login.
+  const redirectTo = getSafeRedirect(formData.get("redirect_to"))
+
+  if (redirectTo) {
+    redirect(redirectTo)
   }
 }
 

@@ -16,10 +16,20 @@ type Props = {
   // recibiendo el setter para mantener la misma interfaz que usa
   // login-template.tsx, pero no se usa acá.
   setCurrentView: (view: LOGIN_VIEW) => void
+  // Ruta a la que volver tras loguearse (viene del middleware cuando
+  // redirige por falta de sesión). Se manda como input oculto y se lee en
+  // el server action `login` (src/lib/data/customer.ts).
+  redirectTo?: string
 }
 
-const inputClassName =
-  "h-11 w-full rounded-md border border-ui-border-base px-4 text-base-regular text-ui-fg-base placeholder:text-ui-fg-subtle focus:border-ui-border-interactive focus:outline-none focus:ring-0"
+// El borde/color cambian a rojo cuando `login` devolvió un error, para que
+// el campo se vea igual que un error de validación (borde + texto en rojo).
+const getInputClassName = (hasError: boolean) =>
+  `h-11 w-full rounded-md border px-4 text-base-regular text-ui-fg-base placeholder:text-ui-fg-subtle focus:outline-none focus:ring-0 ${
+    hasError
+      ? "border-rose-500 focus:border-rose-500"
+      : "border-ui-border-base focus:border-ui-border-interactive"
+  }`
 
 const LoginSubmitButton = () => {
   const { pending } = useFormStatus()
@@ -36,9 +46,14 @@ const LoginSubmitButton = () => {
   )
 }
 
-const Login = ({ setCurrentView: _setCurrentView }: Props) => {
+const Login = ({ setCurrentView: _setCurrentView, redirectTo }: Props) => {
   const [message, formAction] = useActionState(login, null)
   const [showPassword, setShowPassword] = useState(false)
+
+  // `message` es el string de error que devuelve el server action `login`
+  // (src/lib/data/customer.ts) cuando falla, o null/undefined si no hubo
+  // intento o si fue exitoso (ahí ya se hizo redirect en el server).
+  const hasError = Boolean(message)
 
   return (
     <div
@@ -49,6 +64,9 @@ const Login = ({ setCurrentView: _setCurrentView }: Props) => {
           en un único <form>, en vez de tener el logo/título/subtítulo fuera
           y solo los inputs adentro. */}
       <form className="flex w-full flex-col" action={formAction}>
+        {redirectTo && (
+          <input type="hidden" name="redirect_to" value={redirectTo} />
+        )}
         <Image
           src={LOGO_URL}
           alt="Sonríe Market"
@@ -65,17 +83,6 @@ const Login = ({ setCurrentView: _setCurrentView }: Props) => {
           Market Store.
         </p>
 
-        {message?.state === "verification_required" && (
-          <div
-            className="mt-6 w-full rounded-md border border-ui-border-base bg-ui-bg-subtle p-4 text-center text-base-regular text-ui-fg-base"
-            data-testid="login-verification-message"
-          >
-            Te enviamos un link de verificación a{" "}
-            <strong>{message.email}</strong>. Verifica tu correo y luego
-            inicia sesión.
-          </div>
-        )}
-
         <div className="mt-6 flex flex-col gap-y-3">
           <input
             type="email"
@@ -84,7 +91,7 @@ const Login = ({ setCurrentView: _setCurrentView }: Props) => {
             title="Ingresa un correo válido."
             autoComplete="email"
             required
-            className={inputClassName}
+            className={getInputClassName(hasError)}
             data-testid="email-input"
           />
           <div className="relative">
@@ -94,7 +101,7 @@ const Login = ({ setCurrentView: _setCurrentView }: Props) => {
               placeholder="Contraseña"
               autoComplete="current-password"
               required
-              className={`${inputClassName} pr-11`}
+              className={`${getInputClassName(hasError)} pr-11`}
               data-testid="password-input"
             />
             <button
@@ -122,10 +129,7 @@ const Login = ({ setCurrentView: _setCurrentView }: Props) => {
           </a>
         </div>
 
-        <ErrorMessage
-          error={message?.state === "error" ? message.error : null}
-          data-testid="login-error-message"
-        />
+        <ErrorMessage error={message} data-testid="login-error-message" />
 
         <LoginSubmitButton />
       </form>

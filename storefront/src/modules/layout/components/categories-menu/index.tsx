@@ -57,7 +57,7 @@ const CategoriesMenu = ({
                   className="border-b border-gray-100 last:border-b-0"
                 >
                   <LocalizedClientLink
-                    href={`/categories/${category.handle}`}
+                    href={`/products?category_id=${category.id}`}
                     className="block px-4 py-3 text-sm hover:bg-gray-50"
                   >
                     {category.name}

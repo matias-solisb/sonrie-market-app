@@ -81,7 +81,7 @@ const ImageOrPlaceholder = ({
     <Image
       src={image}
       alt="Thumbnail"
-      className={clx("absolute inset-0 object-cover object-center", {
+      className={clx("absolute inset-0 object-contain object-center", {
         "p-4": type === "full",
         "p-2": type === "preview",
       })}

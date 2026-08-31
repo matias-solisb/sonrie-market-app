@@ -99,6 +99,13 @@ export async function NavigationHeader() {
         )}
       </header>
 
+      {/* Franja roja de marca: mismo lugar que ocupa la barra de categorías
+          de abajo (bloque siguiente), pero para visitantes sin sesión. Un
+          bloque completo que aparece/desaparece, no un texto que se oculta. */}
+      {!customer && (
+        <div className="h-2 w-full" style={{ backgroundColor: BRAND_RED }} />
+      )}
+
       {customer && topLevelCategories.length > 0 && (
         <div
           className="hidden small:block"

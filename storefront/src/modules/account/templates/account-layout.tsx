@@ -27,12 +27,22 @@ const AccountLayout: React.FC<AccountLayoutProps> = async ({
     )
   }
 
-  const { carts_with_approvals } = await listApprovals({
-    type: ApprovalType.ADMIN,
-    status: ApprovalStatusType.PENDING,
-  })
-
-  const numPendingApprovals = carts_with_approvals?.length || 0
+  // El endpoint de aprobaciones "admin" (type: ADMIN) el backend lo rechaza
+  // con 403 si el cliente logueado no es admin de su empresa — y AccountNav
+  // ya solo muestra el link/badge de Approvals cuando
+  // customer.employee?.is_admin es true. Antes se pedía este listado para
+  // cualquier cliente logueado y, al no estar en un try/catch, un cliente
+  // no-admin (403) tiraba abajo toda la página del dashboard. Ahora: solo
+  // se pide si es admin, y de todos modos queda cubierto por si el
+  // endpoint falla por otra razón (backend caído, etc.).
+  const numPendingApprovals = customer.employee?.is_admin
+    ? await listApprovals({
+        type: ApprovalType.ADMIN,
+        status: ApprovalStatusType.PENDING,
+      })
+        .then(({ carts_with_approvals }) => carts_with_approvals?.length || 0)
+        .catch(() => 0)
+    : 0
 
   return (
     <div className="flex-1 small:py-12" data-testid="account-page">

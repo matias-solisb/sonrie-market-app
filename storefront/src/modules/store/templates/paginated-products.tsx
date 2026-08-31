@@ -8,6 +8,7 @@ import { Pagination } from "@/modules/store/components/pagination"
 import MobileFilters from "@/modules/store/components/mobile-filters"
 import SelectedCategoryBadges from "@/modules/store/components/selected-category-badges"
 import { SortOptions } from "@/modules/store/components/refinement-list/sort-products"
+import EmptyProductsState from "@/modules/store/components/empty-products-state"
 
 const PRODUCT_LIMIT = 12
 
@@ -22,6 +23,7 @@ type PaginatedProductsParams = {
   category_id?: string[]
   id?: string[]
   order?: string
+  q?: string
 }
 
 export default async function PaginatedProducts({
@@ -34,6 +36,7 @@ export default async function PaginatedProducts({
   countryCode,
   optionValueIds,
   categories,
+  q,
 }: {
   sortBy?: SortOptions
   page: number
@@ -43,6 +46,7 @@ export default async function PaginatedProducts({
   productsIds?: string[]
   countryCode: string
   optionValueIds?: OptionValueIds
+  q?: string
   // Categorías para el botón "Filtros" que se muestra solo en mobile (ver
   // mobile-filters) y para los badges de categoría seleccionada — en
   // desktop el filtro de categorías vive en el sidebar fijo
@@ -73,6 +77,10 @@ export default async function PaginatedProducts({
 
   if (sortBy === "created_at") {
     queryParams["order"] = "created_at"
+  }
+
+  if (q) {
+    queryParams["q"] = q
   }
 
   const [region, cart] = await Promise.all([
@@ -132,50 +140,56 @@ export default async function PaginatedProducts({
         />
       </div>
 
-      {totalPages > 1 && (
-        <div className="small:hidden">
-          <Pagination
-            data-testid="product-pagination-mobile"
-            page={page}
-            totalPages={totalPages}
-            className="mt-0 mb-6"
-          />
-        </div>
-      )}
-
-      <ul
-        className="grid grid-cols-2 w-full small:grid-cols-3 medium:grid-cols-4 gap-x-6 gap-y-8"
-        data-testid="products-list"
-      >
-        {products.map((p, index) => {
-          const defaultVariantId = p.variants?.[0]?.id
-          const cartItem = defaultVariantId
-            ? cartItemByVariantId.get(defaultVariantId)
-            : undefined
-
-          return (
-            <li key={p.id}>
-              <ProductPreview
-                product={p}
-                region={region}
-                countryCode={countryCode}
-                destacado={index % 3 === 0}
-                multiplier={DEMO_MULTIPLIERS[index % DEMO_MULTIPLIERS.length]}
-                cartQuantity={cartItem?.quantity}
-                cartLineItemId={cartItem?.id}
+      {count === 0 ? (
+        <EmptyProductsState />
+      ) : (
+        <>
+          {totalPages > 1 && (
+            <div className="small:hidden">
+              <Pagination
+                data-testid="product-pagination-mobile"
+                page={page}
+                totalPages={totalPages}
+                className="mt-0 mb-6"
               />
-            </li>
-          )
-        })}
-      </ul>
-      {totalPages > 1 && (
-        <div className="hidden small:block">
-          <Pagination
-            data-testid="product-pagination"
-            page={page}
-            totalPages={totalPages}
-          />
-        </div>
+            </div>
+          )}
+
+          <ul
+            className="grid grid-cols-2 w-full small:grid-cols-3 medium:grid-cols-4 gap-x-6 gap-y-8"
+            data-testid="products-list"
+          >
+            {products.map((p, index) => {
+              const defaultVariantId = p.variants?.[0]?.id
+              const cartItem = defaultVariantId
+                ? cartItemByVariantId.get(defaultVariantId)
+                : undefined
+
+              return (
+                <li key={p.id}>
+                  <ProductPreview
+                    product={p}
+                    region={region}
+                    countryCode={countryCode}
+                    destacado={index % 3 === 0}
+                    multiplier={DEMO_MULTIPLIERS[index % DEMO_MULTIPLIERS.length]}
+                    cartQuantity={cartItem?.quantity}
+                    cartLineItemId={cartItem?.id}
+                  />
+                </li>
+              )
+            })}
+          </ul>
+          {totalPages > 1 && (
+            <div className="hidden small:block">
+              <Pagination
+                data-testid="product-pagination"
+                page={page}
+                totalPages={totalPages}
+              />
+            </div>
+          )}
+        </>
       )}
     </>
   )

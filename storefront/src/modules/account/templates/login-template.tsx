@@ -14,10 +14,14 @@ export enum LOGIN_VIEW {
 // El registro propio (Register) se retiró de este flujo: las cuentas de
 // Sonríe Market no se crean desde la tienda (vienen del alta SAP / módulo
 // rut-auth), así que ya no hay una vista alternativa a la que cambiar acá.
-const LoginTemplate = () => {
+type Props = {
+  redirectTo?: string
+}
+
+const LoginTemplate = ({ redirectTo }: Props) => {
   return (
     <div className="flex w-full justify-center px-4 py-10 sm:px-8 sm:py-14">
-      <Login setCurrentView={() => {}} />
+      <Login setCurrentView={() => {}} redirectTo={redirectTo} />
     </div>
   )
 }

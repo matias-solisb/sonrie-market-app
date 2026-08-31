@@ -5,6 +5,15 @@ const BACKEND_URL = process.env.NEXT_PUBLIC_MEDUSA_BACKEND_URL
 const PUBLISHABLE_API_KEY = process.env.NEXT_PUBLIC_MEDUSA_PUBLISHABLE_KEY
 const DEFAULT_REGION = process.env.NEXT_PUBLIC_DEFAULT_REGION || "us"
 
+// Cookie que setea el login (ver src/lib/data/cookies.ts -> setAuthToken).
+const AUTH_COOKIE_NAME = "_medusa_jwt"
+
+// Sonríe Market es un canal B2B cerrado: sin sesión no se navega el home
+// ni el catálogo (listado, categorías, colecciones, fichas de producto).
+// El match es sobre el path SIN el prefijo de countryCode.
+const PROTECTED_PATH_REGEX =
+  /^\/?$|^\/(products|categories|collections|store)(\/.*)?$/
+
 const regionMapCache = {
   regionMap: new Map<string, HttpTypes.StoreRegion>(),
   regionMapUpdated: Date.now(),
@@ -130,8 +139,35 @@ export async function middleware(request: NextRequest) {
     countryCode && request.nextUrl.pathname.split("/")[1].includes(countryCode)
 
   // check if one of the country codes is in the url
-  if (urlHasCountryCode && (!cartId || cartIdCookie) && cacheIdCookie) {
-    return NextResponse.next()
+  if (urlHasCountryCode) {
+    const pathnameWithoutCountry =
+      "/" + request.nextUrl.pathname.split("/").slice(2).join("/")
+
+    const isProtectedPath = PROTECTED_PATH_REGEX.test(pathnameWithoutCountry)
+    const isAuthenticated = Boolean(
+      request.cookies.get(AUTH_COOKIE_NAME)?.value
+    )
+
+    // Sin sesión y pidiendo una ruta protegida: se corta acá, antes del
+    // atajo de más abajo (que si no, dejaría pasar cualquier request que ya
+    // tuviera las cookies de región/cache seteadas, sin chequear sesión).
+    if (isProtectedPath && !isAuthenticated) {
+      const countryFromUrl = request.nextUrl.pathname.split("/")[1]
+      const loginUrl = new URL(
+        `/${countryFromUrl}/account`,
+        request.nextUrl.origin
+      )
+      loginUrl.searchParams.set(
+        "redirect_to",
+        `${request.nextUrl.pathname}${request.nextUrl.search}`
+      )
+
+      return NextResponse.redirect(loginUrl, 307)
+    }
+
+    if ((!cartId || cartIdCookie) && cacheIdCookie) {
+      return NextResponse.next()
+    }
   }
 
   // check if the url is a static asset
