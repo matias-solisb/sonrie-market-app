@@ -12117,42 +12117,6 @@ __metadata:
   languageName: node
   linkType: hard
 
-"medusa-b2b-starter@workspace:.":
-  version: 0.0.0-use.local
-  resolution: "medusa-b2b-starter@workspace:."
-  dependencies:
-    "@medusajs/admin-sdk": "npm:2.8.4"
-    "@medusajs/cli": "npm:2.8.4"
-    "@medusajs/framework": "npm:2.8.4"
-    "@medusajs/js-sdk": "npm:2.8.4"
-    "@medusajs/medusa": "npm:2.8.4"
-    "@medusajs/test-utils": "npm:2.8.4"
-    "@medusajs/ui": "npm:4.0.14"
-    "@medusajs/ui-preset": "npm:2.8.4"
-    "@mikro-orm/cli": "npm:6.4.3"
-    "@mikro-orm/core": "npm:6.4.3"
-    "@mikro-orm/knex": "npm:6.4.3"
-    "@mikro-orm/migrations": "npm:6.4.3"
-    "@mikro-orm/postgresql": "npm:6.4.3"
-    "@swc/core": "npm:^1.5.7"
-    "@swc/jest": "npm:^0.2.36"
-    "@types/jest": "npm:^29.5.14"
-    "@types/node": "npm:^20.0.0"
-    "@types/react": "npm:^18.3.2"
-    "@types/react-dom": "npm:^18.2.25"
-    awilix: "npm:^8.0.1"
-    jest: "npm:^29.7.0"
-    pg: "npm:^8.13.0"
-    prop-types: "npm:^15.8.1"
-    react: "npm:^18.2.0"
-    react-dom: "npm:^18.2.0"
-    ts-node: "npm:^10.9.2"
-    typescript: "npm:^5.5.3"
-    vite: "npm:^5.2.11"
-    zod: "npm:3.22.4"
-  languageName: unknown
-  linkType: soft
-
 "merge-descriptors@npm:1.0.3":
   version: 1.0.3
   resolution: "merge-descriptors@npm:1.0.3"
@@ -14498,6 +14462,42 @@ __metadata:
   checksum: 10c0/2856a43c1afaacec5ca74c7f6bb8eb439edf1fdadb045bd201590f809e6e9b711eabcf7d1e8f3448cf414e1333d97e3e16372a989011a3190f20952947b1f60a
   languageName: node
   linkType: hard
+
+"sonrie-market-app@workspace:.":
+  version: 0.0.0-use.local
+  resolution: "sonrie-market-app@workspace:."
+  dependencies:
+    "@medusajs/admin-sdk": "npm:2.8.4"
+    "@medusajs/cli": "npm:2.8.4"
+    "@medusajs/framework": "npm:2.8.4"
+    "@medusajs/js-sdk": "npm:2.8.4"
+    "@medusajs/medusa": "npm:2.8.4"
+    "@medusajs/test-utils": "npm:2.8.4"
+    "@medusajs/ui": "npm:4.0.14"
+    "@medusajs/ui-preset": "npm:2.8.4"
+    "@mikro-orm/cli": "npm:6.4.3"
+    "@mikro-orm/core": "npm:6.4.3"
+    "@mikro-orm/knex": "npm:6.4.3"
+    "@mikro-orm/migrations": "npm:6.4.3"
+    "@mikro-orm/postgresql": "npm:6.4.3"
+    "@swc/core": "npm:^1.5.7"
+    "@swc/jest": "npm:^0.2.36"
+    "@types/jest": "npm:^29.5.14"
+    "@types/node": "npm:^20.0.0"
+    "@types/react": "npm:^18.3.2"
+    "@types/react-dom": "npm:^18.2.25"
+    awilix: "npm:^8.0.1"
+    jest: "npm:^29.7.0"
+    pg: "npm:^8.13.0"
+    prop-types: "npm:^15.8.1"
+    react: "npm:^18.2.0"
+    react-dom: "npm:^18.2.0"
+    ts-node: "npm:^10.9.2"
+    typescript: "npm:^5.5.3"
+    vite: "npm:^5.2.11"
+    zod: "npm:3.22.4"
+  languageName: unknown
+  linkType: soft
 
 "sorted-array-functions@npm:^1.3.0":
   version: 1.3.0
