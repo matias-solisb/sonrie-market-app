@@ -1,12 +1,14 @@
 "use client"
 
 import { useCart } from "@/lib/context/cart-context"
+import { convertToLocale } from "@/lib/util/money"
 import AddNoteButton from "@/modules/cart/components/add-note-button"
 import DeleteButton from "@/modules/common/components/delete-button"
 import LineItemPrice from "@/modules/common/components/line-item-price"
 import LocalizedClientLink from "@/modules/common/components/localized-client-link"
 import Spinner from "@/modules/common/icons/spinner"
 import Thumbnail from "@/modules/products/components/thumbnail"
+import { MinusMini, PlusMini } from "@medusajs/icons"
 import { HttpTypes } from "@medusajs/types"
 import { clx, Container, Input } from "@medusajs/ui"
 import { startTransition, useEffect, useState } from "react"
@@ -88,10 +90,18 @@ const ItemFull = ({
 
   return (
     <Container
-      className={clx("flex gap-4 w-full h-full items-center justify-between", {
-        "shadow-none": !showBorders,
-      })}
+      className={clx(
+        "relative flex gap-4 w-full h-full items-center justify-between border border-gray-200",
+        {
+          "shadow-none border-transparent": !showBorders,
+        }
+      )}
     >
+      <DeleteButton
+        id={item.id}
+        disabled={disabled}
+        className="absolute top-3 right-3"
+      />
       <div className="flex gap-x-4 items-start">
         <LocalizedClientLink href={`/products/${item.product_handle}`}>
           <Thumbnail
@@ -119,24 +129,29 @@ const ItemFull = ({
               currencyCode={currencyCode}
             />
             <div className="flex gap-x-2">
-              <div className="flex gap-x-3 shadow-[0_0_0_1px_rgba(0,0,0,0.1)] rounded-full w-fit p-px items-center">
+              <div
+                className="flex h-10 w-64 items-stretch overflow-hidden rounded-md border border-ui-border-base"
+                data-testid="cart-item-quantity"
+              >
                 <button
+                  type="button"
                   className={clx(
-                    "w-4 h-4 flex items-center justify-center text-neutral-600 hover:bg-neutral-100 rounded-full text-md",
+                    "flex w-10 shrink-0 items-center justify-center bg-blue-900 text-white hover:bg-blue-800",
                     disabled ? "opacity-50 pointer-events-none" : "opacity-100"
                   )}
+                  aria-label="Quitar una unidad"
                   onClick={() => changeQuantity(item.quantity - 1)}
                   disabled={item.quantity <= 1 || disabled}
                 >
-                  -
+                  <MinusMini />
                 </button>
-                <span className="w-4 h-4 flex items-center justify-center text-neutral-950 text-xs">
+                <span className="flex flex-1 items-center justify-center text-base-regular text-ui-fg-base">
                   {updating ? (
-                    <Spinner size="12" />
+                    <Spinner size="16" />
                   ) : (
                     <Input
                       className={clx(
-                        "w-10 h-4 flex items-center justify-center text-center text-neutral-950 text-xs [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none bg-transparent shadow-none",
+                        "h-full w-full flex items-center justify-center text-center text-ui-fg-base text-base-regular border-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none bg-transparent shadow-none",
                         disabled
                           ? "opacity-50 pointer-events-none"
                           : "opacity-100"
@@ -155,18 +170,18 @@ const ItemFull = ({
                   )}
                 </span>
                 <button
+                  type="button"
                   className={clx(
-                    "w-4 h-4 flex items-center justify-center text-neutral-600 hover:bg-neutral-100 rounded-full text-md",
+                    "flex w-10 shrink-0 items-center justify-center bg-blue-900 text-white hover:bg-blue-800",
                     disabled ? "opacity-50 pointer-events-none" : "opacity-100"
                   )}
+                  aria-label="Agregar una unidad"
                   onClick={() => changeQuantity(item.quantity + 1)}
                   disabled={item.quantity >= maxQuantity || disabled}
                 >
-                  +
+                  <PlusMini />
                 </button>
               </div>
-
-              <DeleteButton id={item.id} disabled={disabled} />
             </div>
             <AddNoteButton
               item={item as HttpTypes.StoreCartLineItem}
@@ -175,13 +190,23 @@ const ItemFull = ({
           </div>
         </div>
       </div>
-      <div className="flex flex-col items-start justify-between min-h-full self-stretch">
-        <LineItemPrice
-          className="hidden small:flex"
-          item={item}
-          currencyCode={currencyCode}
-          style="default"
-        />
+      <div className="hidden small:flex flex-col items-end justify-center min-h-full self-stretch text-right">
+        <span className="text-base-regular text-neutral-950">
+          <span className="font-semibold">
+            {convertToLocale({
+              amount: item.total,
+              currency_code: currencyCode,
+            })}
+          </span>{" "}
+          <span className="text-xs font-normal text-neutral-500">/ Total</span>
+        </span>
+        <span className="text-xs text-neutral-500">
+          {convertToLocale({
+            amount: item.unit_price,
+            currency_code: currencyCode,
+          })}
+          /Pack
+        </span>
       </div>
     </Container>
   )

@@ -47,7 +47,7 @@ const AddNoteButton = ({
 
   return (
     <div className="relative w-fit flex items-center justify-center">
-      {!note && !isOpen && (
+      {/* {!note && !isOpen && (
         <button
           className={clx(
             "text-neutral-950 text-xs shadow-[0_0_0_1px_rgba(0,0,0,0.1)] rounded-full px-2 py-1 w-fit min-w-20 h-6 flex items-center justify-center hover:bg-neutral-100 transition-all duration-300",
@@ -59,7 +59,7 @@ const AddNoteButton = ({
         >
           Add note
         </button>
-      )}
+      )} */}
       {note?.length > 0 && (
         <span
           className={clx(

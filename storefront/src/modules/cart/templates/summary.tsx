@@ -4,9 +4,8 @@ import { useCart } from "@/lib/context/cart-context"
 import { getCheckoutStep } from "@/lib/util/get-checkout-step"
 import CartToCsvButton from "@/modules/cart/components/cart-to-csv-button"
 import CartTotals from "@/modules/cart/components/cart-totals"
+import OrderNotes from "@/modules/cart/components/order-notes"
 import PromotionCode from "@/modules/checkout/components/promotion-code"
-import Button from "@/modules/common/components/button"
-import Divider from "@/modules/common/components/divider"
 import LocalizedClientLink from "@/modules/common/components/localized-client-link"
 import { RequestQuoteConfirmation } from "@/modules/quotes/components/request-quote-confirmation"
 import { RequestQuotePrompt } from "@/modules/quotes/components/request-quote-prompt"
@@ -14,6 +13,7 @@ import { B2BCustomer } from "@/types"
 import { ApprovalStatusType } from "@/types/approval"
 import { ExclamationCircle } from "@medusajs/icons"
 import { Container } from "@medusajs/ui"
+import { clx } from "@/modules/common/components/ui"
 
 type SummaryProps = {
   customer: B2BCustomer | null
@@ -36,12 +36,21 @@ const Summary = ({ customer, spendLimitExceeded }: SummaryProps) => {
     (approval) => approval?.status === ApprovalStatusType.PENDING
   )
 
+  const isCartEmpty = !cart?.items?.length
+  const isCheckoutDisabled = spendLimitExceeded || isCartEmpty
+
   return (
-    <Container className="flex flex-col gap-y-3">
-      <CartTotals />
-      <Divider />
-      <PromotionCode cart={cart} />
-      <Divider className="my-6" />
+    <div className="flex flex-col gap-y-4">
+      <Container className="flex flex-col gap-y-3">
+        <CartTotals />
+      </Container>
+
+      {/* <PromotionCode cart={cart} /> */}
+
+      <Container>
+        <OrderNotes cart={cart} />
+      </Container>
+
       {spendLimitExceeded && (
         <div className="flex items-center gap-x-2 bg-neutral-100 p-3 rounded-md shadow-borders-base">
           <ExclamationCircle className="text-orange-500 w-fit overflow-visible" />
@@ -56,49 +65,24 @@ const Summary = ({ customer, spendLimitExceeded }: SummaryProps) => {
         href={checkoutButtonLink}
         data-testid="checkout-button"
       >
-        <Button
-          className="w-full h-10 rounded-full shadow-none"
-          disabled={spendLimitExceeded}
+        <button
+          type="button"
+          disabled={isCheckoutDisabled}
+          className={clx(
+            "w-full h-11 rounded-xl text-sm font-bold transition-colors",
+            isCheckoutDisabled
+              ? "bg-neutral-200 text-neutral-400 pointer-events-none"
+              : "bg-blue-900 text-white hover:bg-blue-800"
+          )}
         >
           {customer
             ? spendLimitExceeded
               ? "Spending Limit Exceeded"
-              : "Checkout"
+              : "Confirmar pedido"
             : "Log in to Checkout"}
-        </Button>
+        </button>
       </LocalizedClientLink>
-      {!!customer && (
-        <RequestQuoteConfirmation>
-          <Button
-            className="w-full h-10 rounded-full shadow-borders-base"
-            variant="secondary"
-            disabled={isPendingApproval}
-          >
-            Request Quote
-          </Button>
-        </RequestQuoteConfirmation>
-      )}
-      {!customer && (
-        <RequestQuotePrompt>
-          <Button
-            className="w-full h-10 rounded-full shadow-borders-base"
-            variant="secondary"
-            disabled={isPendingApproval}
-          >
-            Request Quote
-          </Button>
-        </RequestQuotePrompt>
-      )}
-      <CartToCsvButton cart={cart} />
-      <Button
-        onClick={handleEmptyCart}
-        className="w-full h-10 rounded-full shadow-borders-base"
-        variant="secondary"
-        disabled={isPendingApproval}
-      >
-        Empty Cart
-      </Button>
-    </Container>
+    </div>
   )
 }
 

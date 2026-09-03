@@ -1,4 +1,5 @@
 import { useCart } from "@/lib/context/cart-context"
+import { Trash } from "@medusajs/icons"
 import { clx } from "@medusajs/ui"
 import Spinner from "@/modules/common/icons/spinner"
 import { useState } from "react"
@@ -22,23 +23,20 @@ const DeleteButton = ({
   }
 
   return (
-    <div
+    <button
+      type="button"
       className={clx(
-        "flex items-center justify-between text-small-regular",
+        "flex items-center justify-center text-orange-500 hover:text-orange-600 cursor-pointer",
+        disabled ? "opacity-50 pointer-events-none" : "opacity-100",
         className
       )}
+      onClick={() => handleDelete(id)}
+      disabled={disabled}
+      aria-label="Eliminar producto"
+      data-testid="cart-item-remove-button"
     >
-      <button
-        className={clx(
-          "text-neutral-950 text-xs shadow-[0_0_0_1px_rgba(0,0,0,0.1)] rounded-full px-2 py-1 hover:bg-neutral-100 min-w-20 flex items-center justify-center",
-          disabled ? "opacity-50 pointer-events-none" : "opacity-100"
-        )}
-        onClick={() => handleDelete(id)}
-        disabled={disabled}
-      >
-        {isDeleting ? <Spinner size={12} /> : "Remove"}
-      </button>
-    </div>
+      {isDeleting ? <Spinner size={16} /> : <Trash />}
+    </button>
   )
 }
 

@@ -1,9 +1,8 @@
+import { useCart } from "@/lib/context/cart-context"
 import { getCartApprovalStatus } from "@/lib/util/get-cart-approval-status"
-import { convertToLocale } from "@/lib/util/money"
 import ItemFull from "@/modules/cart/components/item-full"
 import { B2BCart } from "@/types/global"
 import { StoreCartLineItem } from "@medusajs/types"
-import { Container, Text } from "@medusajs/ui"
 import { useMemo } from "react"
 
 type ItemsTemplateProps = {
@@ -29,9 +28,38 @@ const ItemsTemplate = ({
   const isPendingApproval =
     isPendingAdminApproval || isPendingSalesManagerApproval
 
+  const { handleEmptyCart } = useCart()
+
+  const handleRemoveAll = () => {
+    if (window.confirm("¿Eliminar todos los productos del carrito?")) {
+      handleEmptyCart()
+    }
+  }
+
   return (
-    <div className="w-full flex flex-col gap-y-2">
-      <div className="flex flex-col gap-y-2 w-full">
+    <div
+      className="w-full bg-white border border-gray-200 rounded-xl p-5"
+      data-testid="cart-items-container"
+    >
+      <div className="flex items-center justify-between pb-4 mb-4 border-b border-gray-200">
+        <h2 className="text-base font-semibold text-neutral-950">
+          Mi carrito
+        </h2>
+        <div className="flex items-center gap-x-4">
+          <span className="text-sm text-neutral-950">
+            {totalQuantity} Productos
+          </span>
+          <button
+            type="button"
+            onClick={handleRemoveAll}
+            className="text-sm font-medium text-orange-500 border border-orange-300 rounded-md px-3 py-1.5 hover:bg-orange-50"
+            data-testid="empty-cart-button"
+          >
+            Eliminar todos
+          </button>
+        </div>
+      </div>
+      <div className="flex flex-col gap-y-3 w-full">
         {items &&
           items.map((item: StoreCartLineItem) => {
             return (
@@ -49,19 +77,6 @@ const ItemsTemplate = ({
             )
           })}
       </div>
-      {showTotal && (
-        <Container>
-          <div className="flex items-start justify-between h-full self-stretch">
-            <Text>Total: {totalQuantity} items</Text>
-            <Text>
-              {convertToLocale({
-                amount: cart?.item_total,
-                currency_code: cart?.currency_code,
-              })}
-            </Text>
-          </div>
-        </Container>
-      )}
     </div>
   )
 }
