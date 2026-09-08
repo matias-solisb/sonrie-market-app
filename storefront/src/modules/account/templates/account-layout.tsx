@@ -1,7 +1,4 @@
-import { listApprovals } from "@/lib/data/approvals"
-import AccountNav from "@/modules/account/components/account-nav"
 import { B2BCustomer } from "@/types"
-import { ApprovalStatusType, ApprovalType } from "@/types/approval"
 import React from "react"
 
 interface AccountLayoutProps {
@@ -9,13 +6,28 @@ interface AccountLayoutProps {
   children: React.ReactNode
 }
 
+/*
+
+Sin sidebar de navegación: la única navegación entre secciones de la
+cuenta es el dropdown `AccountMenu` del header (Perfil/Pedidos/Documentos),
+igual que en el sitio de referencia (sonrie.youorder.me). Antes acá vivía
+`AccountNav` en una grilla 240px/1fr — se sacó a pedido explícito (no
+mostrar ningún menú a la izquierda), así que el contenido ahora ocupa todo
+el ancho disponible tanto con sesión como sin ella.
+
+Nota: esto deja sin ningún link de navegación visible a las páginas
+Company/Addresses/Quotes/Approvals del B2B Starter original (antes solo
+alcanzables desde AccountNav) — siguen existiendo y son alcanzables por
+URL directa, pero no aparecen en ningún menú. Si en algún momento se
+vuelven a necesitar desde la UI, hay que agregarlas a `AccountMenu` o a
+algún otro punto de navegación.
+
+*/
+
 const AccountLayout: React.FC<AccountLayoutProps> = async ({
   customer,
   children,
 }) => {
-  // Sin sesión (vista de login): nada de sidebar de navegación — se centra
-  // el contenido en toda la pantalla en vez de vivir apretado en la
-  // columna derecha de la grilla del dashboard.
   if (!customer) {
     return (
       <div
@@ -27,35 +39,15 @@ const AccountLayout: React.FC<AccountLayoutProps> = async ({
     )
   }
 
-  // El endpoint de aprobaciones "admin" (type: ADMIN) el backend lo rechaza
-  // con 403 si el cliente logueado no es admin de su empresa — y AccountNav
-  // ya solo muestra el link/badge de Approvals cuando
-  // customer.employee?.is_admin es true. Antes se pedía este listado para
-  // cualquier cliente logueado y, al no estar en un try/catch, un cliente
-  // no-admin (403) tiraba abajo toda la página del dashboard. Ahora: solo
-  // se pide si es admin, y de todos modos queda cubierto por si el
-  // endpoint falla por otra razón (backend caído, etc.).
-  const numPendingApprovals = customer.employee?.is_admin
-    ? await listApprovals({
-        type: ApprovalType.ADMIN,
-        status: ApprovalStatusType.PENDING,
-      })
-        .then(({ carts_with_approvals }) => carts_with_approvals?.length || 0)
-        .catch(() => 0)
-    : 0
-
   return (
-    <div className="flex-1 small:py-12" data-testid="account-page">
-      <div className="flex-1 content-container h-full max-w-5xl mx-auto bg-white flex flex-col">
-        <div className="grid grid-cols-1 small:grid-cols-[240px_1fr] py-12">
-          <div>
-            <AccountNav
-              customer={customer}
-              numPendingApprovals={numPendingApprovals}
-            />
-          </div>
-          <div className="flex-1">{children}</div>
-        </div>
+    // Espacio entre el header del sitio y el contenido de la cuenta: antes
+    // se sumaba `small:py-12` (afuera) + `py-12` (adentro) = 96px en
+    // desktop. Quedó en un solo valor acá — para acercar o alejar "Mis
+    // datos" del header, es este `py-6 small:py-8` el que hay que tocar
+    // (py-6 = 24px en mobile, py-8 = 32px desde 1024px).
+    <div className="flex-1" data-testid="account-page">
+      <div className="flex-1 content-container h-full max-w-5xl mx-auto bg-white flex flex-col py-6 small:py-8">
+        {children}
       </div>
     </div>
   )

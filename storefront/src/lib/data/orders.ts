@@ -50,7 +50,7 @@ export const listOrders = async (
         offset,
         order: "-created_at",
         fields:
-          "*items,+items.metadata,*items.variant,*items.product,*customer",
+          "*items,+items.metadata,*items.variant,*items.product,*customer,*shipping_address,*fulfillments",
         ...filters,
       },
       headers,
@@ -58,5 +58,42 @@ export const listOrders = async (
       cache: "force-cache",
     })
     .then(({ orders }) => orders)
+    .catch((err) => medusaError(err))
+}
+
+// Igual que `listOrders`, pero además devuelve `count` — lo necesita la
+// tabla de "Mis pedidos" (`OrdersTable`) para su paginación. Se deja como
+// función aparte en vez de cambiar la forma del retorno de `listOrders`
+// para no romper a sus otros llamadores (`account/@dashboard/page.tsx`,
+// `employee-wrapper.tsx`), que ya esperan un arreglo plano.
+export const listOrdersWithCount = async (
+  limit: number = 10,
+  offset: number = 0,
+  filters?: Record<string, any>
+) => {
+  const headers = {
+    ...(await getAuthHeaders()),
+  }
+
+  const next = {
+    ...(await getCacheOptions("orders")),
+  }
+
+  return sdk.client
+    .fetch<HttpTypes.StoreOrderListResponse>(`/store/orders`, {
+      method: "GET",
+      query: {
+        limit,
+        offset,
+        order: "-created_at",
+        fields:
+          "*items,+items.metadata,*items.variant,*items.product,*customer,*shipping_address,*fulfillments",
+        ...filters,
+      },
+      headers,
+      next,
+      cache: "force-cache",
+    })
+    .then(({ orders, count }) => ({ orders, count }))
     .catch((err) => medusaError(err))
 }

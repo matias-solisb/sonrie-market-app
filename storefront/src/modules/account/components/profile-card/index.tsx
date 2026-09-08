@@ -3,14 +3,129 @@
 import { updateCustomer } from "@/lib/data/customer"
 import Button from "@/modules/common/components/button"
 import Input from "@/modules/common/components/input"
+import LocalizedClientLink from "@/modules/common/components/localized-client-link"
+import Eye from "@/modules/common/icons/eye"
+import EyeOff from "@/modules/common/icons/eye-off"
 import { B2BCustomer } from "@/types/global"
 import { HttpTypes } from "@medusajs/types"
-import { Container, Text, clx, toast } from "@medusajs/ui"
-import { useState } from "react"
+import { Checkbox, Container, Text, clx, toast } from "@medusajs/ui"
+import { useState, type ReactNode } from "react"
+
+/*
+
+Card "Mis datos". El título "Mis datos" y el link "Editar Datos" van
+FUERA del recuadro blanco (`Container`) — viven en este mismo componente
+para poder togglear `isEditing`, pero se renderizan como hermanos del
+`Container`, no dentro de él, para que queden por fuera visualmente
+(según la referencia).
+
+Nombre/Apellido/Teléfono siguen editables vía `updateCustomer`. Dirección
+e "ID del comercio" son de solo lectura (ver comentario más abajo).
+Contraseña y Notificaciones antes vivían en un `SecurityCard` aparte con
+su propio recuadro — se fusionaron acá, como secciones del mismo card, que
+es como las muestra la referencia.
+
+Los separadores entre secciones (Dirección/Contraseña/Notificaciones, y el
+bloque de datos de arriba) NO son un `border-b` de ancho completo — son un
+div de 1px propio (`h-px bg-neutral-200`) con margen derecho (`mr-10`)
+para que la línea quede corta y no toque el borde derecho del recuadro,
+tal como pide la referencia. Se pone como último hijo de cada sección (no
+como borde del contenedor) para que además participe de la misma
+animación de colapso que el resto del contenido de esa sección.
+
+- "Cambiar contraseña" ahora sí abre un formulario real (contraseña
+  actual / nueva / repetir, con el mismo `Input` que ya usan
+  Nombre/Apellido/Teléfono, que además ya trae el ícono de mostrar/ocultar
+  para `type="password"`). Lo que NO tiene todavía es una acción real de
+  guardado: no existe un flujo para confirmar la contraseña actual contra
+  el provider de auth `emailpass` de Medusa ni para actualizarla, así que
+  "Guardar contraseña" valida en el cliente (campos completos, nueva =
+  repetida) y después muestra un aviso de que el guardado real falta por
+  construir, en vez de fingir que se guardó.
+- "Notificaciones": no existe ningún campo de preferencia de
+  notificaciones en el customer hoy — el checkbox es solo visual
+  (estado local, no se guarda) hasta que exista dónde persistirlo.
+
+*/
+
+// Ancho del margen derecho de los separadores cortos — tocar este único
+// valor cambia el largo de TODAS las líneas divisorias de la card.
+//
+// Hay dos variantes porque el punto de partida (izquierda) depende de si
+// el divisor vive DENTRO de un contenedor que ya tiene `p-6` (grids de
+// "Nombre/Email/..." — ahí el padding del contenedor ya lo alinea con el
+// texto, no hace falta márgen izquierdo) o si vive como hermano directo de
+// `Container` (que tiene `p-0`) — ahí sin `ml-6` el divisor arrancaría 24px
+// más a la izquierda que el texto de las secciones (Dirección/Contraseña/
+// Notificaciones), pegado al borde real de la card.
+const DIVIDER_CLASS = "h-px bg-neutral-200 mr-10"
+const DIVIDER_CLASS_STANDALONE = "h-px bg-neutral-200 ml-6 mr-10"
+
+// Campo de Contraseña con su propio estilo — mismo patrón "label arriba +
+// cajita abajo" que ya usa el selector de Dirección en el carro
+// (`cart/components/delivery-options/index.tsx`: label `text-xs
+// text-neutral-500`, separados por `gap-y-1.5`, caja `rounded-md border
+// border-gray-200 bg-white h-11`). No usa el `Input` compartido de
+// `common/components/input` porque ese trae `rounded-full` fijo (no se
+// puede pisar solo con className, misma prioridad en el CSS generado por
+// Tailwind) y además dibuja el label flotando encima del borde, que fue
+// justo lo que se veía mal acá — este patrón es más simple: el label
+// nunca se mueve, siempre está arriba de la caja.
+const PASSWORD_LABEL_CLASS = "text-xs text-neutral-500"
+const PASSWORD_INPUT_CLASS =
+  "w-full appearance-none rounded-md border border-gray-200 bg-white h-11 pl-3 pr-9 text-sm text-neutral-950 outline-none hover:border-gray-300"
+
+const PasswordField = ({
+  label,
+  name,
+  value,
+  onChange,
+}: {
+  label: string
+  name: string
+  value: string
+  onChange: (value: string) => void
+}) => {
+  const [visible, setVisible] = useState(false)
+
+  return (
+    <div className="flex flex-col gap-y-1.5 w-full small:max-w-xs">
+      <label htmlFor={name} className={PASSWORD_LABEL_CLASS}>
+        {label}
+      </label>
+      <div className="relative">
+        <input
+          id={name}
+          type={visible ? "text" : "password"}
+          name={name}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          className={PASSWORD_INPUT_CLASS}
+        />
+        <button
+          type="button"
+          onClick={() => setVisible((v) => !v)}
+          className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-500"
+        >
+          {visible ? <Eye size="18" /> : <EyeOff size="18" />}
+        </button>
+      </div>
+    </div>
+  )
+}
 
 const ProfileCard = ({ customer }: { customer: B2BCustomer }) => {
   const [isEditing, setIsEditing] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
+  const [receiveEmailNotifications, setReceiveEmailNotifications] =
+    useState(true)
+
+  const [isChangingPassword, setIsChangingPassword] = useState(false)
+  const [passwordForm, setPasswordForm] = useState({
+    current: "",
+    next: "",
+    repeat: "",
+  })
 
   const { first_name, last_name, phone } = customer
 
@@ -31,14 +146,76 @@ const ProfileCard = ({ customer }: { customer: B2BCustomer }) => {
     toast.success("Customer updated")
   }
 
+  const closePasswordForm = () => {
+    setIsChangingPassword(false)
+    setPasswordForm({ current: "", next: "", repeat: "" })
+  }
+
+  const handleSavePassword = () => {
+    if (!passwordForm.current || !passwordForm.next || !passwordForm.repeat) {
+      toast.error("Completa los tres campos.")
+      return
+    }
+
+    if (passwordForm.next !== passwordForm.repeat) {
+      toast.error("La nueva contraseña y su repetición no coinciden.")
+      return
+    }
+
+    // TODO: acá falta el flujo real (confirmar `passwordForm.current`
+    // contra el provider `emailpass` y actualizar la contraseña vía
+    // Medusa Auth). Por ahora solo se avisa que falta construirse, en vez
+    // de simular un guardado que no ocurrió.
+    toast.info("Cambiar la contraseña todavía no está implementado.")
+    closePasswordForm()
+  }
+
+  const defaultAddress =
+    customer.addresses?.find((a) => a.is_default_shipping) ||
+    customer.addresses?.[0]
+
+  const addressLines = defaultAddress
+    ? [
+        [defaultAddress.address_1, defaultAddress.address_2]
+          .filter(Boolean)
+          .join(" "),
+        [defaultAddress.city, defaultAddress.province]
+          .filter(Boolean)
+          .join(", "),
+      ].filter(Boolean)
+    : []
+
+  const companyId = customer.employee?.company?.id
+
+  const Label = ({ children }: { children: ReactNode }) => (
+    <Text size="large" className="font-semibold text-blue-900">
+      {children}
+    </Text>
+  )
+
   return (
     <div className="h-fit">
+      <div className="flex items-center gap-x-4 mb-4">
+        <Text className="text-2xl font-bold text-neutral-950">
+          Mis datos
+        </Text>
+        {!isEditing && (
+          <button
+            type="button"
+            className="text-base font-bold hover:underline underline-offset-2"
+            onClick={() => setIsEditing(true)}
+          >
+            Editar Datos
+          </button>
+        )}
+      </div>
+
       <Container className="p-0 overflow-hidden">
         <form
           className={clx(
-            "grid grid-cols-2 gap-4 border-b border-neutral-200 overflow-hidden transition-all duration-300 ease-in-out",
+            "grid grid-cols-1 small:grid-cols-2 gap-6 overflow-hidden transition-all duration-300 ease-in-out",
             {
-              "max-h-[244px] opacity-100 p-4": isEditing,
+              "max-h-[640px] small:max-h-[460px] opacity-100 p-6": isEditing,
               "max-h-0 opacity-0": !isEditing,
             }
           )}
@@ -50,7 +227,7 @@ const ProfileCard = ({ customer }: { customer: B2BCustomer }) => {
           }}
         >
           <div className="flex flex-col gap-y-2">
-            <Text className="font-medium text-neutral-950">First Name</Text>
+            <Label>Nombre</Label>
             <Input
               label="First Name"
               name="first_name"
@@ -64,7 +241,7 @@ const ProfileCard = ({ customer }: { customer: B2BCustomer }) => {
             />
           </div>
           <div className="flex flex-col gap-y-2">
-            <Text className="font-medium text-neutral-950">Last Name</Text>
+            <Label>Apellido</Label>
             <Input
               label="Last Name"
               name="last_name"
@@ -78,11 +255,7 @@ const ProfileCard = ({ customer }: { customer: B2BCustomer }) => {
             />
           </div>
           <div className="flex flex-col gap-y-2">
-            <Text className="font-medium text-neutral-950">Email</Text>
-            <Text className=" text-neutral-500">{customer.email}</Text>
-          </div>
-          <div className="flex flex-col gap-y-2">
-            <Text className="font-medium text-neutral-950">Phone</Text>
+            <Label>Teléfono</Label>
             <Input
               label="Phone"
               name="phone"
@@ -92,37 +265,58 @@ const ProfileCard = ({ customer }: { customer: B2BCustomer }) => {
               }
             />
           </div>
+          <div className="flex flex-col gap-y-2">
+            <Label>Email</Label>
+            <Text className="text-neutral-950">{customer.email}</Text>
+          </div>
+          <div className="flex flex-col gap-y-2 small:col-span-2">
+            <Label>ID del comercio</Label>
+            <Text className="text-neutral-950">{companyId || "—"}</Text>
+          </div>
+          <div className="small:col-span-2">
+            <div className={DIVIDER_CLASS} />
+          </div>
         </form>
+
         <div
           className={clx(
-            "grid grid-cols-2 gap-4 border-b border-neutral-200 transition-all duration-300 ease-in-out",
+            "grid grid-cols-1 small:grid-cols-2 gap-x-10 gap-y-6 transition-all duration-300 ease-in-out",
             {
               "opacity-0 max-h-0": isEditing,
-              "opacity-100 max-h-[214px] p-4": !isEditing,
+              "opacity-100 max-h-[600px] small:max-h-[380px] p-6": !isEditing,
             }
           )}
         >
-          <div className="flex flex-col gap-y-2">
-            <Text className="font-medium text-neutral-950">First Name</Text>
-            <Text className=" text-neutral-500">{customer.first_name}</Text>
+          <div className="flex flex-col gap-y-1">
+            <Label>Nombre</Label>
+            <Text size="large" className="text-neutral-950">
+              {[customer.first_name, customer.last_name]
+                .filter(Boolean)
+                .join(" ") || "—"}
+            </Text>
           </div>
-          <div className="flex flex-col gap-y-2">
-            <Text className="font-medium text-neutral-950">Last Name</Text>
-            <Text className=" text-neutral-500">{customer.last_name}</Text>
+          <div className="hidden small:block" />
+          <div className="flex flex-col gap-y-1">
+            <Label>Teléfono</Label>
+            <Text size="large" className="text-neutral-950">{customer.phone || "—"}</Text>
           </div>
-          <div className="flex flex-col gap-y-2">
-            <Text className="font-medium text-neutral-950">Email</Text>
-            <Text className=" text-neutral-500">{customer.email}</Text>
+          <div className="flex flex-col gap-y-1">
+            <Label>Email</Label>
+            <Text size="large" className="text-neutral-950">{customer.email}</Text>
           </div>
-          <div className="flex flex-col gap-y-2">
-            <Text className="font-medium text-neutral-950">Phone</Text>
-            <Text className=" text-neutral-500">{customer.phone}</Text>
+          <div className="flex flex-col gap-y-1">
+            <Label>ID del comercio</Label>
+            <Text size="large" className="text-neutral-950">{companyId || "—"}</Text>
+          </div>
+          <div className="hidden small:block" />
+          <div className="small:col-span-2">
+            <div className={DIVIDER_CLASS} />
           </div>
         </div>
 
-        <div className="flex items-center justify-end gap-2 bg-neutral-50 p-4">
-          {isEditing ? (
-            <>
+        {isEditing && (
+          <>
+            <div className="flex items-center justify-end gap-3 bg-neutral-50 p-6">
               <Button
                 variant="secondary"
                 onClick={() => setIsEditing(false)}
@@ -130,19 +324,129 @@ const ProfileCard = ({ customer }: { customer: B2BCustomer }) => {
               >
                 Cancel
               </Button>
-              <Button
-                variant="primary"
-                onClick={handleSave}
-                isLoading={isSaving}
-              >
+              <Button variant="primary" onClick={handleSave} isLoading={isSaving}>
                 Save
               </Button>
-            </>
+            </div>
+            <div className={DIVIDER_CLASS_STANDALONE} />
+          </>
+        )}
+
+        <div className="flex flex-col gap-y-3 p-6">
+          <Label>Dirección</Label>
+          {addressLines.length > 0 ? (
+            <div className="rounded-md border border-neutral-200 px-4 py-3 text-neutral-950 text-base">
+              {addressLines.join(" ")}
+            </div>
           ) : (
-            <Button variant="secondary" onClick={() => setIsEditing(true)}>
-              Edit
-            </Button>
+            <Text size="large" className="text-neutral-500">
+              Aún no registras una dirección.{" "}
+              <LocalizedClientLink
+                href="/account/addresses"
+                className="text-blue-900 hover:underline"
+              >
+                Agregar dirección
+              </LocalizedClientLink>
+            </Text>
           )}
+        </div>
+        <div className={DIVIDER_CLASS_STANDALONE} />
+
+        <div className="flex flex-col gap-y-3 p-6">
+          <Label>Contraseña</Label>
+
+          {!isChangingPassword ? (
+            <div className="flex flex-col small:flex-row small:items-end small:justify-between gap-3 small:gap-4">
+              <div className="flex flex-col gap-y-1.5 w-full small:max-w-xs">
+                <label htmlFor="password_display" className={PASSWORD_LABEL_CLASS}>
+                  Contraseña
+                </label>
+                <div
+                  id="password_display"
+                  className="w-full rounded-md border border-gray-200 bg-white h-11 pl-3 pr-3 flex items-center text-sm text-neutral-950"
+                >
+                  ••••••••
+                </div>
+              </div>
+              <button
+                type="button"
+                className="text-base font-medium text-neutral-950 hover:underline underline-offset-2 whitespace-nowrap self-start small:self-auto"
+                onClick={() => setIsChangingPassword(true)}
+              >
+                Cambiar contraseña
+              </button>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-y-4">
+              <PasswordField
+                label="Contraseña actual"
+                name="current_password"
+                value={passwordForm.current}
+                onChange={(value) =>
+                  setPasswordForm({ ...passwordForm, current: value })
+                }
+              />
+              <PasswordField
+                label="Ingresar nueva contraseña"
+                name="new_password"
+                value={passwordForm.next}
+                onChange={(value) =>
+                  setPasswordForm({ ...passwordForm, next: value })
+                }
+              />
+              <PasswordField
+                label="Repetir contraseña"
+                name="repeat_password"
+                value={passwordForm.repeat}
+                onChange={(value) =>
+                  setPasswordForm({ ...passwordForm, repeat: value })
+                }
+              />
+
+              <div className="flex items-center justify-end gap-4">
+                <button
+                  type="button"
+                  className="text-base font-medium text-neutral-950 hover:underline underline-offset-2"
+                  onClick={closePasswordForm}
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  className="rounded-md bg-blue-900 px-6 py-2.5 text-sm font-medium text-white hover:bg-blue-800 transition-colors"
+                  onClick={handleSavePassword}
+                >
+                  Guardar contraseña
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+        <div className={DIVIDER_CLASS_STANDALONE} />
+
+        <div className="flex flex-col gap-y-3 p-6">
+          <Label>Notificaciones</Label>
+          {/*
+            TODO: no existe todavía un campo de preferencia de
+            notificaciones en el customer — este checkbox es solo visual
+            (no persiste) hasta que se defina dónde guardarlo (metadata
+            del customer, o un módulo propio).
+          */}
+          <div className="flex items-center gap-x-2">
+            <Checkbox
+              id="email-notifications"
+              checked={receiveEmailNotifications}
+              onCheckedChange={(checked) =>
+                setReceiveEmailNotifications(Boolean(checked))
+              }
+            />
+            <label
+              htmlFor="email-notifications"
+              className="text-base text-neutral-950 cursor-pointer"
+            >
+              Quiero recibir notificaciones via email
+            </label>
+          </div>
         </div>
       </Container>
     </div>

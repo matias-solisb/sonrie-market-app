@@ -40,7 +40,7 @@ const HelpIcon = ({ className }: { className?: string }) => (
 // colores/coordenadas confirmados en el devtools del sitio original) va de
 // azul opaco abajo-izquierda a transparente arriba-derecha. viewBox 480x300
 // para que la forma sea ancha (como en la referencia) en vez de cuadrada.
-const IllustrationBackground = () => (
+/* const IllustrationBackground = () => (
   <svg
     viewBox="0 0 480 300"
     className="absolute inset-0 h-full w-full"
@@ -67,10 +67,8 @@ const IllustrationBackground = () => (
       <circle cx="290" cy="95" r="55" />
     </g>
 
-    {/* Sol, arriba a la izquierda */}
     <circle cx="95" cy="95" r="26" fill="#FFD666" />
 
-    {/* Nubes chicas decorativas */}
     <g fill="#ffffff">
       <ellipse cx="70" cy="205" rx="26" ry="15" />
       <ellipse cx="52" cy="200" rx="15" ry="11" />
@@ -78,7 +76,7 @@ const IllustrationBackground = () => (
       <ellipse cx="418" cy="125" rx="14" ry="10" />
     </g>
   </svg>
-)
+) */
 
 // Esta es la 404 "raíz" (fuera de [countryCode]/(main)) — se muestra cuando
 // la URL ni siquiera matchea un país, así que no hereda el header normal
@@ -110,7 +108,7 @@ export default function NotFound() {
         </a>
       </header>
 
-      <div className="flex flex-1 flex-col items-center px-6 pt-16 text-center sm:pt-24">
+      <div className="flex flex-1 flex-col items-center px-6 pt-16 text-center sm:pt-4">
         <h1 className="text-2xl-semi text-ui-fg-base sm:text-3xl-semi">
           ¡Lo siento, página no encontrada!
         </h1>
@@ -118,55 +116,6 @@ export default function NotFound() {
           Lo sentimos, no pudimos encontrar la página que estás buscando.
           ¿Quizás has escrito mal la URL? Asegúrate de revisar tu ortografía.
         </p>
-
-        {/* aspect-[8/5] = 480/300, la misma proporción del viewBox de
-            IllustrationBackground (antes era un cuadrado, por eso la nube
-            se veía más grande que la chica). La imagen se ancla abajo y se
-            dimensiona por alto (no por ancho), ya que la ilustración es más
-            alta que ancha. */}
-        <div className="relative mt-12 aspect-[8/5] w-full max-w-md sm:max-w-lg">
-          <IllustrationBackground />
-
-          {/* "404" grande detrás de la chica, como en la referencia — las
-              piernas quedan por delante del "0" gracias al z-index. */}
-          <div
-            aria-hidden="true"
-            className="absolute inset-x-0 bottom-[16%] text-center text-6xl font-bold leading-none text-[#004b93] sm:text-7xl"
-          >
-            404
-          </div>
-
-          {/* Signos de pregunta decorativos cerca de la cabeza (en el sitio
-              original son parte del SVG, no del PNG del personaje). */}
-          <span
-            aria-hidden="true"
-            className="absolute left-[38%] top-[16%] text-2xl font-bold text-gray-300 sm:text-3xl"
-          >
-            ?
-          </span>
-          <span
-            aria-hidden="true"
-            className="absolute right-[24%] top-[8%] text-3xl font-bold text-gray-400 sm:text-4xl"
-          >
-            ?
-          </span>
-          <span
-            aria-hidden="true"
-            className="absolute right-[26%] top-[36%] text-xl font-bold text-gray-300 sm:text-2xl"
-          >
-            ?
-          </span>
-
-          {/* <img> plano en vez de next/image: así el navegador respeta la
-              proporción real del archivo en vez de la que nosotros
-              adivinemos, que es lo que causaba que se viera deformada. */}
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={ILLUSTRATION_URL}
-            alt="Ilustración de una persona confundida junto al número 404"
-            className="absolute bottom-[6%] left-1/2 z-10 h-[62%] w-auto -translate-x-1/2"
-          />
-        </div>
 
         <Link
           href="/"

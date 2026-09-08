@@ -103,8 +103,8 @@ const AccountMenu = ({ customer }: { customer: HttpTypes.StoreCustomer }) => {
             </MenuItem>
             <MenuItem>
               {({ focus }) => (
-                <a
-                  href="#"
+                <LocalizedClientLink
+                  href="/account/payment-documents"
                   className={`flex items-center gap-x-3 border-b border-dashed border-gray-200 px-4 py-3 text-sm text-ui-fg-base ${
                     focus ? "bg-gray-50" : ""
                   }`}
@@ -112,7 +112,7 @@ const AccountMenu = ({ customer }: { customer: HttpTypes.StoreCustomer }) => {
                 >
                   <DocumentText/>
                   Documentos
-                </a>
+                </LocalizedClientLink>
               )}
             </MenuItem>
             <MenuItem>

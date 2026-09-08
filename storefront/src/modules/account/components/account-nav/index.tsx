@@ -8,7 +8,7 @@ import MapPin from "@/modules/common/icons/map-pin"
 import Package from "@/modules/common/icons/package"
 import User from "@/modules/common/icons/user"
 import { B2BCustomer } from "@/types/global"
-import { ArrowRightOnRectangle, BuildingStorefront } from "@medusajs/icons"
+import { ArrowRightOnRectangle, BuildingStorefront, DocumentText } from "@medusajs/icons"
 import { clx } from "@medusajs/ui"
 import { useParams, usePathname } from "next/navigation"
 
@@ -106,6 +106,19 @@ const AccountNav = ({
                     <ChevronDown className="transform -rotate-90" />
                   </LocalizedClientLink>
                 </li>
+                <li>
+                  <LocalizedClientLink
+                    href="/account/payment-documents"
+                    className="flex items-center justify-between py-4 border-b border-gray-200 px-8"
+                    data-testid="documents-link"
+                  >
+                    <div className="flex items-center gap-x-2">
+                      <DocumentText width={20} />
+                      <span>Documentos</span>
+                    </div>
+                    <ChevronDown className="transform -rotate-90" />
+                  </LocalizedClientLink>
+                </li>
                 {customer?.employee?.is_admin && (
                   <li>
                     <LocalizedClientLink
@@ -199,6 +212,15 @@ const AccountNav = ({
                 data-testid="orders-link"
               >
                 Orders
+              </AccountNavLink>
+            </li>
+            <li>
+              <AccountNavLink
+                href="/account/payment-documents"
+                route={route!}
+                data-testid="documents-link"
+              >
+                Documentos
               </AccountNavLink>
             </li>
             {customer?.employee?.is_admin && (

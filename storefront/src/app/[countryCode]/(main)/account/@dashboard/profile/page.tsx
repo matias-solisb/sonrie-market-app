@@ -1,8 +1,7 @@
 import { retrieveCustomer } from "@/lib/data/customer"
 import { listRegions } from "@/lib/data/regions"
+import CreditPanel from "@/modules/account/components/credit-panel"
 import ProfileCard from "@/modules/account/components/profile-card"
-import SecurityCard from "@/modules/account/components/security-card"
-import { Heading } from "@medusajs/ui"
 import { Metadata } from "next"
 import { notFound } from "next/navigation"
 
@@ -21,22 +20,10 @@ export default async function Profile() {
 
   return (
     <div className="w-full" data-testid="profile-page-wrapper">
-      <div className="mb-8 flex flex-col gap-y-4">
-        <Heading level="h2" className="text-lg text-neutral-950">
-          Details
-        </Heading>
+      <div className="grid grid-cols-1 small:grid-cols-[1fr_320px] gap-4 items-start">
         <ProfileCard customer={customer} />
-      </div>
-      <div className="mb-8 flex flex-col gap-y-4">
-        <Heading level="h2" className="text-lg text-neutral-950">
-          Security
-        </Heading>
-        <SecurityCard customer={customer} />
+        <CreditPanel customer={customer} />
       </div>
     </div>
   )
-}
-
-const Divider = () => {
-  return <div className="w-full h-px bg-gray-200" />
 }
