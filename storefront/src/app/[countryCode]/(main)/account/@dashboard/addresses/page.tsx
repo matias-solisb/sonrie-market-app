@@ -21,6 +21,13 @@ export default async function Addresses(props: {
     notFound()
   }
 
+  // Solo un employee admin puede agregar/editar/eliminar direcciones — ver
+  // el mismo comentario en `profile-card/index.tsx`. Esta página sigue
+  // siendo alcanzable navegando directo a la URL (no se redirige a un
+  // no-admin), pero `AddressBook` no le renderiza ninguna acción de
+  // escritura, solo lectura.
+  const isAdmin = customer.employee?.is_admin ?? false
+
   return (
     <div className="w-full" data-testid="addresses-page-wrapper">
       <div className="mb-8 flex flex-col gap-y-4">
@@ -30,7 +37,7 @@ export default async function Addresses(props: {
           like. Saving your addresses will make them available during checkout.
         </p>
       </div>
-      <AddressBook customer={customer} region={region} />
+      <AddressBook customer={customer} region={region} isAdmin={isAdmin} />
     </div>
   )
 }

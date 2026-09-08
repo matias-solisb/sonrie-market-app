@@ -22,6 +22,11 @@ type EditAddressProps = {
   address: HttpTypes.StoreCustomerAddress
   customer: B2BCustomer
   isActive?: boolean
+  // Solo un employee admin puede editar/eliminar direcciones — ver el
+  // comentario en `profile-card/index.tsx` sobre `employee.is_admin`. En
+  // `false` esta card se ve igual pero sin la fila de botones Edit/Remove
+  // (ni el modal de edición, que solo se abre desde esos botones).
+  isAdmin?: boolean
 }
 
 const EditAddress: React.FC<EditAddressProps> = ({
@@ -29,6 +34,7 @@ const EditAddress: React.FC<EditAddressProps> = ({
   address,
   customer,
   isActive = false,
+  isAdmin = false,
 }) => {
   const [removing, setRemoving] = useState(false)
   const [successState, setSuccessState] = useState(false)
@@ -104,24 +110,26 @@ const EditAddress: React.FC<EditAddressProps> = ({
             </span>
           </Text>
         </div>
-        <div className="flex items-center gap-x-4">
-          <button
-            className="text-small-regular text-ui-fg-base flex items-center gap-x-2"
-            onClick={open}
-            data-testid="address-edit-button"
-          >
-            <Edit />
-            Edit
-          </button>
-          <button
-            className="text-small-regular text-ui-fg-base flex items-center gap-x-2"
-            onClick={removeAddress}
-            data-testid="address-delete-button"
-          >
-            {removing ? <Spinner /> : <Trash />}
-            Remove
-          </button>
-        </div>
+        {isAdmin && (
+          <div className="flex items-center gap-x-4">
+            <button
+              className="text-small-regular text-ui-fg-base flex items-center gap-x-2"
+              onClick={open}
+              data-testid="address-edit-button"
+            >
+              <Edit />
+              Edit
+            </button>
+            <button
+              className="text-small-regular text-ui-fg-base flex items-center gap-x-2"
+              onClick={removeAddress}
+              data-testid="address-delete-button"
+            >
+              {removing ? <Spinner /> : <Trash />}
+              Remove
+            </button>
+          </div>
+        )}
       </div>
 
       <Modal isOpen={state} close={close} data-testid="edit-address-modal">

@@ -6,9 +6,12 @@ import Input from "@/modules/common/components/input"
 import LocalizedClientLink from "@/modules/common/components/localized-client-link"
 import Eye from "@/modules/common/icons/eye"
 import EyeOff from "@/modules/common/icons/eye-off"
+import { muiTheme } from "@/lib/mui/theme"
 import { B2BCustomer } from "@/types/global"
 import { HttpTypes } from "@medusajs/types"
 import { Checkbox, Container, Text, clx, toast } from "@medusajs/ui"
+import OutlinedInput from "@mui/material/OutlinedInput"
+import { ThemeProvider } from "@mui/material/styles"
 import { useState, type ReactNode } from "react"
 
 /*
@@ -187,6 +190,15 @@ const ProfileCard = ({ customer }: { customer: B2BCustomer }) => {
 
   const companyId = customer.employee?.company?.id
 
+  // Solo un employee admin (`employee.is_admin`, el mismo campo que ya usa
+  // el resto del sitio para permisos — ver `account-nav`,
+  // `approval-settings-card`, `employees-card`, checkout) puede agregar o
+  // editar la dirección de la empresa. Un cliente normal la ve de solo
+  // lectura acá; si no hay dirección todavía, no ve un link para
+  // agregarla (eso vive en `/account/addresses`, que también quedó
+  // bloqueado para no-admins — ver `AddressBook`).
+  const isAdmin = customer.employee?.is_admin ?? false
+
   const Label = ({ children }: { children: ReactNode }) => (
     <Text size="large" className="font-semibold text-blue-900">
       {children}
@@ -338,7 +350,7 @@ const ProfileCard = ({ customer }: { customer: B2BCustomer }) => {
             <div className="rounded-md border border-neutral-200 px-4 py-3 text-neutral-950 text-base">
               {addressLines.join(" ")}
             </div>
-          ) : (
+          ) : isAdmin ? (
             <Text size="large" className="text-neutral-500">
               Aún no registras una dirección.{" "}
               <LocalizedClientLink
@@ -348,6 +360,11 @@ const ProfileCard = ({ customer }: { customer: B2BCustomer }) => {
                 Agregar dirección
               </LocalizedClientLink>
             </Text>
+          ) : (
+            <Text size="large" className="text-neutral-500">
+              Aún no hay una dirección registrada. Solo un administrador de
+              tu empresa puede agregarla.
+            </Text>
           )}
         </div>
         <div className={DIVIDER_CLASS_STANDALONE} />
@@ -356,21 +373,57 @@ const ProfileCard = ({ customer }: { customer: B2BCustomer }) => {
           <Label>Contraseña</Label>
 
           {!isChangingPassword ? (
-            <div className="flex flex-col small:flex-row small:items-end small:justify-between gap-3 small:gap-4">
-              <div className="flex flex-col gap-y-1.5 w-full small:max-w-xs">
+            // La caja de contraseña y el link "Cambiar contraseña" van
+            // siempre en la misma fila (a pedido explícito), incluso en
+            // mobile: por eso no hay un toggle flex-col/small:flex-row acá
+            // como en el resto de la card. El campo usa flex-1 + min-w-0
+            // para poder achicarse en pantallas angostas sin empujar el
+            // botón a una segunda línea, y el botón usa shrink-0 para
+            // no perder su ancho de texto.
+            <div className="flex flex-row items-center justify-between gap-5">
+              <div className="flex flex-col gap-y-1.5 flex-1 min-w-0 max-w-xs">
                 <label htmlFor="password_display" className={PASSWORD_LABEL_CLASS}>
                   Contraseña
                 </label>
-                <div
-                  id="password_display"
-                  className="w-full rounded-md border border-gray-200 bg-white h-11 pl-3 pr-3 flex items-center text-sm text-neutral-950"
-                >
-                  ••••••••
-                </div>
+                {/*
+                  El sitio legacy (sonrie.youorder.me) muestra este campo con
+                  las clases reales `MuiInputBase-input MuiOutlinedInput-input
+                  Mui-disabled` (confirmado inspeccionando sus chunks JS, igual
+                  que se hizo para identificar el DatePicker) — o sea que ahí
+                  NO es una cajita Tailwind imitando el look, es un
+                  `OutlinedInput` real de Material UI en estado disabled. Para
+                  que coincida a nivel de píxel se reemplaza acá por el mismo
+                  componente real, reusando `muiTheme` (el mismo tema del
+                  DatePicker en `document-filters`) solo para este campo — el
+                  label de arriba sigue siendo el nuestro (Tailwind), no el
+                  label flotante de MUI, para mantener el patrón "label
+                  arriba + caja abajo" que ya se definió para el resto del
+                  formulario de contraseña.
+                */}
+                <ThemeProvider theme={muiTheme}>
+                  <OutlinedInput
+                    id="password_display"
+                    type="password"
+                    value="12345678"
+                    disabled
+                    fullWidth
+                    inputProps={{ readOnly: true, "aria-label": "Contraseña" }}
+                    sx={{
+                      height: 44, // = h-11, para alinear con el resto de las cajas del form
+                      backgroundColor: "#fff",
+                      fontSize: "0.875rem", // text-sm
+                      "& .MuiOutlinedInput-input": {
+                        paddingTop: 0,
+                        paddingBottom: 0,
+                        paddingLeft: "12px", // = pl-3
+                      },
+                    }}
+                  />
+                </ThemeProvider>
               </div>
               <button
                 type="button"
-                className="text-base font-medium text-neutral-950 hover:underline underline-offset-2 whitespace-nowrap self-start small:self-auto"
+                className="text-base font-medium text-neutral-950 hover:underline underline-offset-2 whitespace-nowrap shrink-0"
                 onClick={() => setIsChangingPassword(true)}
               >
                 Cambiar contraseña

@@ -138,7 +138,7 @@ const OrdersTable = ({
         </Table.Body>
       </Table>
 
-      {orders.length === 0 && (
+      {/* {orders.length === 0 && (
         <div
           className="w-full flex flex-col items-center gap-y-2 py-8"
           data-testid="no-orders-container"
@@ -147,7 +147,7 @@ const OrdersTable = ({
             Aún no tienes pedidos para mostrar.
           </Text>
         </div>
-      )}
+      )} */}
 
       {/*
         No se usa `Table.Pagination` de `@medusajs/ui` a propósito: su

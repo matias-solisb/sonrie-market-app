@@ -64,13 +64,7 @@ export default async function Orders({
   }).catch(() => ({ carts_with_approvals: [] }))
 
   return (
-    <div
-      className="w-full flex flex-col gap-y-4"
-      data-testid="orders-page-wrapper"
-    >
-      <div className="mb-4">
-        <Heading>Orders</Heading>
-      </div>
+    <div className="w-full flex flex-col gap-y-4" data-testid="orders-page-wrapper">
       {approval_required && (
         <div>
           <Heading level="h2" className="text-neutral-700 mb-4">

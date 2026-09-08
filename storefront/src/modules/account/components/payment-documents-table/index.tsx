@@ -94,7 +94,7 @@ const PaymentDocumentsTable = ({ documents }: PaymentDocumentsTableProps) => {
         </Table.Body>
       </Table>
 
-      {documents.length === 0 && (
+      {/* {documents.length === 0 && (
         <div
           className="w-full flex flex-col items-center gap-y-2 py-8"
           data-testid="no-documents-container"
@@ -104,7 +104,7 @@ const PaymentDocumentsTable = ({ documents }: PaymentDocumentsTableProps) => {
             documentos de pago desde acá.
           </Text>
         </div>
-      )}
+      )} */}
 
       {/* Ver el comentario largo en `orders-table/index.tsx` sobre por qué
           esto no usa `Table.Pagination` de @medusajs/ui. */}
