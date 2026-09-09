@@ -16,6 +16,13 @@ const nextConfig = {
     },
   },
   images: {
+    // Next.js exige declarar acá cada valor de `quality` usado en
+    // `<Image quality={...} />` en el sitio (hoy: 50, en los thumbnails
+    // de productos/pedidos/aprobaciones/cotizaciones, y 100, en
+    // `sign-in-prompt`) — sin esto solo avisa por consola, pero a partir
+    // de Next.js 16 se vuelve obligatorio y esas imágenes dejarían de
+    // renderizar. Ver next-image-unconfigured-qualities en los docs.
+    qualities: [50, 100],
     remotePatterns: [
       {
         protocol: "http",
