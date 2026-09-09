@@ -207,6 +207,91 @@ export async function login(_currentState: unknown, formData: FormData) {
   }
 }
 
+// Estado que devuelven `requestPasswordReset` y `resetPassword` a
+// `useActionState`. A diferencia de `login` (que en éxito hace
+// `redirect()` y no necesita distinguir "éxito" de "sin enviar todavía"),
+// acá el éxito se muestra como un mensaje inline en la misma vista, así
+// que hace falta una bandera `success` explícita en vez de solo un string
+// de error.
+export type PasswordResetActionState = {
+  error?: string
+  success?: boolean
+}
+
+// Paso 1 del flujo "Olvidé mi contraseña": pide el reset a Medusa
+// (`POST /auth/customer/emailpass/reset-password`, vía el SDK). Ese
+// endpoint SIEMPRE responde 201 aunque el email no exista en el sistema
+// — es a propósito, para no filtrar qué correos están registrados — así
+// que folosotros tampoco distinguimos ese caso acá: se muestra el mismo
+// mensaje de éxito exista o no la cuenta. Un error acá es de verdad una
+// falla de red/backend, no "el correo no existe".
+//
+// Quien realmente entrega el correo es el subscriber del backend
+// (`backend/src/subscribers/customer-password-reset.ts`), que hoy solo
+// loggea el link en la consola del backend (provider `local`, ver
+// `medusa-config.ts`) — no hay ningún servicio de correo real conectado
+// todavía.
+export async function requestPasswordReset(
+  _currentState: PasswordResetActionState,
+  formData: FormData
+): Promise<PasswordResetActionState> {
+  const email = formData.get("email") as string
+
+  try {
+    await sdk.auth.resetPassword("customer", "emailpass", {
+      identifier: email,
+    })
+  } catch (error: any) {
+    return {
+      error: "No pudimos procesar tu solicitud. Intenta nuevamente en unos minutos.",
+    }
+  }
+
+  return { success: true }
+}
+
+// Paso 2: pone la contraseña nueva usando el token que llegó en la URL
+// del correo (ver `resetUrl` en el subscriber del backend). El endpoint
+// (`POST /auth/customer/emailpass/update`) valida el token como un
+// Authorization Bearer — si venció (dura 15 minutos, fijo en el core de
+// Medusa) o es inválido, tira un error genérico de "Unauthorized" que acá
+// se traduce a un mensaje que le sirve al usuario para reintentar.
+export async function resetPassword(
+  _currentState: PasswordResetActionState,
+  formData: FormData
+): Promise<PasswordResetActionState> {
+  const token = formData.get("token") as string
+  const password = formData.get("password") as string
+  const repeatPassword = formData.get("repeat_password") as string
+
+  if (!token) {
+    return {
+      error:
+        "Este link no es válido. Solicita uno nuevo desde \"¿Olvidaste la contraseña?\".",
+    }
+  }
+
+  if (password !== repeatPassword) {
+    return { error: "Las contraseñas no coinciden." }
+  }
+
+  try {
+    await sdk.auth.updateProvider(
+      "customer",
+      "emailpass",
+      { password },
+      token
+    )
+  } catch (error: any) {
+    return {
+      error:
+        "El link expiró o no es válido. Solicita uno nuevo desde \"¿Olvidaste la contraseña?\".",
+    }
+  }
+
+  return { success: true }
+}
+
 export async function signout(countryCode: string, customerId: string) {
   await sdk.auth.logout()
   removeAuthToken()

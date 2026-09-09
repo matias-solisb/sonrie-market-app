@@ -1,6 +1,7 @@
 import { login } from "@/lib/data/customer"
 import { LOGIN_VIEW } from "@/modules/account/templates/login-template"
 import ErrorMessage from "@/modules/checkout/components/error-message"
+import LocalizedClientLink from "@/modules/common/components/localized-client-link"
 import Eye from "@/modules/common/icons/eye"
 import EyeOff from "@/modules/common/icons/eye-off"
 import Image from "next/image"
@@ -118,15 +119,17 @@ const Login = ({ setCurrentView: _setCurrentView, redirectTo }: Props) => {
         </div>
 
         <div className="mt-3 text-right">
-          {/* TODO: no existe todavía un flujo de "olvidé mi contraseña" —
-              placeholder hasta que se construya esa página. */}
-          <a
-            href="#"
+          {/* Vista en src/modules/account/components/recover-password —
+              ver el comentario en su page.tsx (recover-password/page.tsx)
+              sobre por qué es una ruta hermana de `account/` y no algo
+              anidado adentro. */}
+          <LocalizedClientLink
+            href="/recover-password"
             className="text-small-regular text-blue-900 hover:underline"
             data-testid="forgot-password-link"
           >
             ¿Olvidaste la contraseña?
-          </a>
+          </LocalizedClientLink>
         </div>
 
         <ErrorMessage error={message} data-testid="login-error-message" />
