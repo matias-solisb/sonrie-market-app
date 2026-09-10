@@ -8,7 +8,7 @@ import {
 } from "@headlessui/react"
 import {
   ExclamationCircle,
-  ShoppingBag,
+  ShoppingCart,
   Spinner,
   Trash,
   XMark,
@@ -187,7 +187,7 @@ const CartDropdown = ({
             }}
           >
             <span className="relative flex items-center">
-              <ShoppingBag />
+              <ShoppingCart />
               {totalItems > 0 && (
                 <span
                   className="absolute -right-2 -top-2 flex h-4 min-w-4 items-center justify-center rounded-full bg-blue-900 px-1 text-[10px] font-semibold text-white"

@@ -1,9 +1,10 @@
 "use client"
 
-import { updateCustomer } from "@/lib/data/customer"
+import { changePassword, updateCustomer } from "@/lib/data/customer"
 import Button from "@/modules/common/components/button"
 import Input from "@/modules/common/components/input"
 import LocalizedClientLink from "@/modules/common/components/localized-client-link"
+import { showSuccessToast } from "@/modules/common/components/success-toast"
 import Eye from "@/modules/common/icons/eye"
 import EyeOff from "@/modules/common/icons/eye-off"
 import { muiTheme } from "@/lib/mui/theme"
@@ -36,15 +37,16 @@ tal como pide la referencia. Se pone como último hijo de cada sección (no
 como borde del contenedor) para que además participe de la misma
 animación de colapso que el resto del contenido de esa sección.
 
-- "Cambiar contraseña" ahora sí abre un formulario real (contraseña
-  actual / nueva / repetir, con el mismo `Input` que ya usan
-  Nombre/Apellido/Teléfono, que además ya trae el ícono de mostrar/ocultar
-  para `type="password"`). Lo que NO tiene todavía es una acción real de
-  guardado: no existe un flujo para confirmar la contraseña actual contra
-  el provider de auth `emailpass` de Medusa ni para actualizarla, así que
-  "Guardar contraseña" valida en el cliente (campos completos, nueva =
-  repetida) y después muestra un aviso de que el guardado real falta por
-  construir, en vez de fingir que se guardó.
+- "Cambiar contraseña" ahora guarda de verdad: valida en el cliente
+  (campos completos, nueva = repetida) y llama al server action
+  `changePassword` (`lib/data/customer.ts`), que primero verifica la
+  "contraseña actual" haciendo un login real contra el provider
+  `emailpass` de Medusa (el endpoint de update NO valida esa contraseña
+  por sí solo — ver el comentario en `changePassword`) y recién ahí
+  actualiza la contraseña. Si la actual está mal, o algo falla, se
+  muestra el error con `toast.error`; si todo sale bien se cierra el
+  formulario y se muestra el toast verde de éxito
+  (`showSuccessToast`, en `common/components/success-toast`).
 - "Notificaciones": no existe ningún campo de preferencia de
   notificaciones en el customer hoy — el checkbox es solo visual
   (estado local, no se guarda) hasta que exista dónde persistirlo.
@@ -124,6 +126,7 @@ const ProfileCard = ({ customer }: { customer: B2BCustomer }) => {
     useState(true)
 
   const [isChangingPassword, setIsChangingPassword] = useState(false)
+  const [isSavingPassword, setIsSavingPassword] = useState(false)
   const [passwordForm, setPasswordForm] = useState({
     current: "",
     next: "",
@@ -154,7 +157,7 @@ const ProfileCard = ({ customer }: { customer: B2BCustomer }) => {
     setPasswordForm({ current: "", next: "", repeat: "" })
   }
 
-  const handleSavePassword = () => {
+  const handleSavePassword = async () => {
     if (!passwordForm.current || !passwordForm.next || !passwordForm.repeat) {
       toast.error("Completa los tres campos.")
       return
@@ -165,12 +168,22 @@ const ProfileCard = ({ customer }: { customer: B2BCustomer }) => {
       return
     }
 
-    // TODO: acá falta el flujo real (confirmar `passwordForm.current`
-    // contra el provider `emailpass` y actualizar la contraseña vía
-    // Medusa Auth). Por ahora solo se avisa que falta construirse, en vez
-    // de simular un guardado que no ocurrió.
-    toast.info("Cambiar la contraseña todavía no está implementado.")
+    setIsSavingPassword(true)
+
+    const result = await changePassword({
+      currentPassword: passwordForm.current,
+      newPassword: passwordForm.next,
+    })
+
+    setIsSavingPassword(false)
+
+    if (result.error) {
+      toast.error(result.error)
+      return
+    }
+
     closePasswordForm()
+    showSuccessToast("Contraseña actualizada correctamente")
   }
 
   const defaultAddress =
@@ -466,10 +479,11 @@ const ProfileCard = ({ customer }: { customer: B2BCustomer }) => {
                 </button>
                 <button
                   type="button"
-                  className="rounded-md bg-blue-900 px-6 py-2.5 text-sm font-medium text-white hover:bg-blue-800 transition-colors"
+                  className="rounded-md bg-blue-900 px-6 py-2.5 text-sm font-medium text-white hover:bg-blue-800 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
                   onClick={handleSavePassword}
+                  disabled={isSavingPassword}
                 >
-                  Guardar contraseña
+                  {isSavingPassword ? "Guardando..." : "Guardar contraseña"}
                 </button>
               </div>
             </div>

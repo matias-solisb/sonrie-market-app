@@ -18,9 +18,10 @@ type FooterColumn = {
 }
 
 // TODO: several of these links don't have a real page yet (Pagos, Nuevos
-// Productos, Destacados, Contacto, Preguntas Frecuentes, Condiciones de
-// Despacho, Terminos y Condiciones). They point to "#" as a placeholder
-// until those routes exist — swap in the real href once they're built.
+// Productos, Destacados, Productos Recomendados, Contacto, Preguntas
+// Frecuentes, Condiciones de Despacho, Terminos y Condiciones). They point
+// to "#" as a placeholder until those routes exist — swap in the real href
+// once they're built.
 const ACCOUNT_COLUMN: FooterColumn = {
   title: "Cuenta",
   links: [
@@ -30,26 +31,35 @@ const ACCOUNT_COLUMN: FooterColumn = {
   ],
 }
 
-const OTHER_COLUMNS: FooterColumn[] = [
-  {
-    title: "Enlaces útiles",
-    links: [
-      { label: "Pagos", href: "#" },
-      { label: "Ofertas", href: "/products" },
-      { label: "Nuevos Productos", href: "#" },
-      { label: "Destacados", href: "#" },
-    ],
-  },
-  {
-    title: "Centro de ayuda",
-    links: [
-      { label: "Contacto", href: "#" },
-      { label: "Preguntas Frecuentes", href: "#" },
-      { label: "Condiciones de Despacho", href: "#" },
-      { label: "Terminos y Condiciones", href: "#" },
-    ],
-  },
-]
+// "Enlaces útiles" cambia de contenido según haya sesión o no (ver
+// capturas de referencia "Sin login" / "Con login" del sitio legacy):
+// - Con login aparece "Pagos" primero, y desaparece "Productos
+//   Recomendados".
+// - Sin login aparece "Productos Recomendados" al final, y no hay
+//   "Pagos" (no hay nada que pagar sin cuenta).
+// El resto de la columna (Ofertas, Nuevos Productos, Destacados) es
+// igual en ambos casos.
+const buildUsefulLinksColumn = (isLoggedIn: boolean): FooterColumn => ({
+  title: "Enlaces útiles",
+  links: [
+    ...(isLoggedIn ? [{ label: "Pagos", href: "#" }] : []),
+    { label: "Ofertas", href: "/products" },
+    { label: "Nuevos Productos", href: "#" },
+    { label: "Destacados", href: "#" },
+    ...(!isLoggedIn ? [{ label: "Productos Recomendados", href: "#" }] : []),
+  ],
+})
+
+// "Centro de ayuda" no cambia con el login.
+const HELP_COLUMN: FooterColumn = {
+  title: "Centro de ayuda",
+  links: [
+    { label: "Contacto", href: "#" },
+    { label: "Preguntas Frecuentes", href: "#" },
+    { label: "Condiciones de Despacho", href: "#" },
+    { label: "Terminos y Condiciones", href: "#" },
+  ],
+}
 
 const FooterLinkItem = ({ label, href }: FooterLink) => {
   if (href.startsWith("/")) {
@@ -67,17 +77,22 @@ const FooterLinkItem = ({ label, href }: FooterLink) => {
   )
 }
 
-// Todas las columnas, en el orden fijo que define la posición en el grid de
-// escritorio (Cuenta siempre es la primera). Sin sesión, la columna Cuenta
-// se oculta pero "Enlaces útiles" y "Centro de ayuda" deben quedarse en su
-// misma posición — no correrse un puesto a la izquierda.
-const ALL_COLUMNS = [ACCOUNT_COLUMN, ...OTHER_COLUMNS]
-
 export default async function Footer() {
   // La columna "Cuenta" (Mis Datos, Carrito, Mis pedidos) solo tiene sentido
   // si hay una sesión activa — sin login no hay datos, ni pedidos, y el
   // carrito sigue siendo accesible desde el ícono del header.
   const customer = await retrieveCustomer().catch(() => null)
+  const isLoggedIn = Boolean(customer)
+
+  // Todas las columnas, en el orden fijo que define la posición en el grid
+  // de escritorio (Cuenta siempre es la primera). Sin sesión, la columna
+  // Cuenta se oculta pero "Enlaces útiles" y "Centro de ayuda" deben
+  // quedarse en su misma posición — no correrse un puesto a la izquierda.
+  const ALL_COLUMNS = [
+    ACCOUNT_COLUMN,
+    buildUsefulLinksColumn(isLoggedIn),
+    HELP_COLUMN,
+  ]
 
   return (
     <footer className="bg-gray-50 border-t border-ui-border-base w-full">

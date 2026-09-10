@@ -292,6 +292,89 @@ export async function resetPassword(
   return { success: true }
 }
 
+// Cambio de contraseña desde la cuenta ya logueada (ProfileCard). A
+// diferencia del flujo de "Olvidé mi contraseña", acá no hay token de
+// email: el usuario ya tiene sesión.
+//
+// Paso 1 — verificar la "contraseña actual": el endpoint de Medusa para
+// actualizar contraseña (`EmailPassAuthService.update()`) NO verifica la
+// contraseña actual por sí solo, así que la verificamos nosotros acá
+// mismo, haciendo un login real con el email de la cuenta + la
+// contraseña "actual" ingresada. Si ese login falla, la contraseña
+// actual está mal.
+//
+// Paso 2 — aplicar la contraseña nueva: NO se puede reusar el token que
+// devuelve ese login de verificación contra el endpoint nativo
+// `POST /auth/customer/emailpass/update` — ese endpoint exige un JWT con
+// un claim `entity_id` que solo trae el token especial del flujo de
+// "olvidé mi contraseña"; un token normal de sesión/login (`actor_id` +
+// `app_metadata`) SIEMPRE lo rechaza con "Invalid token", confirmado
+// leyendo el código fuente de Medusa. Por eso se llama en cambio a una
+// ruta propia del backend (`POST /store/customers/me/password`, ver
+// `backend/src/api/store/customers/me/password/route.ts`), protegida
+// por el middleware estándar de sesión — ahí sí se puede aplicar la
+// contraseña nueva usando la sesión actual del usuario (`getAuthHeaders`),
+// sin depender del token de verificación del paso 1.
+export async function changePassword({
+  currentPassword,
+  newPassword,
+}: {
+  currentPassword: string
+  newPassword: string
+}): Promise<PasswordResetActionState> {
+  const customer = await retrieveCustomer()
+
+  if (!customer?.email) {
+    return {
+      error: "No pudimos identificar tu cuenta. Vuelve a iniciar sesión.",
+    }
+  }
+
+  try {
+    await sdk.auth.login("customer", "emailpass", {
+      email: customer.email,
+      password: currentPassword,
+    })
+  } catch (error: any) {
+    return { error: "La contraseña actual no es correcta." }
+  }
+
+  const headers = {
+    ...(await getAuthHeaders()),
+  }
+
+  try {
+    await sdk.client.fetch("/store/customers/me/password", {
+      method: "POST",
+      body: { password: newPassword },
+      headers,
+    })
+  } catch (error: any) {
+    // Este llamado corre en el servidor de Next.js (es un Server Action),
+    // así que su resultado NUNCA aparece en la pestaña Network del
+    // navegador — esa pestaña solo ve el POST del navegador hacia el
+    // propio Next.js (aparece con el nombre de la página, p. ej.
+    // "profile"), no la llamada de Next.js hacia el backend de Medusa.
+    // Por eso se loggea acá el detalle real (status + body del error de
+    // Medusa): para verlo hay que mirar la terminal donde corre
+    // `npm run dev` del storefront, no la consola del navegador.
+    console.error(
+      "[changePassword] falló POST /store/customers/me/password:",
+      "status:",
+      error?.status,
+      "message:",
+      error?.message,
+      "body:",
+      error?.body ?? error
+    )
+    return {
+      error: "No pudimos actualizar la contraseña. Intenta nuevamente.",
+    }
+  }
+
+  return { success: true }
+}
+
 export async function signout(countryCode: string, customerId: string) {
   await sdk.auth.logout()
   removeAuthToken()
