@@ -31,9 +31,7 @@ const ItemsTemplate = ({
   const { handleEmptyCart } = useCart()
 
   const handleRemoveAll = () => {
-    if (window.confirm("¿Eliminar todos los productos del carrito?")) {
-      handleEmptyCart()
-    }
+    handleEmptyCart()
   }
 
   return (

@@ -287,8 +287,28 @@ export function CartProvider({
 
     startTransition(() => {
       setOptimisticCart((prev) => {
+        if (!prev) return prev
+
         prevCart = structuredClone(prev) as B2BCart
-        return null
+
+        // Antes esto reemplazaba el carrito completo por `null`. Como el
+        // carrito expuesto por el contexto se arma con
+        // `{ ...optimisticCart, items: sortedItems }`, un `optimisticCart`
+        // en null perdía campos como `region` — y CartTemplate solo
+        // muestra el bloque de "Facturación" cuando `cart && cart.region`
+        // existen, así que el div de facturación desaparecía en vez de
+        // quedar visible con montos en 0. Ahora se conserva el carrito
+        // (region, currency_code, id, etc.) y solo se vacían los items y
+        // los totales.
+        return {
+          ...prev,
+          items: [],
+          item_subtotal: 0,
+          subtotal: 0,
+          total: 0,
+          tax_total: 0,
+          discount_total: 0,
+        }
       })
     })
 

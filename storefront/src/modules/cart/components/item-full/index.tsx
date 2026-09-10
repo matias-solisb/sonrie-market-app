@@ -140,8 +140,20 @@ const ItemFull = ({
                     disabled ? "opacity-50 pointer-events-none" : "opacity-100"
                   )}
                   aria-label="Quitar una unidad"
-                  onClick={() => changeQuantity(item.quantity - 1)}
-                  disabled={item.quantity <= 1 || disabled}
+                  onClick={() => {
+                    // Con cantidad 1, "quitar una unidad" debe eliminar la
+                    // línea del carrito (bajar a 0), no intentar actualizarla
+                    // a cantidad 0 (el Store API de Medusa no acepta
+                    // quantity: 0 en updateLineItem). Antes este botón se
+                    // deshabilitaba en cantidad 1, dejando el click sin
+                    // ningún efecto.
+                    if (item.quantity <= 1) {
+                      handleDeleteItem(item.id)
+                    } else {
+                      changeQuantity(item.quantity - 1)
+                    }
+                  }}
+                  disabled={disabled}
                 >
                   <MinusMini />
                 </button>
