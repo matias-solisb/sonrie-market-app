@@ -176,6 +176,7 @@ const CartDropdown = ({
   return (
     <div className="h-full z-50">
       <Popover className="relative h-full">
+        {/* Trigger: ícono de carrito + monto, en el header del sitio */}
         <PopoverButton className="h-full">
           <LocalizedClientLink
             className="flex items-center gap-x-2 text-ui-fg-base hover:text-ui-fg-subtle"
@@ -200,6 +201,7 @@ const CartDropdown = ({
             <span data-testid="nav-cart-amount">{cartAmount}</span>
           </LocalizedClientLink>
         </PopoverButton>
+        {/* Fondo oscuro detrás del panel, clickeable para cerrar */}
         <Transition
           show={cartDropdownOpen}
           as={Fragment}
@@ -217,6 +219,7 @@ const CartDropdown = ({
             aria-hidden="true"
           />
         </Transition>
+        {/* Panel del carrito: se desliza desde la derecha */}
         <Transition
           show={cartDropdownOpen}
           as={Fragment}
@@ -232,6 +235,7 @@ const CartDropdown = ({
             className="fixed inset-y-0 right-0 z-[61] flex h-full w-full flex-col bg-white text-ui-fg-base shadow-xl sm:w-[520px]"
             data-testid="nav-cart-dropdown"
           >
+            {/* Header del panel: título + botón cerrar */}
             <div className="p-6 flex items-center justify-between border-b border-gray-200">
               <h3 className="text-large-semi">
                 Mi Carrito - {totalItems} Productos
@@ -247,6 +251,7 @@ const CartDropdown = ({
             </div>
             <div className="flex flex-col flex-1 min-h-0">
               {cartState && cartState.items?.length ? (
+                // Lista de productos del carrito (scrolleable)
                 <div className="flex-1 min-h-0 overflow-y-auto px-4 grid grid-cols-1 gap-y-4 content-start no-scrollbar p-px">
                   {cartState.items
                     .sort((a, b) => {
@@ -255,12 +260,14 @@ const CartDropdown = ({
                         : 1
                     })
                     .map((item) => (
+                      // Tarjeta de un producto: thumbnail + datos + stepper de cantidad
                       <div
                         className="flex flex-col gap-y-3 rounded-lg border border-gray-200 bg-white p-3 shadow-sm"
                         key={item.id}
                         data-testid="cart-item"
                       >
                         <div className="grid grid-cols-[96px_1fr] gap-x-4">
+                          {/* Thumbnail del producto */}
                           <LocalizedClientLink
                             href={`/products/${item.product_handle}`}
                             className="w-24"
@@ -272,6 +279,7 @@ const CartDropdown = ({
                             />
                           </LocalizedClientLink>
                           <div className="flex flex-col justify-between gap-y-3 flex-1">
+                            {/* Título + variante (izq.) y botón eliminar (der.) */}
                             <div className="flex items-start justify-between gap-x-2">
                               <div className="flex flex-col overflow-ellipsis whitespace-nowrap mr-4 w-[180px]">
                                 <h3 className="text-base-regular overflow-hidden text-ellipsis">
@@ -290,9 +298,10 @@ const CartDropdown = ({
                               </div>
                               <CartItemDeleteButton
                                 id={item.id}
-                                className="shrink-0"
+                                className="shrink-3"
                               />
                             </div>
+                            {/* Precio del ítem */}
                             <div className="flex justify-end">
                               <LineItemPrice
                                 item={item}
@@ -302,6 +311,7 @@ const CartDropdown = ({
                             </div>
                           </div>
                         </div>
+                        {/* Stepper de cantidad (+/-) */}
                         <AddToCartStepper
                           variantId={item.variant_id}
                           countryCode={countryCode}
@@ -313,10 +323,13 @@ const CartDropdown = ({
                     ))}
                 </div>
               ) : (
+                // Carrito vacío: solo ocupa el espacio, sin mensaje propio
                 <div className="flex-1" data-testid="cart-empty-state" />
               )}
 
+              {/* Footer: subtotal, aviso de monto mínimo y botón ir al carrito */}
               <div className="p-4 flex flex-col gap-y-4 text-big-regular border-t border-gray-200">
+                {/* Subtotal */}
                 <div className="flex items-center justify-between">
                   <span className="text-ui-fg-base font-bold">
                     Subtotal:
@@ -335,6 +348,7 @@ const CartDropdown = ({
                   </span>
                 </div>
 
+                {/* Aviso de monto mínimo de pedido (solo si aún falta) */}
                 {amountMissingForMinimum > 0 && (
                   <div
                     className="flex items-start gap-x-2 rounded-md bg-amber-50 p-3 text-amber-900"
@@ -365,6 +379,7 @@ const CartDropdown = ({
                   </div>
                 )}
 
+                {/* Botón ir al carrito */}
                 <LocalizedClientLink href="/cart" passHref>
                   <Button
                     className="w-full bg-blue-900"

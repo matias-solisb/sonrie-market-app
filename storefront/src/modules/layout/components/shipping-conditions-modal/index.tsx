@@ -50,19 +50,23 @@ const ShippingConditionsModal = () => {
         Condiciones de Despacho
       </button>
 
-      <Modal isOpen={isOpen} close={() => setIsOpen(false)} size="large">
+      <Modal
+        isOpen={isOpen}
+        close={() => setIsOpen(false)}
+        panelClassName="max-w-3xl max-h-[75vh] h-fit bg-white shadow-xl border-2 border-black rounded-3xl"
+      >
         <Modal.Title>
           <span className="sr-only">Condiciones de Despacho</span>
         </Modal.Title>
         <Modal.Body>
           <div
-            className="grid w-full grid-cols-1 gap-4 pt-2 small:grid-cols-3"
+            className="grid w-full grid-cols-1 gap-4 pt-2 rounded-lg small:grid-cols-3"
             data-testid="shipping-conditions-modal"
           >
             {CONDITIONS.map((condition) => (
               <div
                 key={condition.title}
-                className="flex flex-col items-center gap-y-3 rounded-md border border-ui-border-base p-6 text-center"
+                className="flex flex-col items-center gap-y-3 rounded-lg border border-ui-border-base p-6 text-center"
               >
                 <Image
                   src={condition.icon}

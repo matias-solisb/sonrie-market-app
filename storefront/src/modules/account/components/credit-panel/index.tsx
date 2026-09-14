@@ -14,7 +14,15 @@ mismo campo que ya usa `checkSpendingLimit` para bloquear el carrito
 `getSpendWindow`/`getOrderTotalInSpendWindow` para calcular cuánto queda
 disponible en el período vigente, en vez de duplicar esa lógica.
 
+Los separadores entre secciones siguen el mismo patrón que `ProfileCard`
+(`DIVIDER_CLASS_STANDALONE` ahí): NO son un `border-b` en el div de la
+sección, sino un div de 1px propio puesto como HERMANO después de esa
+sección, para que la línea quede corta (no toque el borde derecho) igual
+que en "Mis datos".
+
 */
+
+const DIVIDER_CLASS = "h-px bg-neutral-200 ml-6 mr-10"
 
 const CreditPanel = ({ customer }: { customer: B2BCustomer }) => {
   const employee = customer.employee
@@ -56,7 +64,7 @@ const CreditPanel = ({ customer }: { customer: B2BCustomer }) => {
       </div>
 
       <Container className="p-0 overflow-hidden">
-        <div className="flex items-center justify-between p-6 border-b border-neutral-200">
+        <div className="flex items-center justify-between p-6">
           <Text size="large" className="font-semibold text-blue-900">
             Crédito
           </Text>
@@ -70,8 +78,9 @@ const CreditPanel = ({ customer }: { customer: B2BCustomer }) => {
             </Badge>
           )}
         </div>
+        <div className={DIVIDER_CLASS} />
 
-        <div className="flex flex-col gap-y-4 p-6 border-b border-neutral-200">
+        <div className="flex flex-col gap-y-4 p-6">
           <div className="flex items-center justify-between">
             <Text size="large" className="text-neutral-500">
               Total
@@ -99,6 +108,7 @@ const CreditPanel = ({ customer }: { customer: B2BCustomer }) => {
             </Text>
           </div>
         </div>
+        <div className={DIVIDER_CLASS} />
 
         <div className="flex flex-col gap-y-3 p-6">
           <Text size="large" className="font-semibold text-blue-900">

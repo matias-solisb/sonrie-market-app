@@ -101,7 +101,7 @@ const AccountMenu = ({ customer }: { customer: HttpTypes.StoreCustomer }) => {
                 </LocalizedClientLink>
               )}
             </MenuItem>
-            <MenuItem>
+            {/* <MenuItem>
               {({ focus }) => (
                 <LocalizedClientLink
                   href="/account/payment-documents"
@@ -114,7 +114,7 @@ const AccountMenu = ({ customer }: { customer: HttpTypes.StoreCustomer }) => {
                   Documentos
                 </LocalizedClientLink>
               )}
-            </MenuItem>
+            </MenuItem> */}
             <MenuItem>
               {({ focus }) => (
                 <button

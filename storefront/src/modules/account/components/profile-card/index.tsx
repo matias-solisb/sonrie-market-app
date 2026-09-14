@@ -1,8 +1,6 @@
 "use client"
 
 import { changePassword, updateCustomer } from "@/lib/data/customer"
-import Button from "@/modules/common/components/button"
-import Input from "@/modules/common/components/input"
 import LocalizedClientLink from "@/modules/common/components/localized-client-link"
 import { showSuccessToast } from "@/modules/common/components/success-toast"
 import Eye from "@/modules/common/icons/eye"
@@ -14,6 +12,10 @@ import { Checkbox, Container, Text, clx, toast } from "@medusajs/ui"
 import OutlinedInput from "@mui/material/OutlinedInput"
 import { ThemeProvider } from "@mui/material/styles"
 import { useState, type ReactNode } from "react"
+import PhoneCountrySelect, {
+  getDialCode,
+  parsePhoneNumber,
+} from "@/modules/account/components/profile-card/phone-country-select"
 
 /*
 
@@ -29,13 +31,21 @@ Contraseña y Notificaciones antes vivían en un `SecurityCard` aparte con
 su propio recuadro — se fusionaron acá, como secciones del mismo card, que
 es como las muestra la referencia.
 
+El bloque de "Nombre/Teléfono/Email/ID del comercio" es UN solo grid
+(no dos JSX separados para "ver" y "editar" alternados con animación de
+colapso, como había antes): cada campo decide con `isEditing ? <input> :
+<Text>` qué mostrar. Se simplificó así a propósito — la versión con dos
+bloques duplicaba cada campo y terminó rompiéndose (un campo duplicado y
+los botones de guardar quedando atrapados dentro del bloque que se
+colapsaba). El costo es que ya no hay animación de alto/opacidad al
+entrar o salir de edición.
+
 Los separadores entre secciones (Dirección/Contraseña/Notificaciones, y el
 bloque de datos de arriba) NO son un `border-b` de ancho completo — son un
 div de 1px propio (`h-px bg-neutral-200`) con margen derecho (`mr-10`)
 para que la línea quede corta y no toque el borde derecho del recuadro,
-tal como pide la referencia. Se pone como último hijo de cada sección (no
-como borde del contenedor) para que además participe de la misma
-animación de colapso que el resto del contenido de esa sección.
+tal como pide la referencia. Se pone como hermano después de cada sección
+(no como borde del contenedor).
 
 - "Cambiar contraseña" ahora guarda de verdad: valida en el cliente
   (campos completos, nueva = repetida) y llama al server action
@@ -54,16 +64,11 @@ animación de colapso que el resto del contenido de esa sección.
 */
 
 // Ancho del margen derecho de los separadores cortos — tocar este único
-// valor cambia el largo de TODAS las líneas divisorias de la card.
-//
-// Hay dos variantes porque el punto de partida (izquierda) depende de si
-// el divisor vive DENTRO de un contenedor que ya tiene `p-6` (grids de
-// "Nombre/Email/..." — ahí el padding del contenedor ya lo alinea con el
-// texto, no hace falta márgen izquierdo) o si vive como hermano directo de
-// `Container` (que tiene `p-0`) — ahí sin `ml-6` el divisor arrancaría 24px
-// más a la izquierda que el texto de las secciones (Dirección/Contraseña/
-// Notificaciones), pegado al borde real de la card.
-const DIVIDER_CLASS = "h-px bg-neutral-200 mr-10"
+// valor cambia el largo de TODAS las líneas divisorias de la card. Llevan
+// `ml-6` porque viven como hermanos directos de `Container` (que tiene
+// `p-0`) — sin eso el divisor arrancaría 24px más a la izquierda que el
+// texto de las secciones (Nombre/Dirección/Contraseña/Notificaciones),
+// pegado al borde real de la card.
 const DIVIDER_CLASS_STANDALONE = "h-px bg-neutral-200 ml-6 mr-10"
 
 // Campo de Contraseña con su propio estilo — mismo patrón "label arriba +
@@ -79,6 +84,33 @@ const DIVIDER_CLASS_STANDALONE = "h-px bg-neutral-200 ml-6 mr-10"
 const PASSWORD_LABEL_CLASS = "text-xs text-neutral-500"
 const PASSWORD_INPUT_CLASS =
   "w-full appearance-none rounded-md border border-gray-200 bg-white h-11 pl-3 pr-9 text-sm text-neutral-950 outline-none hover:border-gray-300"
+
+// Campos de "Editar Datos" (Nombre/Apellido/Teléfono/Email): caja con borde
+// redondeado conteniendo el label chico arriba y el valor abajo, según la
+// referencia (imagen del formulario). Reemplaza al `Input` compartido
+// (pill/`rounded-full` con label flotante) solo para esta sección.
+const FIELD_BOX_CLASS =
+  "flex flex-col gap-y-1 rounded-2xl border border-gray-200 bg-white px-4 py-3 focus-within:border-blue-900 transition-colors"
+const FIELD_LABEL_CLASS = "text-xs text-neutral-500"
+const FIELD_INPUT_CLASS =
+  "w-full min-w-0 bg-transparent text-base text-neutral-950 outline-none"
+
+const FieldBox = ({
+  label,
+  htmlFor,
+  children,
+}: {
+  label: string
+  htmlFor?: string
+  children: ReactNode
+}) => (
+  <div className={FIELD_BOX_CLASS}>
+    <label htmlFor={htmlFor} className={FIELD_LABEL_CLASS}>
+      {label}
+    </label>
+    {children}
+  </div>
+)
 
 const PasswordField = ({
   label,
@@ -138,18 +170,32 @@ const ProfileCard = ({ customer }: { customer: B2BCustomer }) => {
   const [customerData, setCustomerData] = useState({
     first_name,
     last_name,
-    phone,
   } as HttpTypes.StoreUpdateCustomer)
+
+  const initialPhone = parsePhoneNumber(phone)
+  const [phoneCountry, setPhoneCountry] = useState(initialPhone.countryCode)
+  const [phoneLocal, setPhoneLocal] = useState(initialPhone.localNumber)
 
   const handleSave = async () => {
     setIsSaving(true)
-    await updateCustomer(customerData).catch(() => {
+    const phone = phoneLocal ? `+${getDialCode(phoneCountry)}${phoneLocal}` : ""
+
+    try {
+      await updateCustomer({ ...customerData, phone })
+    } catch (error) {
+      // El Server Action corre en el servidor de Next.js: este error NUNCA
+      // aparece en la pestaña Network del navegador (mismo caso que
+      // `changePassword`, ver comentario en lib/data/customer.ts) — para
+      // verlo hay que mirar la terminal donde corre `npm run dev`.
+      console.error("[ProfileCard] falló updateCustomer:", error)
       toast.error("Error updating customer")
-    })
+      setIsSaving(false)
+      return
+    }
+
     setIsSaving(false)
     setIsEditing(false)
-
-    toast.success("Customer updated")
+    showSuccessToast("Su perfil ha sido actualizado")
   }
 
   const closePasswordForm = () => {
@@ -237,15 +283,9 @@ const ProfileCard = ({ customer }: { customer: B2BCustomer }) => {
 
       <Container className="p-0 overflow-hidden">
         <form
-          className={clx(
-            "grid grid-cols-1 small:grid-cols-2 gap-6 overflow-hidden transition-all duration-300 ease-in-out",
-            {
-              "max-h-[640px] small:max-h-[460px] opacity-100 p-6": isEditing,
-              "max-h-0 opacity-0": !isEditing,
-            }
-          )}
+          className="grid grid-cols-1 gap-6 p-6 small:grid-cols-2"
           onKeyDown={(e) => {
-            if (e.key === "Enter") {
+            if (e.key === "Enter" && isEditing) {
               e.preventDefault()
               handleSave()
             }
@@ -253,109 +293,126 @@ const ProfileCard = ({ customer }: { customer: B2BCustomer }) => {
         >
           <div className="flex flex-col gap-y-2">
             <Label>Nombre</Label>
-            <Input
-              label="First Name"
-              name="first_name"
-              value={customerData.first_name || ""}
-              onChange={(e) =>
-                setCustomerData({
-                  ...customerData,
-                  first_name: e.target.value,
-                })
-              }
-            />
+            {isEditing ? (
+              <FieldBox label="Nombre" htmlFor="first_name">
+                <input
+                  id="first_name"
+                  name="first_name"
+                  value={customerData.first_name || ""}
+                  onChange={(e) =>
+                    setCustomerData({
+                      ...customerData,
+                      first_name: e.target.value,
+                    })
+                  }
+                  className={FIELD_INPUT_CLASS}
+                />
+              </FieldBox>
+            ) : (
+              <Text size="large" className="text-neutral-950">
+                {customer.first_name || "—"}
+              </Text>
+            )}
           </div>
           <div className="flex flex-col gap-y-2">
             <Label>Apellido</Label>
-            <Input
-              label="Last Name"
-              name="last_name"
-              value={customerData.last_name || ""}
-              onChange={(e) =>
-                setCustomerData({
-                  ...customerData,
-                  last_name: e.target.value,
-                })
-              }
-            />
+            {isEditing ? (
+              <FieldBox label="Apellido" htmlFor="last_name">
+                <input
+                  id="last_name"
+                  name="last_name"
+                  value={customerData.last_name || ""}
+                  onChange={(e) =>
+                    setCustomerData({
+                      ...customerData,
+                      last_name: e.target.value,
+                    })
+                  }
+                  className={FIELD_INPUT_CLASS}
+                />
+              </FieldBox>
+            ) : (
+              <Text size="large" className="text-neutral-950">
+                {customer.last_name || "—"}
+              </Text>
+            )}
           </div>
           <div className="flex flex-col gap-y-2">
             <Label>Teléfono</Label>
-            <Input
-              label="Phone"
-              name="phone"
-              value={customerData.phone || ""}
-              onChange={(e) =>
-                setCustomerData({ ...customerData, phone: e.target.value })
-              }
-            />
+            {isEditing ? (
+              <FieldBox label="Teléfono" htmlFor="phone">
+                <div className="flex items-center gap-x-2">
+                  <PhoneCountrySelect value={phoneCountry} onChange={setPhoneCountry} />
+                  <input
+                    id="phone"
+                    name="phone"
+                    type="tel"
+                    inputMode="numeric"
+                    value={phoneLocal}
+                    onChange={(e) =>
+                      setPhoneLocal(e.target.value.replace(/\D/g, ""))
+                    }
+                    className={clx(FIELD_INPUT_CLASS, "flex-1")}
+                  />
+                </div>
+              </FieldBox>
+            ) : (
+              <Text size="large" className="text-neutral-950">
+                {customer.phone || "—"}
+              </Text>
+            )}
           </div>
           <div className="flex flex-col gap-y-2">
             <Label>Email</Label>
-            <Text className="text-neutral-950">{customer.email}</Text>
+            {isEditing ? (
+              <FieldBox label="Email">
+                <span className="text-base text-neutral-400">
+                  {customer.email}
+                </span>
+              </FieldBox>
+            ) : (
+              <Text size="large" className="text-neutral-950">
+                {customer.email}
+              </Text>
+            )}
           </div>
           <div className="flex flex-col gap-y-2 small:col-span-2">
             <Label>ID del comercio</Label>
-            <Text className="text-neutral-950">{companyId || "—"}</Text>
-          </div>
-          <div className="small:col-span-2">
-            <div className={DIVIDER_CLASS} />
+            {isEditing ? (
+              <FieldBox label="ID del comercio">
+                <span className="text-base text-neutral-400">
+                  {companyId || "—"}
+                </span>
+              </FieldBox>
+            ) : (
+              <Text size="large" className="text-neutral-950">
+                {companyId || "—"}
+              </Text>
+            )}
           </div>
         </form>
 
-        <div
-          className={clx(
-            "grid grid-cols-1 small:grid-cols-2 gap-x-10 gap-y-6 transition-all duration-300 ease-in-out",
-            {
-              "opacity-0 max-h-0": isEditing,
-              "opacity-100 max-h-[600px] small:max-h-[380px] p-6": !isEditing,
-            }
-          )}
-        >
-          <div className="flex flex-col gap-y-1">
-            <Label>Nombre</Label>
-            <Text size="large" className="text-neutral-950">
-              {[customer.first_name, customer.last_name]
-                .filter(Boolean)
-                .join(" ") || "—"}
-            </Text>
-          </div>
-          <div className="hidden small:block" />
-          <div className="flex flex-col gap-y-1">
-            <Label>Teléfono</Label>
-            <Text size="large" className="text-neutral-950">{customer.phone || "—"}</Text>
-          </div>
-          <div className="flex flex-col gap-y-1">
-            <Label>Email</Label>
-            <Text size="large" className="text-neutral-950">{customer.email}</Text>
-          </div>
-          <div className="flex flex-col gap-y-1">
-            <Label>ID del comercio</Label>
-            <Text size="large" className="text-neutral-950">{companyId || "—"}</Text>
-          </div>
-          <div className="hidden small:block" />
-          <div className="small:col-span-2">
-            <div className={DIVIDER_CLASS} />
-          </div>
-        </div>
-
         {isEditing && (
-          <>
-            <div className="flex items-center justify-end gap-3 bg-neutral-50 p-6">
-              <Button
-                variant="secondary"
-                onClick={() => setIsEditing(false)}
-                disabled={isSaving}
-              >
-                Cancel
-              </Button>
-              <Button variant="primary" onClick={handleSave} isLoading={isSaving}>
-                Save
-              </Button>
-            </div>
-            <div className={DIVIDER_CLASS_STANDALONE} />
-          </>
+          <div className="flex items-center justify-end gap-3 bg-neutral-50 p-6">
+            <button
+              type="button"
+              className="rounded-md border border-neutral-300 bg-white px-6 py-2.5 text-sm font-medium text-blue-900 hover:bg-neutral-50 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+              onClick={() => setIsEditing(false)}
+              disabled={isSaving}
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              className="rounded-md bg-blue-900 px-6 py-2.5 text-sm font-medium text-white hover:bg-blue-800 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+              onClick={handleSave}
+              disabled={isSaving}
+            >
+              {isSaving ? "Guardando..." : "Guardar cambios"}
+            </button>
+          </div>
         )}
+        <div className={DIVIDER_CLASS_STANDALONE} />
 
         <div className="flex flex-col gap-y-3 p-6">
           <Label>Dirección</Label>

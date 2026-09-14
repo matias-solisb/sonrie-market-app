@@ -21,9 +21,6 @@ const documents: PaymentDocument[] = []
 export default async function PaymentDocuments() {
   return (
     <div className="w-full" data-testid="payment-documents-page-wrapper">
-      <div className="mb-4">
-        <Heading>Documentos de pago</Heading>
-      </div>
       <div className="flex flex-col gap-y-4">
         <OrdersDocumentsTabs active="payment-documents" />
         <DocumentFilters />

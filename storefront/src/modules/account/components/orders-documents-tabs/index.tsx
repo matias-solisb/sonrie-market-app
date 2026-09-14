@@ -28,11 +28,11 @@ type TabKey = "orders" | "payment-documents"
 
 const TABS: { key: TabKey; label: string; href: string }[] = [
   { key: "orders", label: "Mis pedidos", href: "/account/orders" },
-  {
+  /* {
     key: "payment-documents",
     label: "Mis documentos",
     href: "/account/payment-documents",
-  },
+  }, */
 ]
 
 // `-mb-px` hace que el borde de 2px de la pestaña activa quede pegado

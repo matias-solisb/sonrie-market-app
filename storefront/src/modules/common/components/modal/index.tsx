@@ -12,6 +12,13 @@ type ModalProps = {
   search?: boolean
   children: React.ReactNode
   "data-testid"?: string
+  // Permite pisar el ancho/alto y el borde/redondeo/fondo del panel para
+  // un modal puntual (ver `ShippingConditionsModal`) sin afectar el resto
+  // de los modales que comparten este componente (direcciones, etc). Al
+  // pasarlo, reemplaza tanto el ancho que daría `size` como el
+  // `max-h-[75vh] h-fit` default — por eso debe incluir sus propias
+  // clases de ancho/alto si las necesita.
+  panelClassName?: string
 }
 
 const Modal = ({
@@ -21,6 +28,7 @@ const Modal = ({
   search = false,
   children,
   "data-testid": dataTestId,
+  panelClassName,
 }: ModalProps) => {
   return (
     <Transition appear show={isOpen} as={Fragment}>
@@ -59,14 +67,17 @@ const Modal = ({
               <Dialog.Panel
                 data-testid={dataTestId}
                 className={clx(
-                  "flex flex-col justify-start w-full transform p-5 text-left align-middle transition-all max-h-[75vh] h-fit",
+                  "flex flex-col justify-start w-full transform p-5 text-left align-middle transition-all",
                   {
-                    "max-w-md": size === "small",
-                    "max-w-xl": size === "medium",
-                    "max-w-3xl": size === "large",
+                    "max-w-md": size === "small" && !panelClassName,
+                    "max-w-xl": size === "medium" && !panelClassName,
+                    "max-w-3xl": size === "large" && !panelClassName,
+                    "max-h-[75vh] h-fit": !panelClassName,
                     "bg-transparent shadow-none": search,
-                    "bg-white shadow-xl border rounded-rounded": !search,
-                  }
+                    "bg-white shadow-xl border rounded-rounded":
+                      !search && !panelClassName,
+                  },
+                  !search && panelClassName
                 )}
               >
                 <ModalProvider close={close}>{children}</ModalProvider>
