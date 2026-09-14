@@ -130,7 +130,7 @@ export async function NavigationHeader() {
               {topLevelCategories.map((category) => (
                 <li key={category.id}>
                   <LocalizedClientLink
-                    href={`/categories/${category.handle}`}
+                    href={`/products?category_id=${category.id}`}
                     className="font-semibold hover:text-white/80"
                   >
                     {category.name}

@@ -3,6 +3,7 @@ import Image from "next/image"
 
 import { retrieveCustomer } from "@/lib/data/customer"
 import LocalizedClientLink from "@/modules/common/components/localized-client-link"
+import ShippingConditionsModal from "@/modules/layout/components/shipping-conditions-modal"
 
 const LOGO_URL =
   "https://s3.amazonaws.com/production-clients-images/sonrie.youorder.me/others/LOGO-Sonri%CC%81e-Market%20%28002%29.png"
@@ -19,9 +20,11 @@ type FooterColumn = {
 
 // TODO: several of these links don't have a real page yet (Pagos, Nuevos
 // Productos, Destacados, Productos Recomendados, Contacto, Preguntas
-// Frecuentes, Condiciones de Despacho, Terminos y Condiciones). They point
-// to "#" as a placeholder until those routes exist — swap in the real href
-// once they're built.
+// Frecuentes, Terminos y Condiciones). They point to "#" as a placeholder
+// until those routes exist — swap in the real href once they're built.
+// "Condiciones de Despacho" es la excepción: en vez de un href abre un
+// modal (ver ShippingConditionsModal / FooterLinkItem más abajo), como en
+// el sitio legacy.
 const ACCOUNT_COLUMN: FooterColumn = {
   title: "Cuenta",
   links: [
@@ -62,6 +65,10 @@ const HELP_COLUMN: FooterColumn = {
 }
 
 const FooterLinkItem = ({ label, href }: FooterLink) => {
+  if (label === "Condiciones de Despacho") {
+    return <ShippingConditionsModal />
+  }
+
   if (href.startsWith("/")) {
     return (
       <LocalizedClientLink href={href} className="hover:text-ui-fg-base">

@@ -8,11 +8,11 @@ const DEFAULT_REGION = process.env.NEXT_PUBLIC_DEFAULT_REGION || "us"
 // Cookie que setea el login (ver src/lib/data/cookies.ts -> setAuthToken).
 const AUTH_COOKIE_NAME = "_medusa_jwt"
 
-// Sonríe Market es un canal B2B cerrado: sin sesión no se navega el home
-// ni el catálogo (listado, categorías, colecciones, fichas de producto).
-// El match es sobre el path SIN el prefijo de countryCode.
+// Sonríe Market es un canal B2B cerrado: sin sesión no se navega el home,
+// el catálogo (listado, categorías, colecciones, fichas de producto) ni el
+// carrito. El match es sobre el path SIN el prefijo de countryCode.
 const PROTECTED_PATH_REGEX =
-  /^\/?$|^\/(products|categories|collections|store)(\/.*)?$/
+  /^\/?$|^\/(products|categories|collections|store|cart)(\/.*)?$/
 
 const regionMapCache = {
   regionMap: new Map<string, HttpTypes.StoreRegion>(),

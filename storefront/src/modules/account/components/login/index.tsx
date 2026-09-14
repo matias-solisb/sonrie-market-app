@@ -79,10 +79,10 @@ const Login = ({ setCurrentView: _setCurrentView, redirectTo }: Props) => {
         <h1 className="text-xl-semi text-ui-fg-base sm:text-2xl-semi">
           Bienvenido a Sonríe Market Store
         </h1>
-        <p className="mt-3 text-base-regular text-ui-fg-subtle">
-          Utiliza tu cuenta YouOrder.me para acceder al catálogo de Sonríe
+        {/* <p className="mt-3 text-base-regular text-ui-fg-subtle">
+          Utiliza tu cuenta xxxx para acceder al catálogo de Sonríe
           Market Store.
-        </p>
+        </p> */}
 
         <div className="mt-6 flex flex-col gap-y-3">
           <input

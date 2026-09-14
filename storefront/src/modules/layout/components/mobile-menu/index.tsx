@@ -89,7 +89,7 @@ const MobileMenu = ({
                         className="border-b border-ui-border-base"
                       >
                         <LocalizedClientLink
-                          href={`/categories/${category.handle}`}
+                          href={`/products?category_id=${category.id}`}
                           className="block px-4 py-4 text-base font-semibold text-ui-fg-base"
                           onClick={close}
                         >
