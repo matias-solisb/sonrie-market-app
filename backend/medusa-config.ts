@@ -27,11 +27,16 @@ module.exports = defineConfig({
       resolve: "./modules/approval",
     },
     [Modules.CACHE]: {
-      resolve: "@medusajs/medusa/cache-inmemory",
+      //resolve: "@medusajs/medusa/cache-inmemory",
+      resolve: "@medusajs/medusa/cache-redis",
+      options: { 
+        redisUrl: process.env.REDIS_URL,
+      },
     },
     [Modules.WORKFLOW_ENGINE]: {
       resolve: "@medusajs/medusa/workflow-engine-inmemory",
     },
+
     // Necesario para "Olvidé mi contraseña" del storefront: cuando se pide
     // un reset (POST /auth/customer/emailpass/reset-password), el core de
     // Medusa emite el evento `auth.password_reset` — sin este módulo
