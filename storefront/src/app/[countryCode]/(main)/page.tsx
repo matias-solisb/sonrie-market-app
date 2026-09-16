@@ -1,3 +1,4 @@
+import { listBanners } from "@/lib/data/banners"
 import { listCollections } from "@/lib/data/collections"
 import { getRegion } from "@/lib/data/regions"
 import { listRegions } from "@/lib/data/regions"
@@ -59,9 +60,11 @@ export default async function Home(props: {
 
   const { countryCode } = params
 
+  const slides = await listBanners()
+
   return (
     <div className="flex flex-col gap-y-2 m-2">
-      <Hero />
+      <Hero slides={slides} />
       <Suspense fallback={<SkeletonFeaturedProducts />}>
         <FeaturedProductsSection countryCode={countryCode} />
       </Suspense>

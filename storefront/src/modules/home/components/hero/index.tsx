@@ -5,40 +5,38 @@ import Image from "next/image"
 import { useEffect, useState } from "react"
 
 import LocalizedClientLink from "@/modules/common/components/localized-client-link"
-
-const SLIDES = [
-  {
-    src: "https://s3.amazonaws.com/production-clients-images/sonrie.youorder.me/banner/ChatGPT%20Image%2017%20jun%202026%2C%2004_53_16%20p.m..png",
-    alt: "Sonríe Market es el nuevo beneficio exclusivo para colaboradores de Soprole",
-  },
-  {
-    src: "https://s3.amazonaws.com/production-clients-images/sonrie.youorder.me/banner/ChatGPT%20Image%2017%20jun%202026%2C%2004_55_05%20p.m..png",
-    alt: "Sonríe Market",
-  },
-]
+import { StoreBanner } from "@/lib/data/banners"
 
 const AUTOPLAY_MS = 6000
 
-const Hero = () => {
+type HeroProps = {
+  slides: StoreBanner[]
+}
+
+const Hero = ({ slides }: HeroProps) => {
   const [current, setCurrent] = useState(0)
 
   useEffect(() => {
-    if (SLIDES.length < 2) {
+    if (slides.length < 2) {
       return
     }
 
     const timer = setInterval(() => {
-      setCurrent((prev) => (prev + 1) % SLIDES.length)
+      setCurrent((prev) => (prev + 1) % slides.length)
     }, AUTOPLAY_MS)
 
     return () => clearInterval(timer)
-  }, [])
+  }, [slides.length])
 
-  const goTo = (index: number) => {
-    setCurrent((index + SLIDES.length) % SLIDES.length)
+  if (slides.length === 0) {
+    return null
   }
 
-  const slide = SLIDES[current]
+  const goTo = (index: number) => {
+    setCurrent((index + slides.length) % slides.length)
+  }
+
+  const slide = slides[current]
 
   return (
     <div
@@ -54,9 +52,9 @@ const Hero = () => {
         data-testid="hero-slide-link"
       >
         <Image
-          key={slide.src}
-          src={slide.src}
-          alt={slide.alt}
+          key={slide.image_url}
+          src={slide.image_url}
+          alt="banner"
           width={1900}
           height={670}
           className="h-auto w-full"
@@ -65,7 +63,7 @@ const Hero = () => {
         />
       </LocalizedClientLink>
 
-      {SLIDES.length > 1 && (
+      {slides.length > 1 && (
         <>
           <button
             type="button"
@@ -88,9 +86,9 @@ const Hero = () => {
         </>
       )}
 
-      {SLIDES.length > 1 && (
+      {slides.length > 1 && (
         <div className="flex items-center justify-center gap-x-2 py-3">
-          {SLIDES.map((_, index) => (
+          {slides.map((_, index) => (
             <button
               key={index}
               type="button"

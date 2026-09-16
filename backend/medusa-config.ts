@@ -1,5 +1,6 @@
 import { QUOTE_MODULE } from "./src/modules/quote";
 import { APPROVAL_MODULE } from "./src/modules/approval";
+import { BANNERS_MODULE } from "./src/modules/banners";
 import { COMPANY_MODULE } from "./src/modules/company";
 import { loadEnv, defineConfig, Modules } from "@medusajs/framework/utils";
 
@@ -8,6 +9,7 @@ loadEnv(process.env.NODE_ENV!, process.cwd());
 module.exports = defineConfig({
   projectConfig: {
     databaseUrl: process.env.DATABASE_URL,
+    redisUrl: process.env.REDIS_URL,
     http: {
       storeCors: process.env.STORE_CORS!,
       adminCors: process.env.ADMIN_CORS!,
@@ -25,6 +27,38 @@ module.exports = defineConfig({
     },
     [APPROVAL_MODULE]: {
       resolve: "./modules/approval",
+    },
+    [BANNERS_MODULE]: {
+      resolve: "./modules/banners",
+    },
+    // File Module — provider local por ahora (interino, mientras blob
+    // storage no está configurado). Cuando esté listo, se cambia el
+    // provider/las opciones acá y no hay que tocar el módulo de banners
+    // ni el resto de la app: todos consumen la URL que devuelva el
+    // File Module, sea cual sea el provider activo.
+    //
+    // upload_dir DEBE ser "static" (el default del provider, ya usado acá
+    // para las imágenes semilla de productos). El watcher de `medusa
+    // develop` vigila todo el proyecto para reiniciar el server, pero
+    // tiene una lista fija de carpetas ignoradas (node_modules, dist,
+    // .medusa, src/admin, static, private) que no se puede configurar
+    // desde acá. Si se sube un archivo a una carpeta que no está en esa
+    // lista (ej. "uploads"), cada subida dispara un reinicio completo a
+    // mitad del flujo de creación del banner.
+    [Modules.FILE]: {
+      resolve: "@medusajs/file",
+      options: {
+        providers: [
+          {
+            resolve: "@medusajs/file-local",
+            id: "local",
+            options: {
+              upload_dir: "static",
+              backend_url: `${process.env.MEDUSA_BACKEND_URL || "http://localhost:9000"}/static`,
+            },
+          },
+        ],
+      },
     },
     [Modules.CACHE]: {
       //resolve: "@medusajs/medusa/cache-inmemory",
