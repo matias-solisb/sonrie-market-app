@@ -216,7 +216,7 @@ export function CartProvider({
 
     await deleteLineItem(lineItem).catch((e) => {
       toast.error("Failed to delete item")
-      setOptimisticCart(prevCart)
+      startTransition(() => setOptimisticCart(prevCart))
     })
   }
 
@@ -277,7 +277,7 @@ export function CartProvider({
         data: { quantity },
       }).catch((e) => {
         toast.error("Failed to update cart quantity")
-        setOptimisticCart(prevCart)
+        startTransition(() => setOptimisticCart(prevCart))
       })
     }
   }
@@ -316,7 +316,7 @@ export function CartProvider({
 
     await emptyCart().catch((e) => {
       toast.error("Failed to empty cart")
-      setOptimisticCart(prevCart)
+      startTransition(() => setOptimisticCart(prevCart))
     })
   }
 

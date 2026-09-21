@@ -42,7 +42,7 @@ const StoreTemplate = async ({
       />
       <div className="w-full">
         <div className="mb-6 hidden small:block">
-          <h1 className="text-2xl-semi" data-testid="store-page-title">
+          <h1 className="text-2xl" data-testid="store-page-title">
             Catálogo de productos
           </h1>
         </div>

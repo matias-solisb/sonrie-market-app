@@ -43,7 +43,7 @@ const FeaturedProductsSection = async ({
   }
 
   return (
-    <ul className="flex flex-col gap-x-6">
+    <ul className="flex flex-col gap-x-1">
       <FeaturedProducts
         collections={collections}
         region={region}

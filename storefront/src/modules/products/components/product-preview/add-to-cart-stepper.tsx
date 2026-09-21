@@ -93,10 +93,7 @@ const AddToCartStepper = ({
         disabled={isPending}
         className={`flex h-10 items-center justify-center gap-x-2 rounded-md bg-blue-900 text-white hover:bg-blue-800 disabled:opacity-60 ${className}`}
         data-testid="add-to-cart-button"
-      >
-        <PlusMini />
-        Agregar
-      </button>
+      >Agregar</button>
     )
   }
 
