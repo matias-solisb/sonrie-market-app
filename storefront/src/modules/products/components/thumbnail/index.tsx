@@ -9,8 +9,9 @@ type ThumbnailProps = {
   images?: { url?: string }[] | null
   size?: "small" | "medium" | "large" | "full" | "square"
   isFeatured?: boolean
-  // "Destacado" ribbon + multiplier badge shown on catalog cards. These are
-  // purely visual for now — see the TODO in paginated-products.tsx.
+  // "Destacado" ribbon: refleja el product tag "featured" del producto
+  // (ver paginated-products.tsx, p.tags). El multiplier badge de abajo
+  // sigue siendo un valor de demostración.
   destacado?: boolean
   multiplier?: number
   className?: string

@@ -7,20 +7,12 @@ import clsx from "clsx"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { useCallback, useState } from "react"
 
-import { CATEGORY_QUERY_KEY } from "@/lib/util/product-option-filters"
+import {
+  CATEGORY_QUERY_KEY,
+  QUICK_FILTERS,
+  QuickFilterTagValue,
+} from "@/lib/util/product-option-filters"
 
-const QUICK_FILTERS = [
-  { id: "ofertas", label: "Ofertas" },
-  { id: "nuevos", label: "Nuevos" },
-  { id: "destacados", label: "Destacados" },
-]
-
-// NOTE: Ofertas / Nuevos / Destacados siguen siendo solo visuales — conectarlos
-// a un filtro real implica primero decidir cómo se representan en Medusa
-// (colección, tag o metadata), lo que implica cambios de datos que quedan
-// para una siguiente etapa. Categorías sí filtra el catálogo de verdad, ya
-// que category_id es un campo nativo de Medusa.
-//
 // `variant`:
 //  - "card"  → sidebar fijo de escritorio (con su propia caja con borde),
 //              oculto en mobile.
@@ -35,17 +27,30 @@ const CatalogSidebar = ({
   selectedCategoryIds: string[]
   variant?: "card" | "panel"
 }) => {
-  const [checkedQuickFilters, setCheckedQuickFilters] = useState<
-    Record<string, boolean>
-  >({})
   const [isCategoriesOpen, setIsCategoriesOpen] = useState(true)
 
   const router = useRouter()
   const pathname = usePathname()
   const searchParams = useSearchParams()
 
-  const toggleQuickFilter = (id: string) =>
-    setCheckedQuickFilters((prev) => ({ ...prev, [id]: !prev[id] }))
+  const toggleQuickFilter = useCallback(
+    (tagValue: QuickFilterTagValue) => {
+      const params = new URLSearchParams(searchParams.toString())
+      const isChecked = params.get(tagValue) === "true"
+
+      if (isChecked) {
+        params.delete(tagValue)
+      } else {
+        params.set(tagValue, "true")
+      }
+
+      params.delete("page")
+
+      const queryString = params.toString()
+      router.push(queryString ? `${pathname}?${queryString}` : pathname)
+    },
+    [pathname, router, searchParams]
+  )
 
   const toggleCategory = useCallback(
     (categoryId: string) => {
@@ -81,8 +86,8 @@ const CatalogSidebar = ({
           >
             <input
               type="checkbox"
-              checked={!!checkedQuickFilters[filter.id]}
-              onChange={() => toggleQuickFilter(filter.id)}
+              checked={searchParams.get(filter.tagValue) === "true"}
+              onChange={() => toggleQuickFilter(filter.tagValue)}
               className="h-4 w-4 rounded border-ui-border-base text-ui-fg-interactive focus:ring-0"
               data-testid={`catalog-filter-${filter.id}`}
             />

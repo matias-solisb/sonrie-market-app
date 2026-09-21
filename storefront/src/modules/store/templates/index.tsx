@@ -1,7 +1,10 @@
 import { Suspense } from "react"
 
 import { listCategories } from "@/lib/data/categories"
-import { OptionValueIds } from "@/lib/util/product-option-filters"
+import {
+  OptionValueIds,
+  QuickFilterTagValue,
+} from "@/lib/util/product-option-filters"
 import SkeletonProductGrid from "@/modules/skeletons/templates/skeleton-product-grid"
 import CatalogSidebar from "@/modules/store/components/catalog-sidebar"
 import { SortOptions } from "@/modules/store/components/refinement-list/sort-products"
@@ -14,6 +17,7 @@ const StoreTemplate = async ({
   countryCode,
   optionValueIds,
   categoryIds,
+  quickFilterTagValues,
   q,
 }: {
   sortBy?: SortOptions
@@ -21,6 +25,7 @@ const StoreTemplate = async ({
   countryCode: string
   optionValueIds?: OptionValueIds
   categoryIds?: string[]
+  quickFilterTagValues?: QuickFilterTagValue[]
   q?: string
 }) => {
   const pageNumber = page ? parseInt(page) : 1
@@ -53,6 +58,7 @@ const StoreTemplate = async ({
             countryCode={countryCode}
             optionValueIds={optionValueIds}
             categoryIds={categoryIds}
+            quickFilterTagValues={quickFilterTagValues}
             categories={topLevelCategories}
             q={q}
           />

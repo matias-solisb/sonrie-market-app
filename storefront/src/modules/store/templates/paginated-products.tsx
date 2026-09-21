@@ -1,29 +1,36 @@
 import { retrieveCart } from "@/lib/data/cart"
 import { listProductsWithSort } from "@/lib/data/products"
+import { listProductTagsByValue } from "@/lib/data/product-tags"
 import { getRegion } from "@/lib/data/regions"
-import { OptionValueIds } from "@/lib/util/product-option-filters"
+import {
+  OptionValueIds,
+  QuickFilterTagValue,
+} from "@/lib/util/product-option-filters"
 import { HttpTypes } from "@medusajs/types"
 import ProductPreview from "@/modules/products/components/product-preview"
 import { Pagination } from "@/modules/store/components/pagination"
 import MobileFilters from "@/modules/store/components/mobile-filters"
 import SelectedCategoryBadges from "@/modules/store/components/selected-category-badges"
+import SelectedQuickFilterBadges from "@/modules/store/components/selected-quick-filter-badges"
 import { SortOptions } from "@/modules/store/components/refinement-list/sort-products"
 import EmptyProductsState from "@/modules/store/components/empty-products-state"
 
 const PRODUCT_LIMIT = 12
 
-// TODO: valores de demostración hasta que "destacado" y el multiplicador de
-// mayoreo tengan un campo real en Medusa (colección, tag o metadata — ver
-// nota en catalog-sidebar). Por ahora solo son visuales.
+// TODO: el multiplicador de mayoreo sigue siendo un valor de demostración —
+// "destacado" ya no lo es, ver más abajo (p.tags), se resolvió con el
+// product tag "featured" creado en el Admin.
 const DEMO_MULTIPLIERS = [10, 12, 15, 20]
 
 type PaginatedProductsParams = {
   limit: number
   collection_id?: string[]
   category_id?: string[]
+  tag_id?: string[]
   id?: string[]
   order?: string
   q?: string
+  fields?: string
 }
 
 export default async function PaginatedProducts({
@@ -35,6 +42,7 @@ export default async function PaginatedProducts({
   productsIds,
   countryCode,
   optionValueIds,
+  quickFilterTagValues,
   categories,
   q,
 }: {
@@ -46,6 +54,12 @@ export default async function PaginatedProducts({
   productsIds?: string[]
   countryCode: string
   optionValueIds?: OptionValueIds
+  // Filtros rápidos "Ofertas/Nuevos/Destacados" del sidebar (ver
+  // catalog-sidebar): cada uno es el value de un product tag creado a
+  // mano en el Admin. Varios seleccionados a la vez es un OR (Medusa
+  // trae productos que tengan CUALQUIERA de los tag_id dados), igual que
+  // ya pasa con categoryIds.
+  quickFilterTagValues?: QuickFilterTagValue[]
   q?: string
   // Categorías para el botón "Filtros" que se muestra solo en mobile (ver
   // mobile-filters) y para los badges de categoría seleccionada — en
@@ -55,6 +69,11 @@ export default async function PaginatedProducts({
 }) {
   const queryParams: PaginatedProductsParams = {
     limit: 12,
+    // +tags suma la relación de product tags al fetch por defecto
+    // (*variants.calculated_price, ver listProducts) — se necesita para
+    // saber, por producto, si trae el tag "featured" y así pintar el
+    // ribbon "Destacado" de la card (ver p.tags más abajo).
+    fields: "*variants.calculated_price,+tags",
   }
 
   if (collectionId) {
@@ -73,6 +92,16 @@ export default async function PaginatedProducts({
 
   if (productsIds) {
     queryParams["id"] = productsIds
+  }
+
+  if (quickFilterTagValues?.length) {
+    const matchingTags = await listProductTagsByValue(quickFilterTagValues)
+
+    // Si algún value todavía no tiene tag creado en el Admin, simplemente
+    // no aporta ids — no rompe el resto de los filtros seleccionados.
+    if (matchingTags.length) {
+      queryParams["tag_id"] = matchingTags.map((tag) => tag.id)
+    }
   }
 
   if (sortBy === "created_at") {
@@ -138,6 +167,9 @@ export default async function PaginatedProducts({
           categories={categories ?? []}
           selectedCategoryIds={categoryIds ?? []}
         />
+        <SelectedQuickFilterBadges
+          selectedQuickFilterTagValues={quickFilterTagValues ?? []}
+        />
       </div>
 
       {count === 0 ? (
@@ -171,7 +203,9 @@ export default async function PaginatedProducts({
                     product={p}
                     region={region}
                     countryCode={countryCode}
-                    destacado={index % 3 === 0}
+                    destacado={
+                      p.tags?.some((tag) => tag.value === "featured") ?? false
+                    }
                     multiplier={DEMO_MULTIPLIERS[index % DEMO_MULTIPLIERS.length]}
                     cartQuantity={cartItem?.quantity}
                     cartLineItemId={cartItem?.id}

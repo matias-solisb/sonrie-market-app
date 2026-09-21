@@ -3,6 +3,7 @@ import { Metadata } from "next"
 import {
   parseCategoryIds,
   parseOptionValueIds,
+  parseQuickFilterTagValues,
 } from "@/lib/util/product-option-filters"
 import { SortOptions } from "@/modules/store/components/refinement-list/sort-products"
 import StoreTemplate from "@/modules/store/templates"
@@ -18,6 +19,10 @@ type ProductsPageSearchParams = Record<string, string | string[] | undefined> & 
   optionValueIds?: string | string[]
   category_id?: string | string[]
   q?: string
+  // Filtros rápidos del sidebar — ver product-option-filters.ts
+  featured?: string
+  new?: string
+  promotions?: string
 }
 
 type Params = {
@@ -33,6 +38,7 @@ export default async function ProductsPage(props: Params) {
   const { sortBy, page, q } = searchParams
   const optionValueIds = parseOptionValueIds(searchParams)
   const categoryIds = parseCategoryIds(searchParams)
+  const quickFilterTagValues = parseQuickFilterTagValues(searchParams)
 
   return (
     <StoreTemplate
@@ -41,6 +47,7 @@ export default async function ProductsPage(props: Params) {
       countryCode={params.countryCode}
       optionValueIds={optionValueIds}
       categoryIds={categoryIds}
+      quickFilterTagValues={quickFilterTagValues}
       q={q}
     />
   )

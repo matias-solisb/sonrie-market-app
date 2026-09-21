@@ -49,3 +49,46 @@ export const parseCategoryIds = (
 
   return []
 }
+
+
+// Filtros rápidos del catálogo (sidebar "Ofertas / Nuevos / Destacados").
+// Cada uno es un booleano en la URL (?featured=true, ?new=true,
+// ?promotions=true, combinables) que se traduce 1:1 al value de un
+// product tag creado a mano en el Admin de Medusa (ver catalog-sidebar).
+export const QUICK_FILTER_TAG_VALUES = ["featured", "new", "promotions"] as const
+
+export type QuickFilterTagValue = (typeof QUICK_FILTER_TAG_VALUES)[number]
+
+export const parseQuickFilterTagValues = (
+  searchParams: URLSearchParams | Record<string, string | string[] | undefined>
+): QuickFilterTagValue[] => {
+  const getValue = (key: string): string | undefined => {
+    if (typeof (searchParams as URLSearchParams).get === "function") {
+      return (searchParams as URLSearchParams).get(key) ?? undefined
+    }
+
+    const raw = (
+      searchParams as Record<string, string | string[] | undefined>
+    )[key]
+
+    return Array.isArray(raw) ? raw[0] : raw
+  }
+
+  return QUICK_FILTER_TAG_VALUES.filter((tagValue) => getValue(tagValue) === "true")
+}
+
+// Metadata de UI de cada quick filter (id/label en español + su tagValue),
+// compartida por catalog-sidebar (checkboxes) y selected-quick-filter-badges
+// (badges "Ofertas ✕" bajo el conteo de resultados), para que ambos queden
+// sincronizados con una sola fuente.
+export type QuickFilter = {
+  id: string
+  label: string
+  tagValue: QuickFilterTagValue
+}
+
+export const QUICK_FILTERS: QuickFilter[] = [
+  { id: "ofertas", label: "Ofertas", tagValue: "promotions" },
+  { id: "nuevos", label: "Nuevos", tagValue: "new" },
+  { id: "destacados", label: "Destacados", tagValue: "featured" },
+]
