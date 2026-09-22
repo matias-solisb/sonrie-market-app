@@ -115,7 +115,7 @@ export async function NavigationHeader() {
             <div className="flex items-center gap-x-6 shrink-0">
               <CategoriesMenu categories={topLevelCategories} />
               <LocalizedClientLink
-                href="/products"
+                href="/products?promotions=true"
                 className="flex items-center gap-x-2 txt-compact-small-plus font-semibold text-white hover:text-white/80"
                 data-testid="nav-offers-link"
               >

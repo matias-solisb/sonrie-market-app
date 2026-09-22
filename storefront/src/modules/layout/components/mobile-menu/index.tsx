@@ -68,7 +68,7 @@ const MobileMenu = ({
               </div>
 
               <LocalizedClientLink
-                href="/products"
+                href="/products?promotions=true"
                 className="flex items-center gap-x-3 border-b border-ui-border-base px-4 py-4 text-base font-semibold text-ui-fg-base"
                 onClick={close}
                 data-testid="mobile-menu-offers-link"
