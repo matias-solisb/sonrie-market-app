@@ -15,7 +15,6 @@ const Button = ({
       variant === "primary" && !props.disabled,
     "!shadow-none bg-transparent text-neutral-900": variant === "transparent",
   })
-  console.log(className)
   return (
     <MedusaButton
       className={`!rounded-full text-sm font-normal ${className}`}

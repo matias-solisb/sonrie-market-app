@@ -1,17 +1,32 @@
 "use client"
 
 import { changePassword, updateCustomer } from "@/lib/data/customer"
+import { useZodForm } from "@/lib/forms/use-zod-form"
+import { muiTheme } from "@/lib/mui/theme"
+import {
+  changePasswordSchema,
+  type ChangePasswordFormValues,
+} from "@/lib/validations/auth"
+import {
+  profileSchema,
+  type ProfileFormValues,
+} from "@/lib/validations/profile"
+import {
+  FormCancelButton,
+  FormPasswordField,
+  FormReadOnlyField,
+  FormSubmitButton,
+  FormTextField,
+} from "@/modules/common/components/form"
 import LocalizedClientLink from "@/modules/common/components/localized-client-link"
 import { showSuccessToast } from "@/modules/common/components/success-toast"
-import Eye from "@/modules/common/icons/eye"
-import EyeOff from "@/modules/common/icons/eye-off"
-import { muiTheme } from "@/lib/mui/theme"
 import { B2BCustomer } from "@/types/global"
-import { HttpTypes } from "@medusajs/types"
-import { Checkbox, Container, Text, clx, toast } from "@medusajs/ui"
+import { Checkbox, Container, Text, toast } from "@medusajs/ui"
+import InputAdornment from "@mui/material/InputAdornment"
 import OutlinedInput from "@mui/material/OutlinedInput"
 import { ThemeProvider } from "@mui/material/styles"
-import { useState, type ReactNode } from "react"
+import { useMemo, useState, type ReactNode } from "react"
+import { Controller } from "react-hook-form"
 import PhoneCountrySelect, {
   getDialCode,
   parsePhoneNumber,
@@ -47,8 +62,12 @@ para que la línea quede corta y no toque el borde derecho del recuadro,
 tal como pide la referencia. Se pone como hermano después de cada sección
 (no como borde del contenedor).
 
-- "Cambiar contraseña" ahora guarda de verdad: valida en el cliente
-  (campos completos, nueva = repetida) y llama al server action
+- Los dos formularios de la card ("Editar Datos" y "Cambiar contraseña")
+  usan los campos compartidos de `common/components/form` (TextField de
+  MUI + react-hook-form) con esquemas zod (`lib/validations/profile` y
+  `lib/validations/auth`): cada error se muestra en su campo.
+- "Cambiar contraseña" valida en el cliente (campos completos, largo
+  mínimo, nueva = repetida) y llama al server action
   `changePassword` (`lib/data/customer.ts`), que primero verifica la
   "contraseña actual" haciendo un login real contra el provider
   `emailpass` de Medusa (el endpoint de update NO valida esa contraseña
@@ -71,166 +90,96 @@ tal como pide la referencia. Se pone como hermano después de cada sección
 // pegado al borde real de la card.
 const DIVIDER_CLASS_STANDALONE = "h-px bg-neutral-200 ml-6 mr-10"
 
-// Campo de Contraseña con su propio estilo — mismo patrón "label arriba +
-// cajita abajo" que ya usa el selector de Dirección en el carro
-// (`cart/components/delivery-options/index.tsx`: label `text-xs
-// text-neutral-500`, separados por `gap-y-1.5`, caja `rounded-md border
-// border-gray-200 bg-white h-11`). No usa el `Input` compartido de
-// `common/components/input` porque ese trae `rounded-full` fijo (no se
-// puede pisar solo con className, misma prioridad en el CSS generado por
-// Tailwind) y además dibuja el label flotando encima del borde, que fue
-// justo lo que se veía mal acá — este patrón es más simple: el label
-// nunca se mueve, siempre está arriba de la caja.
 const PASSWORD_LABEL_CLASS = "text-xs text-neutral-500"
-const PASSWORD_INPUT_CLASS =
-  "w-full appearance-none rounded-md border border-gray-200 bg-white h-11 pl-3 pr-9 text-sm text-neutral-950 outline-none hover:border-gray-300"
 
-// Campos de "Editar Datos" (Nombre/Apellido/Teléfono/Email): caja con borde
-// redondeado conteniendo el label chico arriba y el valor abajo, según la
-// referencia (imagen del formulario). Reemplaza al `Input` compartido
-// (pill/`rounded-full` con label flotante) solo para esta sección.
-const FIELD_BOX_CLASS =
-  "flex flex-col gap-y-1 rounded-2xl border border-gray-200 bg-white px-4 py-3 focus-within:border-blue-900 transition-colors"
-const FIELD_LABEL_CLASS = "text-xs text-neutral-500"
-const FIELD_INPUT_CLASS =
-  "w-full min-w-0 bg-transparent text-base text-neutral-950 outline-none"
+// Valor de "Editar Datos" a partir del customer (también se usa para
+// descartar los cambios al cancelar).
+const toProfileValues = (customer: B2BCustomer): ProfileFormValues => {
+  const { countryCode, localNumber } = parsePhoneNumber(customer.phone)
 
-const FieldBox = ({
-  label,
-  htmlFor,
-  children,
-}: {
-  label: string
-  htmlFor?: string
-  children: ReactNode
-}) => (
-  <div className={FIELD_BOX_CLASS}>
-    <label htmlFor={htmlFor} className={FIELD_LABEL_CLASS}>
-      {label}
-    </label>
-    {children}
-  </div>
-)
+  return {
+    first_name: customer.first_name ?? "",
+    last_name: customer.last_name ?? "",
+    phone_country: countryCode,
+    phone_local: localNumber,
+  }
+}
 
-const PasswordField = ({
-  label,
-  name,
-  value,
-  onChange,
-}: {
-  label: string
-  name: string
-  value: string
-  onChange: (value: string) => void
-}) => {
-  const [visible, setVisible] = useState(false)
-
-  return (
-    <div className="flex flex-col gap-y-1.5 w-full small:max-w-xs">
-      <label htmlFor={name} className={PASSWORD_LABEL_CLASS}>
-        {label}
-      </label>
-      <div className="relative">
-        <input
-          id={name}
-          type={visible ? "text" : "password"}
-          name={name}
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          className={PASSWORD_INPUT_CLASS}
-        />
-        <button
-          type="button"
-          onClick={() => setVisible((v) => !v)}
-          className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-500"
-        >
-          {visible ? <Eye size="18" /> : <EyeOff size="18" />}
-        </button>
-      </div>
-    </div>
-  )
+const EMPTY_PASSWORD_FORM: ChangePasswordFormValues = {
+  current_password: "",
+  password: "",
+  repeat_password: "",
 }
 
 const ProfileCard = ({ customer }: { customer: B2BCustomer }) => {
   const [isEditing, setIsEditing] = useState(false)
-  const [isSaving, setIsSaving] = useState(false)
   const [receiveEmailNotifications, setReceiveEmailNotifications] =
     useState(true)
-
   const [isChangingPassword, setIsChangingPassword] = useState(false)
-  const [isSavingPassword, setIsSavingPassword] = useState(false)
-  const [passwordForm, setPasswordForm] = useState({
-    current: "",
-    next: "",
-    repeat: "",
+
+  const profileDefaults = useMemo(() => toProfileValues(customer), [customer])
+
+  const profileForm = useZodForm(profileSchema, {
+    defaultValues: profileDefaults,
   })
 
-  const { first_name, last_name, phone } = customer
+  const passwordForm = useZodForm(changePasswordSchema, {
+    defaultValues: EMPTY_PASSWORD_FORM,
+  })
 
-  const [customerData, setCustomerData] = useState({
-    first_name,
-    last_name,
-  } as HttpTypes.StoreUpdateCustomer)
+  const cancelEditing = () => {
+    profileForm.reset(profileDefaults)
+    setIsEditing(false)
+  }
 
-  const initialPhone = parsePhoneNumber(phone)
-  const [phoneCountry, setPhoneCountry] = useState(initialPhone.countryCode)
-  const [phoneLocal, setPhoneLocal] = useState(initialPhone.localNumber)
-
-  const handleSave = async () => {
-    setIsSaving(true)
-    const phone = phoneLocal ? `+${getDialCode(phoneCountry)}${phoneLocal}` : ""
+  const handleSave = profileForm.handleSubmit(async (values) => {
+    const phone = values.phone_local
+      ? `+${getDialCode(values.phone_country)}${values.phone_local}`
+      : ""
 
     try {
-      await updateCustomer({ ...customerData, phone })
+      await updateCustomer({
+        first_name: values.first_name,
+        last_name: values.last_name,
+        phone,
+      })
     } catch (error) {
       // El Server Action corre en el servidor de Next.js: este error NUNCA
       // aparece en la pestaña Network del navegador (mismo caso que
       // `changePassword`, ver comentario en lib/data/customer.ts) — para
       // verlo hay que mirar la terminal donde corre `npm run dev`.
       console.error("[ProfileCard] falló updateCustomer:", error)
-      toast.error("Error updating customer")
-      setIsSaving(false)
+      toast.error("No se pudo actualizar tu perfil")
       return
     }
 
-    setIsSaving(false)
+    profileForm.reset(values)
     setIsEditing(false)
     showSuccessToast("Su perfil ha sido actualizado")
-  }
+  })
 
   const closePasswordForm = () => {
     setIsChangingPassword(false)
-    setPasswordForm({ current: "", next: "", repeat: "" })
+    passwordForm.reset(EMPTY_PASSWORD_FORM)
   }
 
-  const handleSavePassword = async () => {
-    if (!passwordForm.current || !passwordForm.next || !passwordForm.repeat) {
-      toast.error("Completa los tres campos.")
-      return
-    }
-
-    if (passwordForm.next !== passwordForm.repeat) {
-      toast.error("La nueva contraseña y su repetición no coinciden.")
-      return
-    }
-
-    setIsSavingPassword(true)
-
+  const handleSavePassword = passwordForm.handleSubmit(async (values) => {
     const result = await changePassword({
-      currentPassword: passwordForm.current,
-      newPassword: passwordForm.next,
+      currentPassword: values.current_password,
+      newPassword: values.password,
     })
 
-    setIsSavingPassword(false)
-
     if (result.error) {
+      // El error típico es "contraseña actual incorrecta": se marca en ese
+      // campo además del toast.
+      passwordForm.setError("current_password", { message: result.error })
       toast.error(result.error)
       return
     }
 
     closePasswordForm()
     showSuccessToast("Contraseña actualizada correctamente")
-  }
+  })
 
   const defaultAddress =
     customer.addresses?.find((a) => a.is_default_shipping) ||
@@ -283,31 +232,20 @@ const ProfileCard = ({ customer }: { customer: B2BCustomer }) => {
 
       <Container className="p-0 overflow-hidden">
         <form
+          id="profile-form"
+          noValidate
+          onSubmit={handleSave}
           className="grid grid-cols-1 gap-6 p-6 small:grid-cols-2"
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && isEditing) {
-              e.preventDefault()
-              handleSave()
-            }
-          }}
         >
           <div className="flex flex-col gap-y-2">
             <Label>Nombre</Label>
             {isEditing ? (
-              <FieldBox label="Nombre" htmlFor="first_name">
-                <input
-                  id="first_name"
-                  name="first_name"
-                  value={customerData.first_name || ""}
-                  onChange={(e) =>
-                    setCustomerData({
-                      ...customerData,
-                      first_name: e.target.value,
-                    })
-                  }
-                  className={FIELD_INPUT_CLASS}
-                />
-              </FieldBox>
+              <FormTextField
+                control={profileForm.control}
+                name="first_name"
+                label="Nombre"
+                autoComplete="given-name"
+              />
             ) : (
               <Text size="large" className="text-neutral-950">
                 {customer.first_name || "—"}
@@ -317,20 +255,12 @@ const ProfileCard = ({ customer }: { customer: B2BCustomer }) => {
           <div className="flex flex-col gap-y-2">
             <Label>Apellido</Label>
             {isEditing ? (
-              <FieldBox label="Apellido" htmlFor="last_name">
-                <input
-                  id="last_name"
-                  name="last_name"
-                  value={customerData.last_name || ""}
-                  onChange={(e) =>
-                    setCustomerData({
-                      ...customerData,
-                      last_name: e.target.value,
-                    })
-                  }
-                  className={FIELD_INPUT_CLASS}
-                />
-              </FieldBox>
+              <FormTextField
+                control={profileForm.control}
+                name="last_name"
+                label="Apellido"
+                autoComplete="family-name"
+              />
             ) : (
               <Text size="large" className="text-neutral-950">
                 {customer.last_name || "—"}
@@ -340,22 +270,35 @@ const ProfileCard = ({ customer }: { customer: B2BCustomer }) => {
           <div className="flex flex-col gap-y-2">
             <Label>Teléfono</Label>
             {isEditing ? (
-              <FieldBox label="Teléfono" htmlFor="phone">
-                <div className="flex items-center gap-x-2">
-                  <PhoneCountrySelect value={phoneCountry} onChange={setPhoneCountry} />
-                  <input
-                    id="phone"
-                    name="phone"
+              // El selector de país va como adornment dentro del mismo
+              // TextField, así el borde/label/error son los del resto.
+              <Controller
+                control={profileForm.control}
+                name="phone_country"
+                render={({ field: country }) => (
+                  <FormTextField
+                    control={profileForm.control}
+                    name="phone_local"
+                    label="Teléfono"
                     type="tel"
-                    inputMode="numeric"
-                    value={phoneLocal}
-                    onChange={(e) =>
-                      setPhoneLocal(e.target.value.replace(/\D/g, ""))
-                    }
-                    className={clx(FIELD_INPUT_CLASS, "flex-1")}
+                    autoComplete="tel-national"
+                    slotProps={{
+                      htmlInput: { inputMode: "numeric" },
+                      inputLabel: { shrink: true },
+                      input: {
+                        startAdornment: (
+                          <InputAdornment position="start">
+                            <PhoneCountrySelect
+                              value={country.value}
+                              onChange={country.onChange}
+                            />
+                          </InputAdornment>
+                        ),
+                      },
+                    }}
                   />
-                </div>
-              </FieldBox>
+                )}
+              />
             ) : (
               <Text size="large" className="text-neutral-950">
                 {customer.phone || "—"}
@@ -365,11 +308,8 @@ const ProfileCard = ({ customer }: { customer: B2BCustomer }) => {
           <div className="flex flex-col gap-y-2">
             <Label>Email</Label>
             {isEditing ? (
-              <FieldBox label="Email">
-                <span className="text-base text-neutral-400">
-                  {customer.email}
-                </span>
-              </FieldBox>
+              // Solo lectura: no se edita desde acá.
+              <FormReadOnlyField label="Email" value={customer.email} />
             ) : (
               <Text size="large" className="text-neutral-950">
                 {customer.email}
@@ -379,11 +319,7 @@ const ProfileCard = ({ customer }: { customer: B2BCustomer }) => {
           <div className="flex flex-col gap-y-2 small:col-span-2">
             <Label>ID del comercio</Label>
             {isEditing ? (
-              <FieldBox label="ID del comercio">
-                <span className="text-base text-neutral-400">
-                  {companyId || "—"}
-                </span>
-              </FieldBox>
+              <FormReadOnlyField label="ID del comercio" value={companyId} />
             ) : (
               <Text size="large" className="text-neutral-950">
                 {companyId || "—"}
@@ -394,22 +330,19 @@ const ProfileCard = ({ customer }: { customer: B2BCustomer }) => {
 
         {isEditing && (
           <div className="flex items-center justify-end gap-3 bg-neutral-50 p-6">
-            <button
-              type="button"
-              className="rounded-md border border-neutral-300 bg-white px-6 py-2.5 text-sm font-medium text-blue-900 hover:bg-neutral-50 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
-              onClick={() => setIsEditing(false)}
-              disabled={isSaving}
+            <FormCancelButton
+              onClick={cancelEditing}
+              disabled={profileForm.formState.isSubmitting}
             >
               Cancelar
-            </button>
-            <button
-              type="button"
-              className="rounded-md bg-blue-900 px-6 py-2.5 text-sm font-medium text-white hover:bg-blue-800 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
-              onClick={handleSave}
-              disabled={isSaving}
+            </FormCancelButton>
+            <FormSubmitButton
+              form="profile-form"
+              isPending={profileForm.formState.isSubmitting}
+              pendingLabel="Guardando..."
             >
-              {isSaving ? "Guardando..." : "Guardar cambios"}
-            </button>
+              Guardar cambios
+            </FormSubmitButton>
           </div>
         )}
         <div className={DIVIDER_CLASS_STANDALONE} />
@@ -466,9 +399,7 @@ const ProfileCard = ({ customer }: { customer: B2BCustomer }) => {
                   componente real, reusando `muiTheme` (el mismo tema del
                   DatePicker en `document-filters`) solo para este campo — el
                   label de arriba sigue siendo el nuestro (Tailwind), no el
-                  label flotante de MUI, para mantener el patrón "label
-                  arriba + caja abajo" que ya se definió para el resto del
-                  formulario de contraseña.
+                  label flotante de MUI, porque así se ve en el legacy.
                 */}
                 <ThemeProvider theme={muiTheme}>
                   <OutlinedInput
@@ -500,31 +431,27 @@ const ProfileCard = ({ customer }: { customer: B2BCustomer }) => {
               </button>
             </div>
           ) : (
-            <div className="flex flex-col gap-y-4">
-              <PasswordField
-                label="Contraseña actual"
-                name="current_password"
-                value={passwordForm.current}
-                onChange={(value) =>
-                  setPasswordForm({ ...passwordForm, current: value })
-                }
-              />
-              <PasswordField
-                label="Ingresar nueva contraseña"
-                name="new_password"
-                value={passwordForm.next}
-                onChange={(value) =>
-                  setPasswordForm({ ...passwordForm, next: value })
-                }
-              />
-              <PasswordField
-                label="Repetir contraseña"
-                name="repeat_password"
-                value={passwordForm.repeat}
-                onChange={(value) =>
-                  setPasswordForm({ ...passwordForm, repeat: value })
-                }
-              />
+            <form
+              noValidate
+              onSubmit={handleSavePassword}
+              className="flex flex-col gap-y-4"
+            >
+              {(
+                [
+                  ["current_password", "Contraseña actual", "current-password"],
+                  ["password", "Ingresar nueva contraseña", "new-password"],
+                  ["repeat_password", "Repetir contraseña", "new-password"],
+                ] as const
+              ).map(([name, label, autoComplete]) => (
+                <div key={name} className="w-full small:max-w-xs">
+                  <FormPasswordField
+                    control={passwordForm.control}
+                    name={name}
+                    label={label}
+                    autoComplete={autoComplete}
+                  />
+                </div>
+              ))}
 
               <div className="flex items-center justify-end gap-4">
                 <button
@@ -534,16 +461,14 @@ const ProfileCard = ({ customer }: { customer: B2BCustomer }) => {
                 >
                   Cancelar
                 </button>
-                <button
-                  type="button"
-                  className="rounded-md bg-blue-900 px-6 py-2.5 text-sm font-medium text-white hover:bg-blue-800 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
-                  onClick={handleSavePassword}
-                  disabled={isSavingPassword}
+                <FormSubmitButton
+                  isPending={passwordForm.formState.isSubmitting}
+                  pendingLabel="Guardando..."
                 >
-                  {isSavingPassword ? "Guardando..." : "Guardar contraseña"}
-                </button>
+                  Guardar contraseña
+                </FormSubmitButton>
               </div>
-            </div>
+            </form>
           )}
         </div>
         <div className={DIVIDER_CLASS_STANDALONE} />

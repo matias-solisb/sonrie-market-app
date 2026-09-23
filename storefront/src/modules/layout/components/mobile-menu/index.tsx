@@ -7,9 +7,7 @@ import Image from "next/image"
 import { Fragment } from "react"
 
 import LocalizedClientLink from "@/modules/common/components/localized-client-link"
-
-const LOGO_URL =
-  "https://s3.amazonaws.com/production-clients-images/sonrie.youorder.me/others/LOGO-Sonri%CC%81e-Market%20%28002%29.png"
+import { SONRIE_LOGO_URL } from "@/lib/constants"
 
 const MobileMenu = ({
   categories,
@@ -58,7 +56,7 @@ const MobileMenu = ({
                   onClick={close}
                 >
                   <Image
-                    src={LOGO_URL}
+                    src={SONRIE_LOGO_URL}
                     alt="Sonríe Market"
                     width={140}
                     height={38}

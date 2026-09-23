@@ -11,9 +11,7 @@ import CategoriesMenu from "@/modules/layout/components/categories-menu"
 import MobileMenu from "@/modules/layout/components/mobile-menu"
 import NotificationBell from "@/modules/layout/components/notification-bell"
 import SearchBar from "@/modules/layout/components/search-bar"
-
-const LOGO_URL =
-  "https://s3.amazonaws.com/production-clients-images/sonrie.youorder.me/others/LOGO-Sonri%CC%81e-Market%20%28002%29.png"
+import { SONRIE_LOGO_URL } from "@/lib/constants"
 
 // Brand red used on the categories sub-bar. Swap for the exact brand hex if
 // this approximation doesn't match the design system.
@@ -43,7 +41,7 @@ export async function NavigationHeader() {
             data-testid="nav-store-link"
           >
             <Image
-              src={LOGO_URL}
+              src={SONRIE_LOGO_URL}
               alt="Sonríe Market"
               width={180}
               height={48}

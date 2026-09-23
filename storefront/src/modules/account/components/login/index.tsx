@@ -1,15 +1,20 @@
+"use client"
+
 import { login } from "@/lib/data/customer"
+import { useActionForm } from "@/lib/forms/use-action-form"
+import { loginSchema } from "@/lib/validations/auth"
+import {
+  AuthCard,
+  AuthSubmitButton,
+  AuthTitle,
+} from "@/modules/account/components/auth-card"
 import { LOGIN_VIEW } from "@/modules/account/templates/login-template"
 import ErrorMessage from "@/modules/checkout/components/error-message"
+import {
+  FormPasswordField,
+  FormTextField,
+} from "@/modules/common/components/form"
 import LocalizedClientLink from "@/modules/common/components/localized-client-link"
-import Eye from "@/modules/common/icons/eye"
-import EyeOff from "@/modules/common/icons/eye-off"
-import Image from "next/image"
-import { useActionState, useState } from "react"
-import { useFormStatus } from "react-dom"
-
-const LOGO_URL =
-  "https://s3.amazonaws.com/production-clients-images/sonrie.youorder.me/others/LOGO-Sonri%CC%81e-Market%20%28002%29.png"
 
 type Props = {
   // Ya no hay un link a "registrarse" en este diseño (las cuentas vienen de
@@ -18,111 +23,59 @@ type Props = {
   // login-template.tsx, pero no se usa acá.
   setCurrentView: (view: LOGIN_VIEW) => void
   // Ruta a la que volver tras loguearse (viene del middleware cuando
-  // redirige por falta de sesión). Se manda como input oculto y se lee en
+  // redirige por falta de sesión). Se manda como campo extra y se lee en
   // el server action `login` (src/lib/data/customer.ts).
   redirectTo?: string
 }
 
-// El borde/color cambian a rojo cuando `login` devolvió un error, para que
-// el campo se vea igual que un error de validación (borde + texto en rojo).
-const getInputClassName = (hasError: boolean) =>
-  `h-11 w-full rounded-md border px-4 text-base-regular text-ui-fg-base placeholder:text-ui-fg-subtle focus:outline-none focus:ring-0 ${
-    hasError
-      ? "border-rose-500 focus:border-rose-500"
-      : "border-ui-border-base focus:border-ui-border-interactive"
-  }`
+/*
 
-const LoginSubmitButton = () => {
-  const { pending } = useFormStatus()
+zod valida en el cliente (correo con formato válido, contraseña no vacía)
+y marca cada campo en rojo; recién si todo es válido se llama al server
+action `login`. El error del servidor ("Correo o contraseña incorrectos",
+backend caído) llega en `message` y se muestra debajo de los campos.
 
-  return (
-    <button
-      type="submit"
-      disabled={pending}
-      className="mt-6 flex h-11 w-full items-center justify-center rounded-md bg-blue-900 font-semibold text-white hover:bg-blue-800 disabled:opacity-60"
-      data-testid="sign-in-button"
-    >
-      {pending ? "Ingresando..." : "Iniciar sesión"}
-    </button>
-  )
-}
-
+*/
 const Login = ({ setCurrentView: _setCurrentView, redirectTo }: Props) => {
-  const [message, formAction] = useActionState(login, null)
-  const [showPassword, setShowPassword] = useState(false)
-
-  // `message` es el string de error que devuelve el server action `login`
-  // (src/lib/data/customer.ts) cuando falla, o null/undefined si no hubo
-  // intento o si fue exitoso (ahí ya se hizo redirect en el server).
-  const hasError = Boolean(message)
+  const {
+    form: { control },
+    state: message,
+    isPending,
+    onSubmit,
+  } = useActionForm({
+    schema: loginSchema,
+    action: login,
+    initialState: undefined,
+    defaultValues: { email: "", password: "" },
+    extraFields: { redirect_to: redirectTo },
+  })
 
   return (
-    <div
-      className="w-full max-w-md rounded-md border border-ui-border-base p-6 sm:p-8"
-      data-testid="login-page"
-    >
-      {/* Todo el contenido visible (logo, textos y campos) queda encerrado
-          en un único <form>, en vez de tener el logo/título/subtítulo fuera
-          y solo los inputs adentro. */}
-      <form className="flex w-full flex-col" action={formAction}>
-        {redirectTo && (
-          <input type="hidden" name="redirect_to" value={redirectTo} />
-        )}
-        <Image
-          src={LOGO_URL}
-          alt="Sonríe Market"
-          width={320}
-          height={88}
-          className="mx-auto mb-6 h-16 w-auto sm:mb-8 sm:h-24"
-        />
+    <AuthCard data-testid="login-page">
+      <form className="flex w-full flex-col" noValidate onSubmit={onSubmit}>
+        <AuthTitle>Bienvenido a Sonríe Market Store</AuthTitle>
 
-        <h1 className="text-xl-semi text-ui-fg-base sm:text-2xl-semi">
-          Bienvenido a Sonríe Market Store
-        </h1>
-        {/* <p className="mt-3 text-base-regular text-ui-fg-subtle">
-          Utiliza tu cuenta xxxx para acceder al catálogo de Sonríe
-          Market Store.
-        </p> */}
-
-        <div className="mt-6 flex flex-col gap-y-3">
-          <input
-            type="email"
+        <div className="mt-6 flex flex-col gap-y-4">
+          <FormTextField
+            control={control}
             name="email"
-            placeholder="Correo"
-            title="Ingresa un correo válido."
+            label="Correo"
+            type="email"
             autoComplete="email"
-            required
-            className={getInputClassName(hasError)}
-            data-testid="email-input"
+            slotProps={{ htmlInput: { "data-testid": "email-input" } }}
           />
-          <div className="relative">
-            <input
-              type={showPassword ? "text" : "password"}
-              name="password"
-              placeholder="Contraseña"
-              autoComplete="current-password"
-              required
-              className={`${getInputClassName(hasError)} pr-11`}
-              data-testid="password-input"
-            />
-            <button
-              type="button"
-              onClick={() => setShowPassword((prev) => !prev)}
-              aria-label={
-                showPassword ? "Ocultar contraseña" : "Mostrar contraseña"
-              }
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-ui-fg-subtle hover:text-ui-fg-base"
-            >
-              {showPassword ? <Eye /> : <EyeOff />}
-            </button>
-          </div>
+          <FormPasswordField
+            control={control}
+            name="password"
+            label="Contraseña"
+            autoComplete="current-password"
+            slotProps={{ htmlInput: { "data-testid": "password-input" } }}
+          />
         </div>
 
         <div className="mt-3 text-right">
-          {/* Vista en src/modules/account/components/recover-password —
-              ver el comentario en su page.tsx (recover-password/page.tsx)
-              sobre por qué es una ruta hermana de `account/` y no algo
-              anidado adentro. */}
+          {/* Ruta hermana de `account/` — ver el comentario en
+              recover-password/page.tsx. */}
           <LocalizedClientLink
             href="/recover-password"
             className="text-small-regular text-blue-900 hover:underline"
@@ -134,9 +87,14 @@ const Login = ({ setCurrentView: _setCurrentView, redirectTo }: Props) => {
 
         <ErrorMessage error={message} data-testid="login-error-message" />
 
-        <LoginSubmitButton />
+        <AuthSubmitButton
+          isPending={isPending}
+          label="Iniciar sesión"
+          pendingLabel="Ingresando..."
+          data-testid="sign-in-button"
+        />
       </form>
-    </div>
+    </AuthCard>
   )
 }
 

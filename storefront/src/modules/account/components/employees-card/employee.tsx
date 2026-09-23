@@ -6,9 +6,18 @@ import {
   getOrderTotalInSpendWindow,
   getSpendWindow,
 } from "@/lib/util/check-spending-limit"
+import { useZodForm } from "@/lib/forms/use-zod-form"
+import {
+  employeeSchema,
+  type EmployeeFormInput,
+  type EmployeeFormValues,
+} from "@/lib/validations/company"
 import { formatAmount } from "@/modules/common/components/amount-cell"
 import Button from "@/modules/common/components/button"
-import NativeSelect from "@/modules/common/components/native-select"
+import {
+  FormSelectField,
+  FormTextField,
+} from "@/modules/common/components/form"
 import {
   B2BCustomer,
   QueryCompany,
@@ -16,8 +25,14 @@ import {
   StoreUpdateEmployee,
 } from "@/types"
 import { HttpTypes } from "@medusajs/types"
-import { CurrencyInput, Prompt, Text, clx, toast } from "@medusajs/ui"
+import { Prompt, Text, clx, toast } from "@medusajs/ui"
+import InputAdornment from "@mui/material/InputAdornment"
 import { useState } from "react"
+
+const PERMISSION_OPTIONS = [
+  { value: "true", label: "Admin" },
+  { value: "false", label: "Empleado" },
+]
 
 const RemoveEmployeePrompt = ({ employee }: { employee: QueryEmployee }) => {
   const [isRemoving, setIsRemoving] = useState(false)
@@ -74,31 +89,44 @@ const Employee = ({
   customer: B2BCustomer | null
 }) => {
   const [isEditing, setIsEditing] = useState(false)
-  const [isSaving, setIsSaving] = useState(false)
-  const [employeeData, setEmployeeData] = useState({
-    id: employee.id,
-    company_id: employee.company_id,
-    spending_limit: employee.spending_limit.toString(),
-    is_admin: employee.is_admin,
-  })
 
   const isCurrentUser = employee.customer.id === customer?.id
+  const formId = `employee-form-${employee.id}`
 
-  const handleSubmit = async () => {
-    const updateData = {
-      ...employeeData,
-      spending_limit: parseFloat(employeeData.spending_limit),
+  const defaultValues: EmployeeFormInput = {
+    spending_limit: employee.spending_limit.toString(),
+    is_admin: employee.is_admin ? "true" : "false",
+  }
+
+  const {
+    control,
+    handleSubmit,
+    reset,
+    formState: { isSubmitting },
+  } = useZodForm(employeeSchema, { defaultValues })
+
+  const cancel = () => {
+    reset(defaultValues)
+    setIsEditing(false)
+  }
+
+  // Antes el toast de éxito salía incluso cuando `updateEmployee` fallaba;
+  // ahora solo sale si el guardado resultó.
+  const onSubmit = async (values: EmployeeFormValues) => {
+    try {
+      await updateEmployee({
+        id: employee.id,
+        company_id: employee.company_id,
+        spending_limit: values.spending_limit,
+        is_admin: values.is_admin === "true",
+      } as StoreUpdateEmployee)
+    } catch {
+      toast.error("No se pudo actualizar el empleado")
+      return
     }
 
-    setIsSaving(true)
-    await updateEmployee(updateData as StoreUpdateEmployee).catch(() => {
-      toast.error("Error updating employee")
-    })
-
-    setIsSaving(false)
     setIsEditing(false)
-
-    toast.success("Employee updated")
+    toast.success("Empleado actualizado")
   }
 
   const spent = getOrderTotalInSpendWindow(orders, getSpendWindow(company)) || 0
@@ -140,18 +168,20 @@ const Employee = ({
           {isEditing ? (
             <>
               <Button
+                type="button"
                 variant="secondary"
-                onClick={() => setIsEditing(false)}
-                disabled={isSaving}
+                onClick={cancel}
+                disabled={isSubmitting}
               >
-                Cancel
+                Cancelar
               </Button>
               <Button
+                type="submit"
+                form={formId}
                 variant="primary"
-                onClick={handleSubmit}
-                isLoading={isSaving}
+                isLoading={isSubmitting}
               >
-                Save
+                Guardar
               </Button>
             </>
           ) : (
@@ -168,54 +198,40 @@ const Employee = ({
         </div>
       </div>
       <form
+        id={formId}
+        noValidate
+        onSubmit={handleSubmit(onSubmit)}
         className={clx(
           "bg-neutral-50 grid grid-cols-2 gap-4 border-b border-neutral-200 transition-all duration-300 ease-in-out",
           {
-            "max-h-[98px] opacity-100 p-4": isEditing,
-            "max-h-0 h-0 opacity-0 border-b-0": !isEditing,
+            "max-h-[160px] opacity-100 p-4": isEditing,
+            "max-h-0 h-0 opacity-0 border-b-0 overflow-hidden": !isEditing,
           }
         )}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") {
-            e.preventDefault()
-            handleSubmit()
-          }
-        }}
       >
-        <div className="flex flex-col gap-y-2">
-          <Text className=" text-neutral-950 font-medium">Spending Limit</Text>
-          <CurrencyInput
-            symbol={currencySymbolMap[company.currency_code!]}
-            code={company.currency_code!}
-            className="bg-white rounded-full"
-            name="spending_limit"
-            value={employeeData.spending_limit}
-            onChange={(e) => {
-              setEmployeeData({
-                ...employeeData,
-                spending_limit: e.target.value.replace(/[^0-9.]/g, ""),
-              })
-            }}
-          />
-        </div>
-        <div className="flex flex-col gap-y-2">
-          <Text className=" text-neutral-950 font-medium">Permissions</Text>
-          <NativeSelect
-            className="bg-white"
-            name="permissions"
-            value={employeeData.is_admin ? "true" : "false"}
-            disabled={!customer?.employee?.is_admin}
-            onChange={(e) => {
-              setEmployeeData({
-                ...employeeData,
-                is_admin: e.target.value === "true",
-              })
-            }}
-          >
-            <option value="true">Admin</option>
-            <option value="false">Employee</option>
-          </NativeSelect>
-        </div>
+        <FormTextField
+          control={control}
+          name="spending_limit"
+          label="Límite de gasto"
+          helperText="0 = sin límite"
+          slotProps={{
+            htmlInput: { inputMode: "decimal" },
+            input: {
+              startAdornment: (
+                <InputAdornment position="start">
+                  {currencySymbolMap[company.currency_code!]}
+                </InputAdornment>
+              ),
+            },
+          }}
+        />
+        <FormSelectField
+          control={control}
+          name="is_admin"
+          label="Permisos"
+          options={PERMISSION_OPTIONS}
+          disabled={!customer?.employee?.is_admin}
+        />
       </form>
     </div>
   )

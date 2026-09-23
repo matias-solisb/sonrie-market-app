@@ -103,3 +103,7 @@ export const currencySymbolMap: Record<string, string> = {
   mmk: "K",
   uzs: "лв",
 }
+
+// Logo de Sonríe Market (mismo archivo que usa el sitio legacy).
+export const SONRIE_LOGO_URL =
+  "https://s3.amazonaws.com/production-clients-images/sonrie.youorder.me/others/LOGO-Sonri%CC%81e-Market%20%28002%29.png"

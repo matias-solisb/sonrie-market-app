@@ -4,9 +4,7 @@ import Image from "next/image"
 import { retrieveCustomer } from "@/lib/data/customer"
 import LocalizedClientLink from "@/modules/common/components/localized-client-link"
 import ShippingConditionsModal from "@/modules/layout/components/shipping-conditions-modal"
-
-const LOGO_URL =
-  "https://s3.amazonaws.com/production-clients-images/sonrie.youorder.me/others/LOGO-Sonri%CC%81e-Market%20%28002%29.png"
+import { SONRIE_LOGO_URL } from "@/lib/constants"
 
 type FooterLink = {
   label: string
@@ -45,11 +43,11 @@ const ACCOUNT_COLUMN: FooterColumn = {
 const buildUsefulLinksColumn = (isLoggedIn: boolean): FooterColumn => ({
   title: "Enlaces útiles",
   links: [
-    ...(isLoggedIn ? [{ label: "Pagos", href: "#" }] : []),
-    { label: "Ofertas", href: "/products" },
-    { label: "Nuevos Productos", href: "#" },
-    { label: "Destacados", href: "#" },
-    ...(!isLoggedIn ? [{ label: "Productos Recomendados", href: "#" }] : []),
+    /* ...(isLoggedIn ? [{ label: "Pagos", href: "#" }] : []), */
+    { label: "Ofertas", href: "/products?promotions=true" },
+    { label: "Nuevos Productos", href: "/products?new=true" },
+    { label: "Destacados", href: "/products?featured=true" },
+    ...(!isLoggedIn ? [{ label: "Productos Recomendados", href: "/products?recommended=true" }] : []),
   ],
 })
 
@@ -57,10 +55,10 @@ const buildUsefulLinksColumn = (isLoggedIn: boolean): FooterColumn => ({
 const HELP_COLUMN: FooterColumn = {
   title: "Centro de ayuda",
   links: [
-    { label: "Contacto", href: "#" },
-    { label: "Preguntas Frecuentes", href: "#" },
+    { label: "Contacto", href: "/contact" },
+    { label: "Preguntas Frecuentes", href: "/faq" },
     { label: "Condiciones de Despacho", href: "#" },
-    { label: "Terminos y Condiciones", href: "#" },
+    { label: "Terminos y Condiciones", href: "/terms" },
   ],
 }
 
@@ -113,7 +111,7 @@ export default async function Footer() {
               data-testid="footer-store-link"
             >
               <Image
-                src={LOGO_URL}
+                src={SONRIE_LOGO_URL}
                 alt="Sonríe Market"
                 width={220}
                 height={60}
@@ -185,7 +183,7 @@ export default async function Footer() {
               data-testid="footer-store-link-mobile"
             >
               <Image
-                src={LOGO_URL}
+                src={SONRIE_LOGO_URL}
                 alt="Sonríe Market"
                 width={160}
                 height={44}

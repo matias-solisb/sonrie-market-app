@@ -4,18 +4,25 @@ import {
   deleteCustomerAddress,
   updateCustomerAddress,
 } from "@/lib/data/customer"
+import { useActionForm } from "@/lib/forms/use-action-form"
 import useToggleState from "@/lib/hooks/use-toggle-state"
-import CountrySelect from "@/modules/checkout/components/country-select"
-import { SubmitButton } from "@/modules/checkout/components/submit-button"
-import Button from "@/modules/common/components/button"
-import Input from "@/modules/common/components/input"
+import {
+  addressSchema,
+  type AddressFormValues,
+} from "@/lib/validations/address"
+import {
+  FormCancelButton,
+  FormSubmitButton,
+} from "@/modules/common/components/form"
 import Modal from "@/modules/common/components/modal"
 import Spinner from "@/modules/common/icons/spinner"
 import { B2BCustomer } from "@/types/global"
 import { PencilSquare as Edit, Trash } from "@medusajs/icons"
 import { HttpTypes } from "@medusajs/types"
 import { Heading, Text, clx } from "@medusajs/ui"
-import React, { useActionState, useEffect, useState } from "react"
+import React, { useMemo, useState } from "react"
+
+import AddressFields from "./address-fields"
 
 type EditAddressProps = {
   region: HttpTypes.StoreRegion
@@ -29,6 +36,14 @@ type EditAddressProps = {
   isAdmin?: boolean
 }
 
+type EditAddressActionState = {
+  success: boolean
+  error: string | null
+  // `updateCustomerAddress` lee el id de la dirección desde el estado
+  // anterior de `useActionState`.
+  addressId: string
+}
+
 const EditAddress: React.FC<EditAddressProps> = ({
   region,
   address,
@@ -37,32 +52,46 @@ const EditAddress: React.FC<EditAddressProps> = ({
   isAdmin = false,
 }) => {
   const [removing, setRemoving] = useState(false)
-  const [successState, setSuccessState] = useState(false)
-  const { state, open, close: closeModal } = useToggleState(false)
+  const { state: isOpen, open, close: closeModal } = useToggleState(false)
 
-  const [formState, formAction] = useActionState(updateCustomerAddress, {
-    success: false,
-    error: null,
-    addressId: address.id,
+  // Valores actuales de la dirección como punto de partida del form. Se
+  // recalculan cuando la dirección cambia (revalidación tras guardar), así
+  // al reabrir el modal se ven los datos nuevos.
+  const addressValues = useMemo<AddressFormValues>(
+    () => ({
+      first_name: address.first_name ?? "",
+      last_name: address.last_name ?? "",
+      company: address.company ?? "",
+      address_1: address.address_1 ?? "",
+      address_2: address.address_2 ?? "",
+      postal_code: address.postal_code ?? "",
+      city: address.city ?? "",
+      province: address.province ?? "",
+      country_code: address.country_code ?? "",
+      phone: address.phone ?? "",
+    }),
+    [address]
+  )
+
+  const {
+    form: { control, reset },
+    state: formState,
+    isPending,
+    onSubmit,
+  } = useActionForm<typeof addressSchema, EditAddressActionState>({
+    schema: addressSchema,
+    action: updateCustomerAddress,
+    initialState: { success: false, error: null, addressId: address.id },
+    defaultValues: addressValues,
+    // Cierra el modal cada vez que se guarda bien.
+    onSuccess: () => close(),
   })
 
   const close = () => {
-    setSuccessState(false)
+    reset(addressValues)
     closeModal()
   }
 
-  useEffect(() => {
-    if (successState) {
-      close()
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [successState])
-
-  useEffect(() => {
-    if (formState.success) {
-      setSuccessState(true)
-    }
-  }, [formState])
 
   const removeAddress = async () => {
     setRemoving(true)
@@ -132,94 +161,13 @@ const EditAddress: React.FC<EditAddressProps> = ({
         )}
       </div>
 
-      <Modal isOpen={state} close={close} data-testid="edit-address-modal">
+      <Modal isOpen={isOpen} close={close} data-testid="edit-address-modal">
         <Modal.Title>
-          <Heading className="mb-2">Edit address</Heading>
+          <Heading className="mb-2">Editar dirección</Heading>
         </Modal.Title>
-        <form action={formAction}>
+        <form noValidate onSubmit={onSubmit}>
           <Modal.Body>
-            <div className="grid grid-cols-1 gap-y-2">
-              <div className="grid grid-cols-2 gap-x-2">
-                <Input
-                  label="First name"
-                  name="first_name"
-                  required
-                  autoComplete="given-name"
-                  defaultValue={address.first_name || undefined}
-                  data-testid="first-name-input"
-                />
-                <Input
-                  label="Last name"
-                  name="last_name"
-                  required
-                  autoComplete="family-name"
-                  defaultValue={address.last_name || undefined}
-                  data-testid="last-name-input"
-                />
-              </div>
-              <Input
-                label="Company"
-                name="company"
-                autoComplete="organization"
-                defaultValue={address.company || undefined}
-                data-testid="company-input"
-              />
-              <Input
-                label="Address"
-                name="address_1"
-                required
-                autoComplete="address-line1"
-                defaultValue={address.address_1 || undefined}
-                data-testid="address-1-input"
-              />
-              <Input
-                label="Apartment, suite, etc."
-                name="address_2"
-                autoComplete="address-line2"
-                defaultValue={address.address_2 || undefined}
-                data-testid="address-2-input"
-              />
-              <div className="grid grid-cols-[144px_1fr] gap-x-2">
-                <Input
-                  label="Postal code"
-                  name="postal_code"
-                  required
-                  autoComplete="postal-code"
-                  defaultValue={address.postal_code || undefined}
-                  data-testid="postal-code-input"
-                />
-                <Input
-                  label="City"
-                  name="city"
-                  required
-                  autoComplete="locality"
-                  defaultValue={address.city || undefined}
-                  data-testid="city-input"
-                />
-              </div>
-              <Input
-                label="Province / State"
-                name="province"
-                autoComplete="address-level1"
-                defaultValue={address.province || undefined}
-                data-testid="state-input"
-              />
-              <CountrySelect
-                name="country_code"
-                region={region}
-                required
-                autoComplete="country"
-                defaultValue={address.country_code || undefined}
-                data-testid="country-select"
-              />
-              <Input
-                label="Phone"
-                name="phone"
-                autoComplete="phone"
-                defaultValue={address.phone || undefined}
-                data-testid="phone-input"
-              />
-            </div>
+            <AddressFields control={control} region={region} />
             {formState.error && (
               <div className="text-rose-500 text-small-regular py-2">
                 {formState.error}
@@ -228,16 +176,16 @@ const EditAddress: React.FC<EditAddressProps> = ({
           </Modal.Body>
           <Modal.Footer>
             <div className="flex gap-3 mt-6">
-              <Button
-                type="reset"
-                variant="secondary"
-                onClick={close}
-                className="h-10"
-                data-testid="cancel-button"
+              <FormCancelButton onClick={close} data-testid="cancel-button">
+                Cancelar
+              </FormCancelButton>
+              <FormSubmitButton
+                isPending={isPending}
+                pendingLabel="Guardando..."
+                data-testid="save-button"
               >
-                Cancel
-              </Button>
-              <SubmitButton data-testid="save-button">Save</SubmitButton>
+                Guardar
+              </FormSubmitButton>
             </div>
           </Modal.Footer>
         </form>

@@ -1,14 +1,12 @@
 import { Metadata } from "next"
 import Image from "next/image"
 import Link from "next/link"
+import { SONRIE_LOGO_URL } from "@/lib/constants"
 
 export const metadata: Metadata = {
   title: "404",
   description: "Página no encontrada",
 }
-
-const LOGO_URL =
-  "https://s3.amazonaws.com/production-clients-images/sonrie.youorder.me/others/LOGO-Sonri%CC%81e-Market%20%28002%29.png"
 
 // Ilustración tomada directamente del sitio ya desplegado (sonrie.youorder.me),
 // que es la referencia de diseño para este proyecto.
@@ -88,7 +86,7 @@ export default function NotFound() {
       <header className="flex items-center justify-between px-6 py-6 sm:px-10">
         <Link href="/" className="flex items-center shrink-0">
           <Image
-            src={LOGO_URL}
+            src={SONRIE_LOGO_URL}
             alt="Sonríe Market"
             width={140}
             height={40}

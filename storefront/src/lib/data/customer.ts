@@ -497,9 +497,12 @@ export const updateCustomerAddress = async (
     .then(async () => {
       const cacheTag = await getCacheTag("customers")
       revalidateTag(cacheTag)
-      return { success: true, error: null }
+      // Se devuelve `addressId` en el nuevo estado: `useActionState` pasa
+      // este objeto como `currentState` en el siguiente envío, y sin él un
+      // segundo "Guardar" en el mismo modal perdía el id de la dirección.
+      return { success: true, error: null, addressId }
     })
     .catch((err) => {
-      return { success: false, error: err.toString() }
+      return { success: false, error: err.toString(), addressId }
     })
 }
