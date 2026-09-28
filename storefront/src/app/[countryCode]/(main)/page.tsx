@@ -1,7 +1,5 @@
 import { listBanners } from "@/lib/data/banners"
-import { listCollections } from "@/lib/data/collections"
-import { getRegion } from "@/lib/data/regions"
-import { listRegions } from "@/lib/data/regions"
+import { getRegion, listRegions } from "@/lib/data/regions"
 import FeaturedProducts from "@/modules/home/components/featured-products"
 import Hero from "@/modules/home/components/hero"
 import SkeletonFeaturedProducts from "@/modules/skeletons/templates/skeleton-featured-products"
@@ -11,9 +9,8 @@ import { Suspense } from "react"
 export const dynamicParams = true
 
 export const metadata: Metadata = {
-  title: "Medusa Next.js Starter Template",
-  description:
-    "A performant frontend ecommerce starter template with Next.js 14 and Medusa.",
+  title: "Sonríe Market",
+  description: "Tienda interna de Sonríe Market.",
 }
 
 export async function generateStaticParams() {
@@ -34,23 +31,11 @@ const FeaturedProductsSection = async ({
 }) => {
   const region = await getRegion(countryCode)
 
-  const { collections } = await listCollections({
-    fields: "id, handle, title",
-  })
-
-  if (!collections || !region) {
+  if (!region) {
     return null
   }
 
-  return (
-    <ul className="flex flex-col gap-x-1">
-      <FeaturedProducts
-        collections={collections}
-        region={region}
-        countryCode={countryCode}
-      />
-    </ul>
-  )
+  return <FeaturedProducts region={region} countryCode={countryCode} />
 }
 
 export default async function Home(props: {

@@ -71,8 +71,8 @@ export default async function PaginatedProducts({
     limit: 12,
     // +tags suma la relación de product tags al fetch por defecto
     // (*variants.calculated_price, ver listProducts) — se necesita para
-    // saber, por producto, si trae el tag "featured" y así pintar el
-    // ribbon "Destacado" de la card (ver p.tags más abajo).
+    // saber, por producto, si es destacado y así pintar la etiqueta
+    // "Destacado" de la card (ver ProductPreview / isFeaturedProduct).
     fields: "*variants.calculated_price,+tags",
   }
 
@@ -203,9 +203,6 @@ export default async function PaginatedProducts({
                     product={p}
                     region={region}
                     countryCode={countryCode}
-                    destacado={
-                      p.tags?.some((tag) => tag.value === "featured") ?? false
-                    }
                     multiplier={DEMO_MULTIPLIERS[index % DEMO_MULTIPLIERS.length]}
                     cartQuantity={cartItem?.quantity}
                     cartLineItemId={cartItem?.id}

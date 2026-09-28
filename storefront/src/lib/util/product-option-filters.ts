@@ -1,3 +1,5 @@
+import { FEATURED_TAG_VALUE } from "@/lib/util/featured-product"
+
 export const OPTION_VALUE_QUERY_KEY = "optionValueIds"
 export const CATEGORY_QUERY_KEY = "category_id"
 
@@ -55,7 +57,11 @@ export const parseCategoryIds = (
 // Cada uno es un booleano en la URL (?featured=true, ?new=true,
 // ?promotions=true, combinables) que se traduce 1:1 al value de un
 // product tag creado a mano en el Admin de Medusa (ver catalog-sidebar).
-export const QUICK_FILTER_TAG_VALUES = ["featured", "new", "promotions"] as const
+export const QUICK_FILTER_TAG_VALUES = [
+  FEATURED_TAG_VALUE,
+  "new",
+  "promotions",
+] as const
 
 export type QuickFilterTagValue = (typeof QUICK_FILTER_TAG_VALUES)[number]
 
@@ -90,5 +96,5 @@ export type QuickFilter = {
 export const QUICK_FILTERS: QuickFilter[] = [
   { id: "ofertas", label: "Ofertas", tagValue: "promotions" },
   { id: "nuevos", label: "Nuevos", tagValue: "new" },
-  { id: "destacados", label: "Destacados", tagValue: "featured" },
+  { id: "destacados", label: "Destacados", tagValue: FEATURED_TAG_VALUE },
 ]

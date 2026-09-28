@@ -1,4 +1,5 @@
 import { Text } from "@/modules/common/components/ui"
+import { isFeaturedProduct } from "@/lib/util/featured-product"
 import { getProductPrice } from "@/lib/util/get-product-price"
 import { HttpTypes } from "@medusajs/types"
 import LocalizedClientLink from "@/modules/common/components/localized-client-link"
@@ -9,7 +10,6 @@ import AddToCartStepper from "./add-to-cart-stepper"
 export default async function ProductPreview({
   product,
   isFeatured,
-  destacado,
   multiplier,
   region: _region,
   countryCode,
@@ -18,7 +18,6 @@ export default async function ProductPreview({
 }: {
   product: HttpTypes.StoreProduct
   isFeatured?: boolean
-  destacado?: boolean
   multiplier?: number
   region: HttpTypes.StoreRegion
   countryCode?: string
@@ -45,7 +44,10 @@ export default async function ProductPreview({
           images={product.images}
           size="full"
           isFeatured={isFeatured}
-          destacado={destacado}
+          // La etiqueta sale del tag del producto (ver
+          // lib/util/featured-product): así se ve igual en la home, el
+          // catálogo y cualquier otra lista, sin que cada una la calcule.
+          destacado={isFeaturedProduct(product)}
           multiplier={multiplier}
         />
         <div className="flex txt-compact-medium mt-4 justify-between">

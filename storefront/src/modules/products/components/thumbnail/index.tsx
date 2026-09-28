@@ -9,9 +9,9 @@ type ThumbnailProps = {
   images?: { url?: string }[] | null
   size?: "small" | "medium" | "large" | "full" | "square"
   isFeatured?: boolean
-  // "Destacado" ribbon: refleja el product tag "featured" del producto
-  // (ver paginated-products.tsx, p.tags). El multiplier badge de abajo
-  // sigue siendo un valor de demostración.
+  // Etiqueta "Destacado" (esquina superior derecha). La calcula
+  // ProductPreview con `isFeaturedProduct` (lib/util/featured-product).
+  // El multiplier badge de abajo sigue siendo un valor de demostración.
   destacado?: boolean
   multiplier?: number
   className?: string
@@ -54,7 +54,7 @@ const Thumbnail: React.FC<ThumbnailProps> = ({
     >
       {destacado && (
         <div
-          className="absolute left-0 top-3 z-10 bg-red-600 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-white shadow-sm"
+          className="absolute right-3 top-3 z-10 rounded-lg bg-rose-600 px-3 py-1 text-sm font-bold text-white shadow-sm"
           data-testid="destacado-ribbon"
         >
           Destacado
