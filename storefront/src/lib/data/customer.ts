@@ -184,7 +184,7 @@ export async function login(_currentState: unknown, formData: FormData) {
     const rawMessage = (error?.message ?? error?.toString() ?? "").toLowerCase()
 
     if (rawMessage.includes("invalid email or password")) {
-      return "Correo o contraseña incorrectos. Verifica tus datos e intenta de nuevo."
+      return "Usuario y contraseña no coinciden"
     }
 
     return "No pudimos iniciar tu sesión. Intenta nuevamente en unos minutos."

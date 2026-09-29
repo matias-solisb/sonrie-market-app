@@ -8,13 +8,17 @@ import {
   AuthSubmitButton,
   AuthTitle,
 } from "@/modules/account/components/auth-card"
+import { muiTheme } from "@/lib/mui/theme"
 import { LOGIN_VIEW } from "@/modules/account/templates/login-template"
-import ErrorMessage from "@/modules/checkout/components/error-message"
 import {
   FormPasswordField,
   FormTextField,
 } from "@/modules/common/components/form"
 import LocalizedClientLink from "@/modules/common/components/localized-client-link"
+import Alert from "@mui/material/Alert"
+import Snackbar from "@mui/material/Snackbar"
+import { ThemeProvider } from "@mui/material/styles"
+import { useEffect, useState } from "react"
 
 type Props = {
   // Ya no hay un link a "registrarse" en este diseño (las cuentas vienen de
@@ -28,17 +32,10 @@ type Props = {
   redirectTo?: string
 }
 
-/*
 
-zod valida en el cliente (correo con formato válido, contraseña no vacía)
-y marca cada campo en rojo; recién si todo es válido se llama al server
-action `login`. El error del servidor ("Correo o contraseña incorrectos",
-backend caído) llega en `message` y se muestra debajo de los campos.
-
-*/
 const Login = ({ setCurrentView: _setCurrentView, redirectTo }: Props) => {
   const {
-    form: { control },
+    form: { control, reset },
     state: message,
     isPending,
     onSubmit,
@@ -49,6 +46,18 @@ const Login = ({ setCurrentView: _setCurrentView, redirectTo }: Props) => {
     defaultValues: { email: "", password: "" },
     extraFields: { redirect_to: redirectTo },
   })
+  
+  const [alertOpen, setAlertOpen] = useState(false)
+
+  useEffect(() => {
+    if (isPending) {
+      setAlertOpen(false)
+    } else if (message) {
+      setAlertOpen(true)
+      // Junto con la alerta se vacían correo y contraseña.
+      reset({ email: "", password: "" })
+    }
+  }, [isPending, message, reset])
 
   return (
     <AuthCard data-testid="login-page">
@@ -85,7 +94,26 @@ const Login = ({ setCurrentView: _setCurrentView, redirectTo }: Props) => {
           </LocalizedClientLink>
         </div>
 
-        <ErrorMessage error={message} data-testid="login-error-message" />
+        <ThemeProvider theme={muiTheme}>
+          <Snackbar
+            open={alertOpen && !!message}
+            autoHideDuration={6000}
+            onClose={(_event, reason) => {
+              if (reason !== "clickaway") setAlertOpen(false)
+            }}
+            anchorOrigin={{ vertical: "bottom", horizontal: "left" }}
+          >
+            <Alert
+              severity="error"
+              variant="filled"
+              onClose={() => setAlertOpen(false)}
+              data-testid="login-error-message"
+              sx={{ alignItems: "center", fontSize: 15 }}
+            >
+              {message}
+            </Alert>
+          </Snackbar>
+        </ThemeProvider>
 
         <AuthSubmitButton
           isPending={isPending}
