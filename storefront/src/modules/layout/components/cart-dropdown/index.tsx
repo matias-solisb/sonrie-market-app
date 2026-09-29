@@ -82,8 +82,13 @@ const CartItemDeleteButton = ({
 
 const CartDropdown = ({
   cart: cartState,
+  isAuthenticated = false,
 }: {
   cart?: B2BCart | null
+  // Sin sesión, "Ir al carrito" lleva a login (/account) y, al entrar,
+  // vuelve al carrito vía `redirect_to` (mismo parámetro que usa el
+  // middleware y que lee el server action `login`).
+  isAuthenticated?: boolean
 }) => {
   const [activeTimer, setActiveTimer] = useState<NodeJS.Timer | undefined>(
     undefined
@@ -108,10 +113,7 @@ const CartDropdown = ({
         minimumFractionDigits: 0,
       })
     : "$0"
-  const amountMissingForMinimum = Math.max(
-    20000 - subtotal,
-    0
-  )
+  const amountMissingForMinimum = Math.max(20000 - subtotal, 0)
   const itemRef = useRef<number>(totalItems || 0)
   const { countryCode } = useParams() as { countryCode: string }
 
@@ -331,9 +333,7 @@ const CartDropdown = ({
               <div className="p-4 flex flex-col gap-y-4 text-big-regular border-t border-gray-200">
                 {/* Subtotal */}
                 <div className="flex items-center justify-between">
-                  <span className="text-ui-fg-base font-bold">
-                    Subtotal:
-                  </span>
+                  <span className="text-ui-fg-base font-bold">Subtotal:</span>
                   <span
                     className="text-large-semi"
                     data-testid="cart-subtotal"
@@ -380,7 +380,18 @@ const CartDropdown = ({
                 )}
 
                 {/* Botón ir al carrito */}
-                <LocalizedClientLink href="/cart" passHref>
+                <LocalizedClientLink
+                  href={
+                    isAuthenticated
+                      ? "/cart"
+                      : `/account?redirect_to=${encodeURIComponent(
+                          `/${countryCode}/cart`
+                        )}`
+                  }
+                  passHref
+                  // Cierra el slider al navegar (al carrito o a login).
+                  onClick={close}
+                >
                   <Button
                     className="w-full bg-blue-900"
                     size="large"
@@ -395,8 +406,8 @@ const CartDropdown = ({
                 lib/util/check-spending-limit.ts) */}
                 <p className="text-center text-xs text-ui-fg-subtle">
                   Recuerda que llevas disponible{" "}
-                  <span className="font-semibold">$50.000</span> en tu línea
-                  de crédito.
+                  <span className="font-semibold">$50.000</span> en tu línea de
+                  crédito.
                 </p>
                 <br />
               </div>
