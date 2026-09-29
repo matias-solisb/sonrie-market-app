@@ -44,9 +44,7 @@ const formatDate = (value?: string | Date | null) => {
   })
 }
 
-const formatAddress = (
-  address?: HttpTypes.StoreOrder["shipping_address"]
-) => {
+const formatAddress = (address?: HttpTypes.StoreOrder["shipping_address"]) => {
   if (!address) return "—"
   return [address.address_1, address.city].filter(Boolean).join(", ") || "—"
 }
@@ -72,9 +70,10 @@ const OrdersTable = ({
 
   return (
     <div className="flex flex-col gap-y-4 w-full" data-testid="orders-table">
-      <Table>
-        <Table.Header>
-          {/*
+      <div className="w-full overflow-x-auto">
+        <Table className="max-[600px]:[&_th]:whitespace-nowrap max-[600px]:[&_td]:whitespace-nowrap">
+          <Table.Header>
+            {/*
             `!bg-neutral-100` va con `!` a propósito: `Table.Row` ya trae
             `bg-ui-bg-base` fijo y `Table.Header` pisa eso encima con un
             selector `[&_tr]:bg-ui-bg-subtle` — ninguno de los dos es
@@ -86,57 +85,58 @@ const OrdersTable = ({
             defecto sale gris clarito vía `text-ui-fg-subtle` del `Table`
             raíz).
           */}
-          <Table.Row className="!bg-neutral-100 hover:!bg-neutral-100">
-            <Table.HeaderCell className="!text-neutral-700 !font-semibold">
-              Fecha pedido
-            </Table.HeaderCell>
-            <Table.HeaderCell className="!text-neutral-700 !font-semibold">
-              Fecha de entrega
-            </Table.HeaderCell>
-            <Table.HeaderCell className="!text-neutral-700 !font-semibold">
-              ID del pedido
-            </Table.HeaderCell>
-            <Table.HeaderCell className="!text-neutral-700 !font-semibold">
-              Dirección
-            </Table.HeaderCell>
-            <Table.HeaderCell className="!text-neutral-700 !font-semibold">
-              Valor
-            </Table.HeaderCell>
-            <Table.HeaderCell className="!text-neutral-700 !font-semibold">
-              Estado
-            </Table.HeaderCell>
-          </Table.Row>
-        </Table.Header>
-        <Table.Body>
-          {orders.map((order) => (
-            <Table.Row
-              key={order.id}
-              className="cursor-pointer [&_td]:last:w-[1%] [&_td]:last:whitespace-nowrap"
-            >
-              <Table.Cell>
-                <LocalizedClientLink
-                  href={`/account/orders/details/${order.id}`}
-                  className="block"
-                >
-                  {formatDate(order.created_at)}
-                </LocalizedClientLink>
-              </Table.Cell>
-              <Table.Cell>
-                {formatDate(order.fulfillments?.[0]?.delivered_at)}
-              </Table.Cell>
-              <Table.Cell>#{order.display_id}</Table.Cell>
-              <Table.Cell>{formatAddress(order.shipping_address)}</Table.Cell>
-              <Table.Cell>
-                {convertToLocale({
-                  amount: order.total,
-                  currency_code: order.currency_code,
-                })}
-              </Table.Cell>
-              <Table.Cell>{getOrderStatusLabel(order)}</Table.Cell>
+            <Table.Row className="!bg-neutral-100 hover:!bg-neutral-100">
+              <Table.HeaderCell className="!text-neutral-700 !font-semibold">
+                Fecha pedido
+              </Table.HeaderCell>
+              <Table.HeaderCell className="!text-neutral-700 !font-semibold">
+                Fecha de entrega
+              </Table.HeaderCell>
+              <Table.HeaderCell className="!text-neutral-700 !font-semibold">
+                ID del pedido
+              </Table.HeaderCell>
+              <Table.HeaderCell className="!text-neutral-700 !font-semibold">
+                Dirección
+              </Table.HeaderCell>
+              <Table.HeaderCell className="!text-neutral-700 !font-semibold">
+                Valor
+              </Table.HeaderCell>
+              <Table.HeaderCell className="!text-neutral-700 !font-semibold">
+                Estado
+              </Table.HeaderCell>
             </Table.Row>
-          ))}
-        </Table.Body>
-      </Table>
+          </Table.Header>
+          <Table.Body>
+            {orders.map((order) => (
+              <Table.Row
+                key={order.id}
+                className="cursor-pointer [&_td]:last:w-[1%] [&_td]:last:whitespace-nowrap"
+              >
+                <Table.Cell>
+                  <LocalizedClientLink
+                    href={`/account/orders/details/${order.id}`}
+                    className="block"
+                  >
+                    {formatDate(order.created_at)}
+                  </LocalizedClientLink>
+                </Table.Cell>
+                <Table.Cell>
+                  {formatDate(order.fulfillments?.[0]?.delivered_at)}
+                </Table.Cell>
+                <Table.Cell>#{order.display_id}</Table.Cell>
+                <Table.Cell>{formatAddress(order.shipping_address)}</Table.Cell>
+                <Table.Cell>
+                  {convertToLocale({
+                    amount: order.total,
+                    currency_code: order.currency_code,
+                  })}
+                </Table.Cell>
+                <Table.Cell>{getOrderStatusLabel(order)}</Table.Cell>
+              </Table.Row>
+            ))}
+          </Table.Body>
+        </Table>
+      </div>
 
       {/* {orders.length === 0 && (
         <div

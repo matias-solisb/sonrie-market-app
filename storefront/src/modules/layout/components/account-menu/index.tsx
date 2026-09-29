@@ -43,7 +43,7 @@ const AccountMenu = ({ customer }: { customer: HttpTypes.StoreCustomer }) => {
         data-testid="nav-account-menu-button"
       >
         <User size={20} />
-        <span className="hidden small:inline">{displayName}</span>
+        <span className="hidden min-[601px]:inline">{displayName}</span>
         <ChevronDownMini />
       </MenuButton>
       <Transition

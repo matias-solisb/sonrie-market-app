@@ -59,7 +59,12 @@ export async function NavigationHeader() {
           <div className="flex items-center gap-x-6 h-full">
             {customer ? (
               <>
-                <AccountMenu customer={customer} />
+                {/* En móvil (<=600px) el usuario pasa al final:
+                    campana, carrito+precio, usuario. En pantallas mayores
+                    se mantiene el orden original. */}
+                <div className="flex items-center h-full max-[600px]:order-last">
+                  <AccountMenu customer={customer} />
+                </div>
                 <NotificationBell />
               </>
             ) : (

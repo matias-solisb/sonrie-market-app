@@ -102,8 +102,11 @@ const ItemFull = ({
         disabled={disabled}
         className="absolute top-3 right-3"
       />
-      <div className="flex gap-x-4 items-start">
-        <LocalizedClientLink href={`/products/${item.product_handle}`}>
+      <div className="flex gap-x-4 items-start min-w-0 flex-1">
+        <LocalizedClientLink
+          href={`/products/${item.product_handle}`}
+          className="shrink-0"
+        >
           <Thumbnail
             thumbnail={item.thumbnail}
             size="square"
@@ -111,8 +114,9 @@ const ItemFull = ({
             className="bg-neutral-100 rounded-lg w-20 h-20"
           />
         </LocalizedClientLink>
-        <div className="flex flex-col gap-y-2 justify-between min-h-full self-stretch">
-          <div className="flex flex-col">
+        <div className="flex flex-col gap-y-2 justify-between min-h-full self-stretch min-w-0 flex-1">
+          {/* pr-6: deja libre la esquina del botón eliminar (absoluto). */}
+          <div className="flex flex-col pr-6 break-words">
             <span className="text-neutral-600 text-[0.6rem]">BRAND</span>
 
             <span className="txt-medium-plus text-neutral-950">
@@ -128,9 +132,9 @@ const ItemFull = ({
               item={item}
               currencyCode={currencyCode}
             />
-            <div className="flex gap-x-2">
+            <div className="flex gap-x-2 w-full small:w-auto">
               <div
-                className="flex h-10 w-64 items-stretch overflow-hidden rounded-md border border-ui-border-base"
+                className="flex h-10 w-full max-w-64 small:w-64 items-stretch overflow-hidden rounded-md border border-ui-border-base"
                 data-testid="cart-item-quantity"
               >
                 <button

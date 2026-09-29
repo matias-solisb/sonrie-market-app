@@ -40,13 +40,8 @@ const AccountLayout: React.FC<AccountLayoutProps> = async ({
   }
 
   return (
-    // Espacio entre el header del sitio y el contenido de la cuenta: antes
-    // se sumaba `small:py-12` (afuera) + `py-12` (adentro) = 96px en
-    // desktop. Quedó en un solo valor acá — para acercar o alejar "Mis
-    // datos" del header, es este `py-6 small:py-8` el que hay que tocar
-    // (py-6 = 24px en mobile, py-8 = 32px desde 1024px).
     <div className="flex-1" data-testid="account-page">
-      <div className="flex-1 content-container h-full max-w-5xl mx-auto bg-white flex flex-col py-6 small:py-8">
+      <div className="flex-1 content-container h-full bg-white flex flex-col py-6 small:py-8">
         {children}
       </div>
     </div>
