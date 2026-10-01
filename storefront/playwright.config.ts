@@ -30,7 +30,16 @@ export default defineConfig({
         screenshot: "only-on-failure",
     },
 
-    projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
+    projects: [
+        // Inicia sesión una vez y guarda la sesión en playwright/.auth/user.json
+        // (ya ignorado por git). Los specs que la necesitan la cargan con test.use().
+        { name: "setup", testMatch: /auth\.setup\.ts/ },
+        {
+            name: "chromium",
+            use: { ...devices["Desktop Chrome"] },
+            dependencies: ["setup"],
+        },
+    ],
 
     // Levanta el storefront si no está corriendo. El BACKEND (Medusa en :9000)
     // tienes que levantarlo tú: el middleware lo necesita para resolver la región.
