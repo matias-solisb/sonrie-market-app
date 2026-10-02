@@ -7,6 +7,11 @@ const requiredEnvs = [
     description:
       "Learn how to create a publishable key: https://docs.medusajs.com/v2/resources/storefront-development/publishable-api-keys",
   },
+  {
+    key: "JWT_SECRET",
+    description:
+      "El mismo JWT_SECRET del backend (backend/.env). El middleware lo usa para validar la sesión. Solo servidor: nunca con prefijo NEXT_PUBLIC_.",
+  },
 ]
 
 function checkEnvVariables() {
