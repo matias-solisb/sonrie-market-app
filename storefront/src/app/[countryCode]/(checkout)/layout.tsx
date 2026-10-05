@@ -1,29 +1,35 @@
+import { SONRIE_LOGO_URL } from "@/lib/constants"
 import LocalizedClientLink from "@/modules/common/components/localized-client-link"
-import LogoIcon from "@/modules/common/icons/logo"
-import MedusaCTA from "@/modules/layout/components/medusa-cta"
+import Image from "next/image"
 
+// Layout del checkout: solo el logo (sin buscador ni menús) para que el
+// colaborador se enfoque en confirmar el pedido.
 export default function CheckoutLayout({
   children,
 }: {
   children: React.ReactNode
 }) {
   return (
-    <div className="mb-2 w-full bg-white relative small:min-h-screen">
-      <div className="h-16 bg-white">
+    <div className="w-full bg-white relative small:min-h-screen">
+      <div className="h-16 bg-white border-b border-ui-border-base">
         <nav className="flex h-full items-center content-container justify-between">
-          <LocalizedClientLink className="hover:text-ui-fg-base" href="/">
-            <h1 className="text-base font-medium flex items-center">
-              <LogoIcon className="inline mr-2" />
-              Medusa B2B Starter
-            </h1>
+          <LocalizedClientLink href="/" className="flex items-center">
+            <Image
+              src={SONRIE_LOGO_URL}
+              alt="Sonríe Market"
+              width={180}
+              height={48}
+              className="h-10 w-auto"
+              priority
+            />
           </LocalizedClientLink>
         </nav>
       </div>
-      <div className="relative bg-neutral-100" data-testid="checkout-container">
+      <div
+        className="relative bg-neutral-100 min-h-[calc(100vh-4rem)]"
+        data-testid="checkout-container"
+      >
         {children}
-      </div>
-      <div className="py-4 w-full flex items-center justify-center">
-        <MedusaCTA />
       </div>
     </div>
   )

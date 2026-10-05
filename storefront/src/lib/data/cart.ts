@@ -117,6 +117,54 @@ export async function updateCart(data: HttpTypes.StoreUpdateCart) {
     .catch(medusaError)
 }
 
+export type UnavailableCartItem = {
+  variant_id: string
+  title: string
+  requested: number
+  available: number
+}
+
+/*
+
+Elige el site de retiro del carrito (POST /store/carts/:id/pickup-site).
+El backend pasa el carrito al canal de venta del site (el stock se reserva
+solo en esa sala), copia la dirección del site como envío y facturación,
+completa el correo del colaborador, guarda `metadata.stock_location_id` y
+agrega la opción "Retiro en {site}". Devuelve el carrito actualizado y los
+ítems sin stock suficiente en ese site.
+
+*/
+export async function setCartPickupSite(stockLocationId: string): Promise<{
+  cart: B2BCart
+  unavailable_items: UnavailableCartItem[]
+}> {
+  const cartId = await getCartId()
+
+  if (!cartId) {
+    throw new Error("No existing cart found when setting the pickup site")
+  }
+
+  const headers = {
+    ...(await getAuthHeaders()),
+  }
+
+  return sdk.client
+    .fetch<{ cart: B2BCart; unavailable_items: UnavailableCartItem[] }>(
+      `/store/carts/${cartId}/pickup-site`,
+      {
+        method: "POST",
+        headers,
+        body: { stock_location_id: stockLocationId },
+      }
+    )
+    .then(async (res) => {
+      revalidateTag(await getCacheTag("fulfillment"))
+      revalidateTag(await getCacheTag("carts"))
+      return res
+    })
+    .catch(medusaError)
+}
+
 export async function addToCart({
   variantId,
   quantity,
@@ -510,6 +558,64 @@ export async function placeOrder(
       response.order.id
     }`
   )
+}
+
+const BENEFIT_PAYMENT_PROVIDER_ID = "pp_system_default"
+
+/*
+
+Confirma el pedido desde el checkout de una sola página.
+
+1. Si el carrito no tiene una sesión de pago "Cargo beneficio"
+   (`pp_system_default`, sin pasarela), la crea. Se hace acá y no al entrar
+   al checkout porque Medusa recrea la colección de pago cuando cambia el
+   total del carrito.
+2. Completa el carrito (`placeOrder`). Si todo sale bien, `placeOrder`
+   redirige a /order/confirmed/:id (lanza NEXT_REDIRECT, que se propaga).
+3. Si el backend rechaza el pedido (saldo de beneficio insuficiente, sin
+   stock en el site, sin site elegido...) devuelve `{ error }` con el
+   mensaje en español que arma el backend, para mostrarlo bajo el botón.
+
+*/
+export async function confirmOrder(): Promise<{ error: string } | void> {
+  const cart = await retrieveCart()
+
+  if (!cart) {
+    return { error: "No encontramos tu carrito. Vuelve a la tienda e intenta de nuevo." }
+  }
+
+  try {
+    const hasBenefitSession = cart.payment_collection?.payment_sessions?.some(
+      (session) =>
+        session.provider_id === BENEFIT_PAYMENT_PROVIDER_ID &&
+        session.status === "pending"
+    )
+
+    if (!hasBenefitSession) {
+      await initiatePaymentSession(cart, {
+        provider_id: BENEFIT_PAYMENT_PROVIDER_ID,
+      })
+    }
+
+    const response = await placeOrder(cart.id)
+
+    if (response?.type === "cart") {
+      return {
+        error:
+          response.error?.message ??
+          "No se pudo confirmar el pedido. Intenta nuevamente.",
+      }
+    }
+  } catch (error: any) {
+    // redirect() de Next se implementa lanzando un error: hay que dejarlo pasar.
+    if (typeof error?.digest === "string" && error.digest.startsWith("NEXT_REDIRECT")) {
+      throw error
+    }
+
+    return {
+      error: error?.message || "No se pudo confirmar el pedido. Intenta nuevamente.",
+    }
+  }
 }
 
 /**

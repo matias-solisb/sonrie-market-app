@@ -123,7 +123,9 @@ const OrdersTable = ({
                 <Table.Cell>
                   {formatDate(order.fulfillments?.[0]?.delivered_at)}
                 </Table.Cell>
-                <Table.Cell>#{order.display_id}</Table.Cell>
+                <Table.Cell data-testid="order-display-id">
+                  #{order.display_id}
+                </Table.Cell>
                 <Table.Cell>{formatAddress(order.shipping_address)}</Table.Cell>
                 <Table.Cell>
                   {convertToLocale({

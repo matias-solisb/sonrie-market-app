@@ -8,6 +8,10 @@ import {
 import { getCartApprovalStatus } from "../../utils/get-cart-approval-status";
 import { BENEFIT_BUDGET_MODULE } from "../../modules/benefit-budget";
 import BenefitBudgetModuleService from "../../modules/benefit-budget/service";
+import {
+  findUnavailableItems,
+  getPickupSite,
+} from "../../utils/pickup-sites";
 
 /*
 
@@ -18,7 +22,12 @@ Corre antes de crear el pedido.
 2. Debe haber un colaborador logueado.
 3. TODO(rut-auth / employee-sync): validar colaborador activo en SAP y
    habilitado por admin cuando existan esos campos.
-4. Cupo de beneficio (módulo benefit-budget): valida
+4. Site de retiro (src/utils/pickup-sites.ts): el carrito debe tener un
+   site elegido (`metadata.stock_location_id`), estar en el sales channel
+   de ese site y tener su opción "Retiro en {site}". Lo deja así
+   POST /store/carts/:id/pickup-site. Además se revisa el stock del site
+   para responder en español antes de que el core falle al reservar.
+5. Cupo de beneficio (módulo benefit-budget): valida
    `consumido + total <= tope` del periodo vigente (hora de Santiago) y
    registra el consumo en la misma transacción. El total incluye IVA.
 
@@ -44,7 +53,21 @@ completeCartWorkflow.hooks.validate(
       data: [queryCart],
     } = await query.graph({
       entity: "cart",
-      fields: ["id", "approvals.*", "customer_id", "total"],
+      fields: [
+        "id",
+        "approvals.*",
+        "customer_id",
+        "total",
+        "metadata",
+        "sales_channel_id",
+        "shipping_methods.shipping_option_id",
+        "items.variant_id",
+        "items.title",
+        "items.product_title",
+        "items.quantity",
+        "items.variant.manage_inventory",
+        "items.variant.allow_backorder",
+      ],
       filters: {
         id: cart.id,
       },
@@ -60,6 +83,51 @@ completeCartWorkflow.hooks.validate(
       throw new MedusaError(
         MedusaError.Types.NOT_ALLOWED,
         "Debes iniciar sesión para completar la compra."
+      );
+    }
+
+    const stockLocationId = queryCart.metadata?.stock_location_id as
+      | string
+      | undefined;
+    const site = stockLocationId
+      ? await getPickupSite(query, stockLocationId)
+      : null;
+
+    if (!site) {
+      throw new MedusaError(
+        MedusaError.Types.NOT_ALLOWED,
+        "Elige un site de retiro en el carrito antes de confirmar el pedido."
+      );
+    }
+
+    const hasPickupMethod = (queryCart.shipping_methods ?? []).some(
+      (method: any) => method?.shipping_option_id === site.shipping_option_id
+    );
+
+    if (queryCart.sales_channel_id !== site.sales_channel_id || !hasPickupMethod) {
+      throw new MedusaError(
+        MedusaError.Types.NOT_ALLOWED,
+        `El carrito no está preparado para retiro en ${site.name}. Vuelve al carrito y confirma el site de retiro.`
+      );
+    }
+
+    const unavailable = await findUnavailableItems(
+      query,
+      (queryCart.items ?? []).filter(Boolean).map((item: any) => ({
+        ...item,
+        title: item.product_title || item.title,
+      })),
+      site.sales_channel_id
+    );
+
+    if (unavailable.length) {
+      const detalle = unavailable
+        .map((i) => `${i.title} (pediste ${i.requested}, quedan ${i.available})`)
+        .join(", ");
+
+      throw new MedusaError(
+        MedusaError.Types.NOT_ALLOWED,
+        `No hay stock suficiente en ${site.name} para: ${detalle}.`
       );
     }
 

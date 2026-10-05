@@ -3,10 +3,13 @@
 import { useCart } from "@/lib/context/cart-context"
 import { convertToLocale } from "@/lib/util/money"
 import Divider from "@/modules/common/components/divider"
+import { StoreBenefitBudget } from "@/types/benefit-budget"
 import { Text } from "@medusajs/ui"
 import React from "react"
 
-const CartTotals: React.FC = () => {
+const CartTotals: React.FC<{ benefitBudget?: StoreBenefitBudget | null }> = ({
+  benefitBudget,
+}) => {
   const { isUpdatingCart, cart } = useCart()
 
   if (!cart) return null
@@ -89,13 +92,17 @@ const CartTotals: React.FC = () => {
         )}
       </div>
 
-      {/* Placeholder estático hasta conectar el cupo real del colaborador
-      (customer.employee.spending_limit, ver lib/util/check-spending-limit.ts) */}
-      <Text className="text-xs text-neutral-500 mt-3">
-        Recuerda que llevas disponible{" "}
-        <span className="font-semibold">$50.000</span> en tu línea de
-        crédito.
-      </Text>
+      {/* Saldo real del beneficio (GET /store/benefit-budget, vía
+      customer.benefit_budget). Sin saldo cargado no se muestra nada. */}
+      {benefitBudget && (
+        <Text className="text-xs text-neutral-500 mt-3" data-testid="cart-benefit-available">
+          Recuerda que tienes disponible{" "}
+          <span className="font-semibold">
+            {convertToLocale({ amount: benefitBudget.disponible, currency_code })}
+          </span>{" "}
+          de tu beneficio este mes.
+        </Text>
+      )}
     </div>
   )
 }

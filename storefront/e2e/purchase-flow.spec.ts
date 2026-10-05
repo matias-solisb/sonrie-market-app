@@ -9,7 +9,10 @@ Escenarios de fallo del flujo de compra: catálogo → carrito → checkout → 
 Requisitos en el ambiente dev:
 - Usuario de prueba de .env.e2e (sesión guardada por auth.setup.ts).
 - Al menos un producto con stock en /cl/store.
-- Para la sección "checkout": shipping option y medio de pago configurados.
+- Para la sección "checkout": sites de retiro configurados
+  (backend: `npx medusa exec ./src/scripts/setup-pickup-sites.ts`), stock del
+  producto en el primer site, campaña de beneficio activa y saldo suficiente
+  (cada corrida del flujo completo crea pedidos reales que consumen beneficio).
 
 Varios tests de "cantidades inválidas" están escritos con el comportamiento
 ESPERADO. Si fallan, probablemente encontraron un bug real en
@@ -191,33 +194,46 @@ test.describe("confirmar pedido", () => {
     async function latestOrderNumber(page: Page) {
         await page.goto("/cl/account/orders")
         const first = page.getByTestId("order-display-id").first()
-        if (!(await first.isVisible({ timeout: 15_000 }).catch(() => false))) return 0
+        // isVisible() no espera (ignora el timeout): con streaming la tabla
+        // aparece después del primer render y se leía 0. waitFor sí espera.
+        const visible = await first
+            .waitFor({ state: "visible", timeout: 15_000 })
+            .then(() => true)
+            .catch(() => false)
+        if (!visible) return 0
         return parseClp(await first.textContent())
     }
 
-    // BUG conocido: Summary.handleConfirm guarda la dirección del site en el
-    // carrito, pero calcula checkoutPath ANTES, con el carrito sin dirección.
-    // Resultado: el checkout siempre abre en step=shipping-address y pide
-    // teléfono y código postal del site. Cuando se corrija, este test empieza
-    // a pasar y Playwright avisa que hay que quitar el test.fail().
+    // Antes Summary.handleConfirm calculaba el paso del checkout con el
+    // carrito previo (sin dirección) y siempre abría en step=shipping-address.
+    // Ahora el backend deja dirección + retiro (POST /store/carts/:id/pickup-site)
+    // y el paso se calcula con el carrito actualizado.
     test("al confirmar el carrito, el checkout no vuelve a pedir la dirección del site", async ({ page }) => {
-        test.fail()
         await goToCheckout(page)
 
         await expect(page).not.toHaveURL(/step=shipping-address/, { timeout: 5_000 })
     })
 
-    test("el botón de pedido no se habilita antes de elegir la entrega", async ({ page }) => {
-        const checkout = await goToCheckout(page)
-        const radio = page.getByTestId("delivery-option-radio").first()
-        test.skip(!(await radio.isVisible().catch(() => false)), "El carrito ya tenía método de entrega")
+    test("sin site confirmado en el carrito, /cl/checkout vuelve al carrito", async ({ page }) => {
+        // Agrega un producto pero entra directo al checkout, sin pasar por
+        // "Confirmar pedido" del carrito (que es donde se elige el site).
+        await cartWithOneItem(page)
+        await page.goto("/cl/checkout")
 
-        if (await checkout.placeOrder.count()) {
-            await expect(checkout.placeOrder).toBeDisabled()
-        }
+        await expect(page).toHaveURL(/\/cl\/cart/, { timeout: 30_000 })
+        await expect(page.getByTestId("submit-order-button")).toHaveCount(0)
     })
 
-    test.fixme("flujo completo: el pedido se crea, se confirma y el carrito queda vacío", async ({ page }) => {
+    test("el checkout es una sola página con el site, el pago y el botón habilitado", async ({ page }) => {
+        const checkout = await goToCheckout(page)
+
+        await expect(page).not.toHaveURL(/step=/)
+        await expect(checkout.pickupSiteName).toBeVisible()
+        await expect(page.getByTestId("benefit-payment")).toContainText("Cargo beneficio")
+        await expect(checkout.placeOrder).toBeEnabled({ timeout: 30_000 })
+    })
+
+    test("flujo completo: el pedido se crea, se confirma y el carrito queda vacío", async ({ page }) => {
         const before = await latestOrderNumber(page)
         const checkout = await goToCheckout(page)
         await checkout.completeSteps()
@@ -234,7 +250,7 @@ test.describe("confirmar pedido", () => {
         expect(await latestOrderNumber(page)).toBe(before + 1)
     })
 
-    test.fixme("doble clic en el botón de pedido crea UN solo pedido", async ({ page }) => {
+    test("doble clic en el botón de pedido crea UN solo pedido", async ({ page }) => {
         const before = await latestOrderNumber(page)
         const checkout = await goToCheckout(page)
         await checkout.completeSteps()
@@ -247,7 +263,7 @@ test.describe("confirmar pedido", () => {
         expect(await latestOrderNumber(page)).toBe(before + 1)
     })
 
-    test.fixme("volver atrás después de comprar no permite pagar de nuevo", async ({ page }) => {
+    test("volver atrás después de comprar no permite pagar de nuevo", async ({ page }) => {
         const checkout = await goToCheckout(page)
         await checkout.completeSteps()
         await checkout.placeOrder.click()

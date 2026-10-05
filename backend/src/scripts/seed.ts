@@ -1,972 +1,322 @@
 import {
   createApiKeysWorkflow,
   createCollectionsWorkflow,
+  createInventoryLevelsWorkflow,
   createProductCategoriesWorkflow,
   createProductsWorkflow,
+  createProductTagsWorkflow,
   createRegionsWorkflow,
   createSalesChannelsWorkflow,
-  createShippingOptionsWorkflow,
   createShippingProfilesWorkflow,
   createStockLocationsWorkflow,
   createTaxRegionsWorkflow,
   linkSalesChannelsToApiKeyWorkflow,
-  linkSalesChannelsToStockLocationWorkflow,
   updateStoresWorkflow,
 } from "@medusajs/core-flows";
-import {
-  ExecArgs,
-  IFulfillmentModuleService,
-  ISalesChannelModuleService,
-  IStoreModuleService,
-} from "@medusajs/framework/types";
+import { ExecArgs } from "@medusajs/framework/types";
 import {
   ContainerRegistrationKeys,
-  ModuleRegistrationName,
   Modules,
   ProductStatus,
 } from "@medusajs/framework/utils";
 
+import { ensurePickupSite } from "../utils/pickup-sites";
 import { ensureBenefitCampaign } from "./seed-benefit-campaign";
+
+/*
+
+Seed de una base NUEVA de Sonríe Market (DEV local / pruebas). No es
+idempotente: correr una sola vez sobre una base vacía (`npm run seed`).
+
+Deja:
+- Tienda en CLP con precios con IVA incluido, región "Chile" (cl) con el
+  medio de pago "Cargo beneficio" (`pp_system_default`) e IVA 19 %
+  (proveedor `tp_system`).
+- Dos sites de retiro DE PRUEBA (direcciones ficticias), cada uno con su
+  opción "Retiro en {site}" $0 y su sales channel (src/utils/pickup-sites.ts).
+- Canal de catálogo ("Default Sales Channel") en la publishable key.
+- Productos lácteos de ejemplo con precios en CLP y stock distinto por
+  site (uno solo tiene stock en Santiago, para probar el stock por site).
+- Campaña de beneficio de $50.000.
+
+Para una base que ya tiene datos (DEV/PRD) no usar este seed: configurar
+los sites con `npx medusa exec ./src/scripts/setup-pickup-sites.ts`.
+
+*/
+
+const DEMO_SITES = [
+  {
+    name: "Sala de venta Santiago (demo)",
+    address: {
+      address_1: "Dirección de prueba 100",
+      city: "Santiago",
+      province: "Región Metropolitana",
+      postal_code: "8320000",
+      country_code: "CL",
+    },
+  },
+  {
+    name: "Sala de venta Sur (demo)",
+    address: {
+      address_1: "Dirección de prueba 200",
+      city: "Temuco",
+      province: "Región de La Araucanía",
+      postal_code: "4780000",
+      country_code: "CL",
+    },
+  },
+];
+
+type DemoProduct = {
+  title: string;
+  handle: string;
+  category: string;
+  description: string;
+  sku: string;
+  price: number;
+  featured?: boolean;
+  /** Stock por site, en el orden de DEMO_SITES. */
+  stock: [number, number];
+};
+
+const DEMO_PRODUCTS: DemoProduct[] = [
+  {
+    title: "Leche entera 1 L",
+    handle: "leche-entera-1l",
+    category: "Leches",
+    description: "Leche entera UHT, caja de 1 litro.",
+    sku: "DEMO-LECHE-ENTERA-1L",
+    price: 1190,
+    featured: true,
+    stock: [200, 120],
+  },
+  {
+    title: "Leche descremada 1 L",
+    handle: "leche-descremada-1l",
+    category: "Leches",
+    description: "Leche descremada UHT, caja de 1 litro.",
+    sku: "DEMO-LECHE-DESCREMADA-1L",
+    price: 1190,
+    stock: [150, 80],
+  },
+  {
+    title: "Yogur batido frutilla 125 g",
+    handle: "yogur-batido-frutilla-125g",
+    category: "Yogures",
+    description: "Yogur batido sabor frutilla, pote de 125 g.",
+    sku: "DEMO-YOGUR-FRUTILLA-125G",
+    price: 390,
+    featured: true,
+    stock: [300, 300],
+  },
+  {
+    title: "Queso gauda laminado 250 g",
+    handle: "queso-gauda-laminado-250g",
+    category: "Quesos y mantequillas",
+    description: "Queso gauda laminado, envase de 250 g.",
+    sku: "DEMO-QUESO-GAUDA-250G",
+    price: 3290,
+    featured: true,
+    stock: [60, 40],
+  },
+  {
+    title: "Mantequilla con sal 250 g",
+    handle: "mantequilla-con-sal-250g",
+    category: "Quesos y mantequillas",
+    description: "Mantequilla con sal, pan de 250 g.",
+    sku: "DEMO-MANTEQUILLA-250G",
+    price: 2590,
+    stock: [80, 50],
+  },
+  {
+    title: "Manjar 400 g",
+    handle: "manjar-400g",
+    category: "Postres",
+    description: "Manjar tradicional, pote de 400 g. Solo en Santiago (demo de stock por site).",
+    sku: "DEMO-MANJAR-400G",
+    price: 2190,
+    stock: [40, 0],
+  },
+];
 
 export default async function seedDemoData({ container }: ExecArgs) {
   const logger = container.resolve(ContainerRegistrationKeys.LOGGER);
-  const link = container.resolve(ContainerRegistrationKeys.LINK);
-  const fulfillmentModuleService: IFulfillmentModuleService = container.resolve(
-    ModuleRegistrationName.FULFILLMENT
-  );
-  const salesChannelModuleService: ISalesChannelModuleService =
-    container.resolve(ModuleRegistrationName.SALES_CHANNEL);
-  const storeModuleService: IStoreModuleService = container.resolve(
-    ModuleRegistrationName.STORE
-  );
-
-  const countries = ["gb", "de", "dk", "se", "fr", "es", "it"];
+  const query = container.resolve(ContainerRegistrationKeys.QUERY);
+  const salesChannelModule = container.resolve(Modules.SALES_CHANNEL);
+  const storeModule = container.resolve(Modules.STORE);
 
   logger.info("Seeding store data...");
-  const [store] = await storeModuleService.listStores();
-  let defaultSalesChannel = await salesChannelModuleService.listSalesChannels({
-    name: "Default Sales Channel",
-  });
+  const [store] = await storeModule.listStores();
+  let catalogChannel = (
+    await salesChannelModule.listSalesChannels({
+      name: "Default Sales Channel",
+    })
+  )[0];
 
-  if (!defaultSalesChannel.length) {
-    // create the default sales channel
-    const { result: salesChannelResult } = await createSalesChannelsWorkflow(
-      container
-    ).run({
+  if (!catalogChannel) {
+    const { result } = await createSalesChannelsWorkflow(container).run({
       input: {
         salesChannelsData: [
           {
             name: "Default Sales Channel",
+            description:
+              "Canal del catálogo (publishable key). Ve el stock de todos los sites.",
           },
         ],
       },
     });
-    defaultSalesChannel = salesChannelResult;
+    catalogChannel = result[0];
   }
 
   await updateStoresWorkflow(container).run({
     input: {
       selector: { id: store.id },
       update: {
+        name: "Sonríe Market",
         supported_currencies: [
-          {
-            currency_code: "eur",
-            is_default: true,
-          },
-          {
-            currency_code: "usd",
-          },
+          { currency_code: "clp", is_default: true, is_tax_inclusive: true },
         ],
-        default_sales_channel_id: defaultSalesChannel[0].id,
+        default_sales_channel_id: catalogChannel.id,
       },
     },
   });
+
   logger.info("Seeding region data...");
-  const { result: regionResult } = await createRegionsWorkflow(container).run({
+  await createRegionsWorkflow(container).run({
     input: {
       regions: [
         {
-          name: "Europe",
-          currency_code: "eur",
-          countries,
+          name: "Chile",
+          currency_code: "clp",
+          countries: ["cl"],
           payment_providers: ["pp_system_default"],
+          automatic_taxes: true,
+          is_tax_inclusive: true,
         },
       ],
     },
   });
-  const region = regionResult[0];
-  logger.info("Finished seeding regions.");
 
   logger.info("Seeding tax regions...");
   await createTaxRegionsWorkflow(container).run({
-    input: countries.map((country_code) => ({
-      country_code,
-    })),
-  });
-  logger.info("Finished seeding tax regions.");
-
-  logger.info("Seeding stock location data...");
-  const { result: stockLocationResult } = await createStockLocationsWorkflow(
-    container
-  ).run({
-    input: {
-      locations: [
-        {
-          name: "European Warehouse",
-          address: {
-            city: "Copenhagen",
-            country_code: "DK",
-            address_1: "",
-          },
-        },
-      ],
-    },
-  });
-  const stockLocation = stockLocationResult[0];
-
-  await link.create({
-    [Modules.STOCK_LOCATION]: {
-      stock_location_id: stockLocation.id,
-    },
-    [Modules.FULFILLMENT]: {
-      fulfillment_provider_id: "manual_manual",
-    },
-  });
-
-  logger.info("Seeding fulfillment data...");
-  const { result: shippingProfileResult } =
-    await createShippingProfilesWorkflow(container).run({
-      input: {
-        data: [
-          {
-            name: "Default",
-            type: "default",
-          },
-        ],
-      },
-    });
-  const shippingProfile = shippingProfileResult[0];
-
-  const fulfillmentSet = await fulfillmentModuleService.createFulfillmentSets({
-    name: "European Warehouse delivery",
-    type: "shipping",
-    service_zones: [
-      {
-        name: "Europe",
-        geo_zones: [
-          {
-            country_code: "gb",
-            type: "country",
-          },
-          {
-            country_code: "de",
-            type: "country",
-          },
-          {
-            country_code: "dk",
-            type: "country",
-          },
-          {
-            country_code: "se",
-            type: "country",
-          },
-          {
-            country_code: "fr",
-            type: "country",
-          },
-          {
-            country_code: "es",
-            type: "country",
-          },
-          {
-            country_code: "it",
-            type: "country",
-          },
-        ],
-      },
-    ],
-  });
-
-  await link.create({
-    [Modules.STOCK_LOCATION]: {
-      stock_location_id: stockLocation.id,
-    },
-    [Modules.FULFILLMENT]: {
-      fulfillment_set_id: fulfillmentSet.id,
-    },
-  });
-
-  await createShippingOptionsWorkflow(container).run({
     input: [
       {
-        name: "Standard Shipping",
-        price_type: "flat",
-        provider_id: "manual_manual",
-        service_zone_id: fulfillmentSet.service_zones[0].id,
-        shipping_profile_id: shippingProfile.id,
-        type: {
-          label: "Standard",
-          description: "Ship in 2-3 days.",
-          code: "standard",
-        },
-        prices: [
-          {
-            currency_code: "usd",
-            amount: 10,
-          },
-          {
-            currency_code: "eur",
-            amount: 10,
-          },
-          {
-            region_id: region.id,
-            amount: 10,
-          },
-        ],
-        rules: [
-          {
-            attribute: "enabled_in_store",
-            value: '"true"',
-            operator: "eq",
-          },
-          {
-            attribute: "is_return",
-            value: "false",
-            operator: "eq",
-          },
-        ],
-      },
-      {
-        name: "Express Shipping",
-        price_type: "flat",
-        provider_id: "manual_manual",
-        service_zone_id: fulfillmentSet.service_zones[0].id,
-        shipping_profile_id: shippingProfile.id,
-        type: {
-          label: "Express",
-          description: "Ship in 24 hours.",
-          code: "express",
-        },
-        prices: [
-          {
-            currency_code: "usd",
-            amount: 10,
-          },
-          {
-            currency_code: "eur",
-            amount: 10,
-          },
-          {
-            region_id: region.id,
-            amount: 10,
-          },
-        ],
-        rules: [
-          {
-            attribute: "enabled_in_store",
-            value: '"true"',
-            operator: "eq",
-          },
-          {
-            attribute: "is_return",
-            value: "false",
-            operator: "eq",
-          },
-        ],
+        country_code: "cl",
+        provider_id: "tp_system",
+        default_tax_rate: { rate: 19, code: "IVA", name: "IVA" },
       },
     ],
   });
-  logger.info("Finished seeding fulfillment data.");
 
-  await linkSalesChannelsToStockLocationWorkflow(container).run({
-    input: {
-      id: stockLocation.id,
-      add: [defaultSalesChannel[0].id],
-    },
+  logger.info("Seeding shipping profile...");
+  const {
+    result: [shippingProfile],
+  } = await createShippingProfilesWorkflow(container).run({
+    input: { data: [{ name: "Default", type: "default" }] },
   });
-  logger.info("Finished seeding stock location data.");
 
-  logger.info("Seeding publishable API key data...");
-  const { result: publishableApiKeyResult } = await createApiKeysWorkflow(
+  logger.info("Seeding pickup sites (demo)...");
+  const { result: locations } = await createStockLocationsWorkflow(
     container
   ).run({
-    input: {
-      api_keys: [
-        {
-          title: "Webshop",
-          type: "publishable",
-          created_by: "",
-        },
-      ],
-    },
+    input: { locations: DEMO_SITES },
   });
-  const publishableApiKey = publishableApiKeyResult[0];
 
-  await linkSalesChannelsToApiKeyWorkflow(container).run({
+  for (const location of locations) {
+    const site = await ensurePickupSite(container, {
+      stock_location_id: location.id,
+      catalog_sales_channel_id: catalogChannel.id,
+      shipping_profile_id: shippingProfile.id,
+    });
+    logger.info(`  Site listo: ${site.name}`);
+  }
+
+  logger.info("Seeding publishable API key data...");
+  const {
+    result: [publishableApiKey],
+  } = await createApiKeysWorkflow(container).run({
     input: {
-      id: publishableApiKey.id,
-      add: [defaultSalesChannel[0].id],
+      api_keys: [{ title: "Webshop", type: "publishable", created_by: "" }],
     },
   });
-  logger.info("Finished seeding publishable API key data.");
+
+  // Solo el canal de catálogo: los canales de site no van en la key (ver
+  // src/utils/pickup-sites.ts).
+  await linkSalesChannelsToApiKeyWorkflow(container).run({
+    input: { id: publishableApiKey.id, add: [catalogChannel.id] },
+  });
 
   logger.info("Seeding product data...");
-
   const {
     result: [collection],
   } = await createCollectionsWorkflow(container).run({
-    input: {
-      collections: [
-        {
-          title: "Featured",
-          handle: "featured",
-        },
-      ],
-    },
+    input: { collections: [{ title: "Featured", handle: "featured" }] },
   });
 
-  const { result: categoryResult } = await createProductCategoriesWorkflow(
+  const categoryNames = [...new Set(DEMO_PRODUCTS.map((p) => p.category))];
+  const { result: categories } = await createProductCategoriesWorkflow(
     container
   ).run({
     input: {
-      product_categories: [
-        {
-          name: "Laptops",
-          is_active: true,
-        },
-        {
-          name: "Accessories",
-          is_active: true,
-        },
-        {
-          name: "Phones",
-          is_active: true,
-        },
-        {
-          name: "Monitors",
-          is_active: true,
-        },
-      ],
+      product_categories: categoryNames.map((name) => ({
+        name,
+        is_active: true,
+      })),
     },
+  });
+
+  const {
+    result: [featuredTag],
+  } = await createProductTagsWorkflow(container).run({
+    input: { product_tags: [{ value: "featured" }] },
   });
 
   await createProductsWorkflow(container).run({
     input: {
-      products: [
-        {
-          title:
-            '16" Ultra-Slim AI Laptop | 3K OLED | 1.1cm Thin | 6-Speaker Audio',
-          collection_id: collection.id,
-          category_ids: [
-            categoryResult.find((cat) => cat.name === "Laptops")?.id!,
-          ],
-          description:
-            "This ultra-thin 16-inch laptop is a sophisticated, high-performance machine for the new era of artificial intelligence. It has been completely redesigned from the inside out. The cabinet features an exquisite new ceramic-aluminum composite material in a range of nature-inspired colors. This material provides durability while completing the ultra-slim design and resisting the test of time. This innovative computer utilizes the latest AI-enhanced processor with quiet ambient cooling. It's designed to enrich your lifestyle on the go with an astonishingly thin 1.1cm chassis that houses an advanced 16-inch 3K OLED display and immersive six-speaker audio.",
-          weight: 400,
-          status: ProductStatus.PUBLISHED,
-          images: [
-            {
-              url: "https://medusa-public-images.s3.eu-west-1.amazonaws.com/laptop-front.png",
-            },
-            {
-              url: "https://medusa-public-images.s3.eu-west-1.amazonaws.com/laptop-side.png",
-            },
-            {
-              url: "https://medusa-public-images.s3.eu-west-1.amazonaws.com/laptop-top.png",
-            },
-          ],
-          options: [
-            {
-              title: "Storage",
-              values: ["256 GB", "512 GB"],
-            },
-            {
-              title: "Color",
-              values: ["Blue", "Red"],
-            },
-          ],
-          variants: [
-            {
-              title: "256 GB / Blue",
-              sku: "256-BLUE",
-              options: {
-                Storage: "256 GB",
-                Color: "Blue",
-              },
-              manage_inventory: false,
-              prices: [
-                {
-                  amount: 1299,
-                  currency_code: "eur",
-                },
-                {
-                  amount: 1299,
-                  currency_code: "usd",
-                },
-              ],
-            },
-            {
-              title: "512 GB / Red",
-              sku: "512-RED",
-              options: {
-                Storage: "512 GB",
-                Color: "Red",
-              },
-              manage_inventory: false,
-              prices: [
-                {
-                  amount: 1259,
-                  currency_code: "eur",
-                },
-                {
-                  amount: 1259,
-                  currency_code: "usd",
-                },
-              ],
-            },
-          ],
-          sales_channels: [
-            {
-              id: defaultSalesChannel[0].id,
-            },
-          ],
-        },
-      ],
+      products: DEMO_PRODUCTS.map((product) => ({
+        title: product.title,
+        handle: product.handle,
+        description: product.description,
+        status: ProductStatus.PUBLISHED,
+        shipping_profile_id: shippingProfile.id,
+        collection_id: product.featured ? collection.id : undefined,
+        tag_ids: product.featured ? [featuredTag.id] : [],
+        category_ids: [categories.find((c) => c.name === product.category)!.id],
+        options: [{ title: "Formato", values: ["Único"] }],
+        variants: [
+          {
+            title: "Único",
+            sku: product.sku,
+            options: { Formato: "Único" },
+            manage_inventory: true,
+            prices: [{ amount: product.price, currency_code: "clp" }],
+          },
+        ],
+        sales_channels: [{ id: catalogChannel.id }],
+      })),
     },
   });
 
-  await createProductsWorkflow(container).run({
-    input: {
-      products: [
-        {
-          title: "1080p HD Pro Webcam | Superior Video | Privacy enabled",
-          category_ids: [
-            categoryResult.find((cat) => cat.name === "Accessories")?.id!,
-          ],
-          description:
-            "High-quality 1080p HD webcam that elevates your work environment with superior video and audio that outperforms standard laptop cameras. Achieve top-tier video collaboration at a cost-effective price point, ideal for widespread deployment across your organization.",
-          weight: 400,
-          status: ProductStatus.PUBLISHED,
-          images: [
-            {
-              url: "https://medusa-public-images.s3.eu-west-1.amazonaws.com/camera-front.png",
-            },
-            {
-              url: "https://medusa-public-images.s3.eu-west-1.amazonaws.com/camera-side.png",
-            },
-          ],
-          options: [
-            {
-              title: "Color",
-              values: ["Black", "White"],
-            },
-          ],
-          variants: [
-            {
-              title: "Webcam Black",
-              sku: "WEBCAM-BLACK",
-              options: {
-                Color: "Black",
-              },
-              manage_inventory: false,
-              prices: [
-                {
-                  amount: 59,
-                  currency_code: "eur",
-                },
-                {
-                  amount: 59,
-                  currency_code: "usd",
-                },
-              ],
-            },
-            {
-              title: "Webcam White",
-              sku: "WEBCAM-WHITE",
-              options: {
-                Color: "White",
-              },
-              manage_inventory: false,
-              prices: [
-                {
-                  amount: 65,
-                  currency_code: "eur",
-                },
-                {
-                  amount: 65,
-                  currency_code: "usd",
-                },
-              ],
-            },
-          ],
-          sales_channels: [
-            {
-              id: defaultSalesChannel[0].id,
-            },
-          ],
-        },
-      ],
-    },
+  logger.info("Seeding inventory levels per site...");
+  const { data: inventoryItems } = await query.graph({
+    entity: "inventory_item",
+    fields: ["id", "sku"],
+    filters: { sku: DEMO_PRODUCTS.map((p) => p.sku) },
   });
 
-  await createProductsWorkflow(container).run({
+  await createInventoryLevelsWorkflow(container).run({
     input: {
-      products: [
-        {
-          title: `6.5" Ultra HD Smartphone | 3x Impact-Resistant Screen`,
-          collection_id: collection.id,
-          category_ids: [
-            categoryResult.find((cat) => cat.name === "Phones")?.id!,
-          ],
-          description:
-            'This premium smartphone is crafted from durable and lightweight aerospace-grade aluminum, featuring an expansive 6.5" Ultra-High Definition AMOLED display. It boasts exceptional durability with a cutting-edge nanocrystal glass front, offering three times the impact resistance of standard smartphone screens. The device combines sleek design with robust protection, setting a new standard for smartphone resilience and visual excellence. Copy',
-          weight: 400,
-          status: ProductStatus.PUBLISHED,
-          images: [
-            {
-              url: "https://medusa-public-images.s3.eu-west-1.amazonaws.com/phone-front.png",
-            },
-            {
-              url: "https://medusa-public-images.s3.eu-west-1.amazonaws.com/phone-side.png",
-            },
-            {
-              url: "https://medusa-public-images.s3.eu-west-1.amazonaws.com/phone-bottom.png",
-            },
-          ],
-          options: [
-            {
-              title: "Memory",
-              values: ["256 GB", "512 GB"],
-            },
-            {
-              title: "Color",
-              values: ["Purple", "Red"],
-            },
-          ],
-          variants: [
-            {
-              title: "256 GB Purple",
-              sku: "PHONE-256-PURPLE",
-              options: {
-                Memory: "256 GB",
-                Color: "Purple",
-              },
-              manage_inventory: false,
-              prices: [
-                {
-                  amount: 999,
-                  currency_code: "eur",
-                },
-                {
-                  amount: 999,
-                  currency_code: "usd",
-                },
-              ],
-            },
-            {
-              title: "256 GB Red",
-              sku: "PHONE-256-RED",
-              options: {
-                Memory: "256 GB",
-                Color: "Red",
-              },
-              manage_inventory: false,
-              prices: [
-                {
-                  amount: 959,
-                  currency_code: "eur",
-                },
-                {
-                  amount: 959,
-                  currency_code: "usd",
-                },
-              ],
-            },
-          ],
-          sales_channels: [
-            {
-              id: defaultSalesChannel[0].id,
-            },
-          ],
-        },
-      ],
-    },
-  });
+      inventory_levels: DEMO_PRODUCTS.flatMap((product) => {
+        const item = inventoryItems.find((i) => i.sku === product.sku)!;
 
-  await createProductsWorkflow(container).run({
-    input: {
-      products: [
-        {
-          title: `34" QD-OLED Curved Gaming Monitor | Ultra-Wide | Infinite Contrast | 175Hz`,
-          collection_id: collection.id,
-          category_ids: [
-            categoryResult.find((cat) => cat.name === "Monitors")?.id!,
-          ],
-          description:
-            "Experience the pinnacle of display technology with this 34-inch curved monitor. By merging OLED panels and Quantum Dot technology, this QD-OLED screen delivers exceptional contrast, deep blacks, unlimited viewing angles, and vivid colors. The curved design provides an immersive experience, allowing you to enjoy the best of both worlds in one cutting-edge display. This innovative monitor represents the ultimate fusion of visual performance and immersive design.",
-          weight: 400,
-          status: ProductStatus.PUBLISHED,
-          images: [
-            {
-              url: "https://medusa-public-images.s3.eu-west-1.amazonaws.com/screen-front.png",
-            },
-            {
-              url: "https://medusa-public-images.s3.eu-west-1.amazonaws.com/screen-side.png",
-            },
-            {
-              url: "https://medusa-public-images.s3.eu-west-1.amazonaws.com/screen-top.png",
-            },
-            {
-              url: "https://medusa-public-images.s3.eu-west-1.amazonaws.com/screen-back.png",
-            },
-          ],
-          options: [
-            {
-              title: "Color",
-              values: ["White", "Black"],
-            },
-          ],
-          variants: [
-            {
-              title: "ACME Monitor 4k White",
-              sku: "ACME-MONITOR-WHITE",
-              options: {
-                Color: "White",
-              },
-              manage_inventory: false,
-              prices: [
-                {
-                  amount: 599,
-                  currency_code: "eur",
-                },
-                {
-                  amount: 599,
-                  currency_code: "usd",
-                },
-              ],
-            },
-            {
-              title: "ACME Monitor 4k White",
-              sku: "ACME-MONITOR-BLACK",
-              options: {
-                Color: "Black",
-              },
-              manage_inventory: false,
-              prices: [
-                {
-                  amount: 599,
-                  currency_code: "eur",
-                },
-                {
-                  amount: 599,
-                  currency_code: "usd",
-                },
-              ],
-            },
-          ],
-          sales_channels: [
-            {
-              id: defaultSalesChannel[0].id,
-            },
-          ],
-        },
-      ],
-    },
-  });
-
-  await createProductsWorkflow(container).run({
-    input: {
-      products: [
-        {
-          title: "Hi-Fi Gaming Headset | Pro-Grade DAC | Hi-Res Certified",
-          collection_id: collection.id,
-          category_ids: [
-            categoryResult.find((cat) => cat.name === "Accessories")?.id!,
-          ],
-          description: `Experience studio-quality audio with this advanced acoustic system, which pairs premium hardware with high-fidelity sound and innovative audio software for an immersive listening experience. The integrated digital-to-analog converter (DAC) enhances the audio setup with high-resolution certification and a built-in amplifier, delivering exceptional sound clarity and depth. This comprehensive audio solution brings professional-grade sound to your personal environment, whether for gaming, music production, or general entertainment.`,
-          weight: 400,
-          status: ProductStatus.PUBLISHED,
-          images: [
-            {
-              url: "https://medusa-public-images.s3.eu-west-1.amazonaws.com/headphone-front.png",
-            },
-            {
-              url: "https://medusa-public-images.s3.eu-west-1.amazonaws.com/headphone-side.png",
-            },
-            {
-              url: "https://medusa-public-images.s3.eu-west-1.amazonaws.com/headphone-top.png",
-            },
-          ],
-          options: [
-            {
-              title: "Color",
-              values: ["Black", "White"],
-            },
-          ],
-          variants: [
-            {
-              title: "Headphone Black",
-              sku: "HEADPHONE-BLACK",
-              options: {
-                Color: "Black",
-              },
-              manage_inventory: false,
-              prices: [
-                {
-                  amount: 149,
-                  currency_code: "eur",
-                },
-                {
-                  amount: 149,
-                  currency_code: "usd",
-                },
-              ],
-            },
-            {
-              title: "Headphone White",
-              sku: "HEADPHONE-WHITE",
-              options: {
-                Color: "White",
-              },
-              manage_inventory: false,
-              prices: [
-                {
-                  amount: 149,
-                  currency_code: "eur",
-                },
-                {
-                  amount: 149,
-                  currency_code: "usd",
-                },
-              ],
-            },
-          ],
-          sales_channels: [
-            {
-              id: defaultSalesChannel[0].id,
-            },
-          ],
-        },
-      ],
-    },
-  });
-
-  await createProductsWorkflow(container).run({
-    input: {
-      products: [
-        {
-          title: "Wireless Keyboard | Touch ID | Numeric Keypad",
-          category_ids: [
-            categoryResult.find((cat) => cat.name === "Accessories")?.id!,
-          ],
-          description: `This wireless keyboard offers a comfortable typing experience with a numeric keypad and Touch ID. It features navigation buttons, full-sized arrow keys, and is ideal for spreadsheets and gaming. The rechargeable battery lasts about a month. It pairs automatically with compatible computers and includes a USB-C to Lightning cable for charging and pairing.`,
-          weight: 400,
-          status: ProductStatus.PUBLISHED,
-          images: [
-            {
-              url: "https://medusa-public-images.s3.eu-west-1.amazonaws.com/keyboard-front.png",
-            },
-            {
-              url: "https://medusa-public-images.s3.eu-west-1.amazonaws.com/keyboard-side.png",
-            },
-          ],
-          options: [
-            {
-              title: "Color",
-              values: ["Black", "White"],
-            },
-          ],
-          variants: [
-            {
-              title: "Keyboard Black",
-              sku: "KEYBOARD-BLACK",
-              options: {
-                Color: "Black",
-              },
-              manage_inventory: false,
-              prices: [
-                {
-                  amount: 99,
-                  currency_code: "eur",
-                },
-                {
-                  amount: 99,
-                  currency_code: "usd",
-                },
-              ],
-            },
-            {
-              title: "Keyboard White",
-              sku: "KEYBOARD-WHITE",
-              options: {
-                Color: "White",
-              },
-              manage_inventory: false,
-              prices: [
-                {
-                  amount: 99,
-                  currency_code: "eur",
-                },
-                {
-                  amount: 99,
-                  currency_code: "usd",
-                },
-              ],
-            },
-          ],
-          sales_channels: [
-            {
-              id: defaultSalesChannel[0].id,
-            },
-          ],
-        },
-      ],
-    },
-  });
-
-  await createProductsWorkflow(container).run({
-    input: {
-      products: [
-        {
-          title: "Wireless Rechargeable Mouse | Multi-Touch Surface",
-          category_ids: [
-            categoryResult.find((cat) => cat.name === "Accessories")?.id!,
-          ],
-          description: `This wireless keyboard offers a comfortable typing experience with a numeric keypad and Touch ID. It features navigation buttons, full-sized arrow keys, and is ideal for spreadsheets and gaming. The rechargeable battery lasts about a month. It pairs automatically with compatible computers and includes a USB-C to Lightning cable for charging and pairing.`,
-          weight: 400,
-          status: ProductStatus.PUBLISHED,
-          images: [
-            {
-              url: "https://medusa-public-images.s3.eu-west-1.amazonaws.com/mouse-top.png",
-            },
-            {
-              url: "https://medusa-public-images.s3.eu-west-1.amazonaws.com/mouse-front.png",
-            },
-          ],
-          options: [
-            {
-              title: "Color",
-              values: ["Black", "White"],
-            },
-          ],
-          variants: [
-            {
-              title: "Mouse Black",
-              sku: "MOUSE-BLACK",
-              options: {
-                Color: "Black",
-              },
-              manage_inventory: false,
-              prices: [
-                {
-                  amount: 79,
-                  currency_code: "eur",
-                },
-                {
-                  amount: 79,
-                  currency_code: "usd",
-                },
-              ],
-            },
-            {
-              title: "Mouse White",
-              sku: "MOUSE-WHITE",
-              options: {
-                Color: "White",
-              },
-              manage_inventory: false,
-              prices: [
-                {
-                  amount: 79,
-                  currency_code: "eur",
-                },
-                {
-                  amount: 79,
-                  currency_code: "usd",
-                },
-              ],
-            },
-          ],
-          sales_channels: [
-            {
-              id: defaultSalesChannel[0].id,
-            },
-          ],
-        },
-      ],
-    },
-  });
-
-  await createProductsWorkflow(container).run({
-    input: {
-      products: [
-        {
-          title: "Conference Speaker | High-Performance | Budget-Friendly",
-          category_ids: [
-            categoryResult.find((cat) => cat.name === "Accessories")?.id!,
-          ],
-          description: `This compact, powerful conference speaker offers exceptional, high-performance features at a surprisingly affordable price. Packed with advanced productivity-enhancing technology, it delivers premium functionality without the premium price tag. Experience better meetings and improved communication, regardless of where your team members are calling from.`,
-          weight: 400,
-          status: ProductStatus.PUBLISHED,
-          images: [
-            {
-              url: "https://medusa-public-images.s3.eu-west-1.amazonaws.com/speaker-top.png",
-            },
-            {
-              url: "https://medusa-public-images.s3.eu-west-1.amazonaws.com/speaker-front.png",
-            },
-          ],
-          options: [
-            {
-              title: "Color",
-              values: ["Black", "White"],
-            },
-          ],
-          variants: [
-            {
-              title: "Speaker Black",
-              sku: "SPEAKER-BLACK",
-              options: {
-                Color: "Black",
-              },
-              manage_inventory: false,
-              prices: [
-                {
-                  amount: 79,
-                  currency_code: "eur",
-                },
-                {
-                  amount: 79,
-                  currency_code: "usd",
-                },
-              ],
-            },
-            {
-              title: "Speaker White",
-              sku: "SPEAKER-WHITE",
-              options: {
-                Color: "White",
-              },
-              manage_inventory: false,
-              prices: [
-                {
-                  amount: 55,
-                  currency_code: "eur",
-                },
-                {
-                  amount: 55,
-                  currency_code: "usd",
-                },
-              ],
-            },
-          ],
-          sales_channels: [
-            {
-              id: defaultSalesChannel[0].id,
-            },
-          ],
-        },
-      ],
+        return locations
+          .map((location, index) => ({
+            inventory_item_id: item.id,
+            location_id: location.id,
+            stocked_quantity: product.stock[index],
+          }))
+          .filter((level) => level.stocked_quantity > 0);
+      }),
     },
   });
 

@@ -35,7 +35,7 @@ const ShippingDetails = ({ order }: ShippingDetailsProps) => {
     !!order.shipping_address && (
       <>
         <Heading level="h3" className="mb-2">
-          Delivery Address
+          Dirección de retiro
         </Heading>
 
         {!!order.shipping_address && (

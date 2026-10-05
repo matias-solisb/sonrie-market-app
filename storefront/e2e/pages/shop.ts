@@ -71,68 +71,15 @@ export class CheckoutPage {
     constructor(readonly page: Page) { }
 
     get placeOrder() { return this.page.getByTestId("submit-order-button") }
-
-    /** Paso actual del checkout según la URL (?step=...). */
-    currentStep(): string | null {
-        return new URL(this.page.url()).searchParams.get("step")
-    }
+    get orderError() { return this.page.getByTestId("submit-order-error") }
+    get pickupSiteName() { return this.page.getByTestId("pickup-site-name") }
 
     /**
-     * Recorre los pasos del checkout guiándose por ?step= hasta que el botón
-     * de pedido quede habilitado: dirección → facturación → entrega → contacto → pago.
-     * Depende de que en dev existan shipping options y un medio de pago
-     * configurados para la región.
+     * El checkout es de una sola página: dirección, retiro, contacto y pago
+     * ("Cargo beneficio") ya vienen resueltos desde el carrito. Solo espera a
+     * que el botón "Confirmar pedido" esté habilitado.
      */
     async completeSteps() {
-        const p = this.page
-
-        for (let i = 0; i < 8; i++) {
-            if (await this.placeOrder.isEnabled().catch(() => false)) break
-
-            const step = this.currentStep()
-            switch (step) {
-                // Hoy SIEMPRE se abre este paso: ver bug en Summary.handleConfirm
-                // (checkoutPath se calcula antes de guardar la dirección del site).
-                // La dirección del site no trae teléfono ni código postal, que el
-                // formulario exige: se completan con valores de prueba.
-                case "shipping-address": {
-                    const required: [string, string][] = [
-                        ["shipping-phone-input", "+56900000000"],
-                        ["shipping-postal-code-input", "7630000"],
-                    ]
-                    for (const [id, value] of required) {
-                        const input = p.getByTestId(id)
-                        if (!(await input.inputValue())) await input.fill(value)
-                    }
-                    await p.getByTestId("submit-address-button").first().click()
-                    break
-                }
-                case "billing-address":
-                case "contact-details":
-                    await p.getByTestId("submit-address-button").first().click()
-                    break
-                case "delivery":
-                    await p.getByTestId("delivery-option-radio").first().click()
-                    await p.getByTestId("submit-delivery-option-button").click()
-                    break
-                case "payment": {
-                    const option = p.getByRole("radio").last()
-                    if (await option.isVisible().catch(() => false)) await option.click()
-                    await p.getByTestId("submit-payment-button").click()
-                    break
-                }
-                default:
-                    // Incluye "contact-information": getCheckoutStep lo devuelve, pero
-                    // el componente de contacto solo se abre con "contact-details".
-                    throw new Error(`Paso de checkout sin formulario que completar: ${step}`)
-            }
-
-            // Espera a que el checkout avance al siguiente paso (o habilite el botón).
-            await expect
-                .poll(async () => this.currentStep() !== step || (await this.placeOrder.isEnabled().catch(() => false)), { timeout: 30_000 })
-                .toBe(true)
-        }
-
         await expect(this.placeOrder).toBeEnabled({ timeout: 30_000 })
     }
 }

@@ -59,7 +59,9 @@ export const GET = async (
       })
     : { data: [] as { id: string; display_id: number }[] };
 
-  const displayIds = new Map(orders.map((o) => [o.id, o.display_id]));
+  const displayIds = new Map<string, number>(
+    orders.map((o: any) => [o.id, o.display_id] as [string, number])
+  );
 
   res.json({
     benefit_budget: { ...balance, campaign_nombre: campaign.nombre },

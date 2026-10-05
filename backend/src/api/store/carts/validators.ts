@@ -17,3 +17,10 @@ export const StoreAddLineItemsBulk = z
     ),
   })
   .strict();
+
+export type StoreSetCartPickupSiteType = z.infer<typeof StoreSetCartPickupSite>;
+export const StoreSetCartPickupSite = z
+  .object({
+    stock_location_id: z.string().min(1),
+  })
+  .strict();

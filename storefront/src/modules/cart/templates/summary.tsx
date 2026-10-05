@@ -4,9 +4,8 @@ import { useState } from "react"
 import { useParams, useRouter } from "next/navigation"
 
 import { useCart } from "@/lib/context/cart-context"
-import { getCheckoutStep } from "@/lib/util/get-checkout-step"
 import { convertToLocale } from "@/lib/util/money"
-import { updateCart } from "@/lib/data/cart"
+import { setCartPickupSite } from "@/lib/data/cart"
 import { StoreStockLocation } from "@/lib/data/stock-locations"
 import CartToCsvButton from "@/modules/cart/components/cart-to-csv-button"
 import CartTotals from "@/modules/cart/components/cart-totals"
@@ -38,11 +37,6 @@ const Summary = ({
 
   if (!cart) return null
 
-  const checkoutStep = getCheckoutStep(cart)
-  const checkoutPath = checkoutStep
-    ? `/checkout?step=${checkoutStep}`
-    : "/checkout"
-
   const isPendingApproval = cart?.approvals?.some(
     (approval) => approval?.status === ApprovalStatusType.PENDING
   )
@@ -50,63 +44,52 @@ const Summary = ({
   const isCartEmpty = !cart?.items?.length
   const isCheckoutDisabled = spendLimitExceeded || isCartEmpty
 
-  // Al confirmar el pedido, si hay un site de retiro elegido en
-  // "Seleccione las opciones de entrega", guardamos su dirección
-  // (stock_location_address.address_1/city, etc.) como shipping_address
-  // y billing_address del carrito ANTES de navegar al checkout — igual a
-  // lo que hace el toggle "same as billing" en BillingAddress. Con esto:
-  //   1. getCheckoutStep() ya no pide la dirección a mano, salta directo
-  //      a delivery/pago.
-  //   2. Al completar el carrito (placeOrder → sdk.store.cart.complete),
-  //      Medusa copia shipping_address/billing_address al pedido, así que
-  //      el order queda con la dirección del site sin código adicional.
-  // El stock_location_id también queda en cart.metadata, por si otros
-  // módulos (pickup-scheduling, sap-orders, etc.) necesitan saber de qué
-  // site salió el pedido.
+  // Al confirmar el pedido se elige el site de retiro en el backend
+  // (setCartPickupSite → POST /store/carts/:id/pickup-site): el carrito pasa
+  // al canal de venta del site, queda con su dirección, el correo del
+  // colaborador y la opción "Retiro en {site}". Si algún producto no tiene
+  // stock suficiente en ese site, se avisa y no se avanza al checkout.
+  //
   const handleConfirm = async () => {
     if (!customer) {
       router.push(`/${countryCode}/account`)
       return
     }
 
-    if (isCheckoutDisabled) {
+    if (isCheckoutDisabled || isConfirming) {
+      return
+    }
+
+    if (!selectedStockLocation) {
+      toast.error("Elige un site de retiro para continuar.")
       return
     }
 
     setIsConfirming(true)
 
     try {
-      if (selectedStockLocation?.address) {
-        const address = {
-          first_name: customer.first_name || selectedStockLocation.name,
-          last_name: customer.last_name || "-",
-          company: selectedStockLocation.name,
-          address_1: selectedStockLocation.address.address_1 || "",
-          address_2: selectedStockLocation.address.address_2 || "",
-          city: selectedStockLocation.address.city || "",
-          province: selectedStockLocation.address.province || "",
-          postal_code: selectedStockLocation.address.postal_code || "",
-          country_code: (
-            selectedStockLocation.address.country_code || "cl"
-          ).toLowerCase(),
-        }
+      const { unavailable_items } = await setCartPickupSite(
+        selectedStockLocation.id
+      )
 
-        await updateCart({
-          shipping_address: address,
-          billing_address: address,
-          metadata: {
-            ...(cart.metadata ?? {}),
-            stock_location_id: selectedStockLocation.id,
-          },
-        })
+      if (unavailable_items.length) {
+        const detalle = unavailable_items
+          .map((i) => `${i.title} (quedan ${i.available})`)
+          .join(", ")
+
+        toast.error(
+          `No hay stock suficiente en ${selectedStockLocation.name} para: ${detalle}. Ajusta las cantidades o elige otro site.`
+        )
+        return
       }
 
-      router.push(`/${countryCode}${checkoutPath}`)
+      // El checkout es una sola página: ya no hay ?step=.
+      router.push(`/${countryCode}/checkout`)
     } catch (e) {
       toast.error(
         "No se pudo guardar el site de retiro elegido. Intenta nuevamente."
       )
-      console.error("Error al guardar stock_location en cart:", e)
+      console.error("Error al elegir el site de retiro:", e)
     } finally {
       setIsConfirming(false)
     }
@@ -115,7 +98,7 @@ const Summary = ({
   return (
     <div className="flex flex-col gap-y-4">
       <Container className="flex flex-col gap-y-3">
-        <CartTotals />
+        <CartTotals benefitBudget={customer?.benefit_budget ?? null} />
       </Container>
 
       {/* <PromotionCode cart={cart} /> */}

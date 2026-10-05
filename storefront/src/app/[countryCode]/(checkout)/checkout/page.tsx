@@ -1,38 +1,56 @@
 import { retrieveCart } from "@/lib/data/cart"
 import { retrieveCustomer } from "@/lib/data/customer"
-import Wrapper from "@/modules/checkout/components/payment-wrapper"
-import CheckoutForm from "@/modules/checkout/templates/checkout-form"
-import CheckoutSummary from "@/modules/checkout/templates/checkout-summary"
-import { B2BCart } from "@/types/global"
+import { listStockLocations } from "@/lib/data/stock-locations"
+import PickupCheckout from "@/modules/checkout/templates/pickup-checkout"
 import { Metadata } from "next"
-import { notFound } from "next/navigation"
+import { redirect } from "next/navigation"
 
 export const metadata: Metadata = {
-  title: "Checkout",
+  title: "Confirmar pedido",
 }
 
-export default async function Checkout({
-  searchParams,
-}: {
-  searchParams?: { [key: string]: string | string[] | undefined }
-}) {
-  const cartId = searchParams?.cartId as string
-  const cart = (await retrieveCart(cartId)) as B2BCart
+type Props = {
+  params: Promise<{ countryCode: string }>
+}
 
-  if (!cart) {
-    return notFound()
+/*
+
+Checkout de una sola página (ver PickupCheckout).
+
+Se entra solo con el carrito listo; si no, se vuelve al carrito:
+- sin carrito o sin productos;
+- carrito de otro colaborador (ya no se acepta ?cartId=: el checkout solo
+  trabaja con el carrito de la sesión);
+- sin site de retiro confirmado (`metadata.stock_location_id` + método de
+  retiro), que se elige con "Confirmar pedido" en el carrito.
+
+Sin sesión, el middleware ya redirige al login.
+
+*/
+export default async function Checkout(props: Props) {
+  const { countryCode } = await props.params
+  const cartPath = `/${countryCode}/cart`
+
+  const [cart, customer, sites] = await Promise.all([
+    retrieveCart(),
+    retrieveCustomer(),
+    listStockLocations(),
+  ])
+
+  if (!customer) {
+    redirect(`/${countryCode}/account?redirect_to=${encodeURIComponent(`/${countryCode}/checkout`)}`)
   }
 
-  const customer = await retrieveCustomer()
+  if (!cart || !cart.items?.length || cart.customer_id !== customer.id) {
+    redirect(cartPath)
+  }
 
-  return (
-    <Wrapper cart={cart}>
-      <div className="grid grid-cols-1 small:grid-cols-[1fr_416px] content-container gap-2 py-24 h-full">
-        <CheckoutForm cart={cart} customer={customer} />
-        <div className="relative">
-          <CheckoutSummary cart={cart} />
-        </div>
-      </div>
-    </Wrapper>
-  )
+  const siteId = cart.metadata?.stock_location_id as string | undefined
+  const site = sites.find((s) => s.id === siteId)
+
+  if (!site || !cart.shipping_methods?.length) {
+    redirect(cartPath)
+  }
+
+  return <PickupCheckout cart={cart} customer={customer} site={site} />
 }

@@ -27,6 +27,16 @@ module.exports = {
         sans: ["var(--font-geist-sans)"],
       },
       keyframes: {
+        // Confirmación de pedido: el círculo aparece y el check se dibuja.
+        "pop-in": {
+          "0%": { transform: "scale(0.6)", opacity: 0 },
+          "70%": { transform: "scale(1.06)", opacity: 1 },
+          "100%": { transform: "scale(1)", opacity: 1 },
+        },
+        "draw-check": {
+          from: { strokeDashoffset: 48 },
+          to: { strokeDashoffset: 0 },
+        },
         "accordion-open": {
           from: { height: 0 },
           to: { height: "var(--radix-accordion-content-height)" },
@@ -37,6 +47,8 @@ module.exports = {
         },
       },
       animation: {
+        "pop-in": "pop-in 0.45s ease-out both",
+        "draw-check": "draw-check 0.45s ease-out 0.3s both",
         "accordion-open": "accordion-open 0.3s ease-out",
         "accordion-close": "accordion-close 0.3s ease-out",
       },

@@ -28,14 +28,24 @@ const CartTemplate = ({
 
   // Site de retiro elegido en "Seleccione las opciones de entrega". Vive
   // acá (no en cart-context) porque solo se usa en esta página: al hacer
-  // clic en "Confirmar pedido", Summary toma el location seleccionado y
-  // guarda su dirección en el carrito antes de entrar al checkout. Arranca
-  // en el primer site de la lista para que siempre haya un valor
-  // seleccionado (mismo comportamiento que el <select> de una sola opción
-  // que reemplaza).
+  // clic en "Confirmar pedido", Summary lo envía al backend
+  // (setCartPickupSite) antes de entrar al checkout.
+  //
+  // Arranca en el site que el carrito ya tiene guardado
+  // (`metadata.stock_location_id`, si el colaborador volvió desde el
+  // checkout) y, si no hay, en el primero de la lista. Antes arrancaba
+  // siempre en el primero: al volver al carrito y confirmar de nuevo sin
+  // mirar, el pedido salía para otro site.
+  const savedStockLocationId = cart?.metadata?.stock_location_id as
+    | string
+    | undefined
   const [selectedStockLocationId, setSelectedStockLocationId] = useState<
     string | null
-  >(stockLocations[0]?.id ?? null)
+  >(
+    stockLocations.some((location) => location.id === savedStockLocationId)
+      ? savedStockLocationId!
+      : stockLocations[0]?.id ?? null
+  )
 
   const selectedStockLocation =
     stockLocations.find(

@@ -83,7 +83,7 @@ test("cambiar de site actualiza la selección", async ({ page }) => {
     expect(second).not.toBe(first)
 })
 
-test.fixme("el checkout usa la dirección del site elegido, no la del primero", async ({ page }) => {
+test("el checkout usa la dirección del site elegido, no la del primero", async ({ page }) => {
     const cart = await cartWithOneItem(page)
     const options = await openSites(page)
     const total = await options.count()
@@ -104,12 +104,8 @@ test.fixme("el checkout usa la dirección del site elegido, no la del primero", 
     }
 })
 
-// BUG probable: el site elegido vive solo en el estado de la página
-// (useState(stockLocations[0])). Si el colaborador elige otro site, confirma,
-// y vuelve al carrito, el selector regresa al primero de la lista aunque
-// cart.metadata.stock_location_id guarde el elegido. Si vuelve a confirmar sin
-// mirar, el pedido sale para el site equivocado. Cuando se corrija, este test
-// empieza a pasar y Playwright avisa que hay que quitar el test.fail().
+// El selector arranca en el site guardado en cart.metadata.stock_location_id
+// (antes volvía al primero de la lista y se podía confirmar el site equivocado).
 test("al volver al carrito, el selector conserva el site elegido", async ({ page }) => {
     const cart = await cartWithOneItem(page)
     const options = await openSites(page)
@@ -117,7 +113,6 @@ test("al volver al carrito, el selector conserva el site elegido", async ({ page
     await page.keyboard.press("Escape")
     test.skip(total < 2, "Se necesitan al menos 2 sites (Stock Locations) en dev")
 
-    test.fail()
     const chosen = await chooseSite(page, 1)
     await cart.checkoutButton.click()
     await expect(page).toHaveURL(/\/cl\/checkout/, { timeout: 30_000 })

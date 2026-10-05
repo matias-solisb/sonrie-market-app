@@ -118,7 +118,13 @@ const CartDropdown = ({
         minimumFractionDigits: 0,
       })
     : "$0"
-  const amountMissingForMinimum = Math.max(20000 - subtotal, 0)
+  // Monto de referencia del aviso: el crédito (beneficio) disponible del
+  // colaborador este mes, en vez de un valor fijo. Sin saldo cargado (sin
+  // sesión o sin campaña activa) no se muestra el aviso.
+  const creditAmount = benefitBudget?.disponible ?? 0
+  const amountMissingForMinimum = benefitBudget
+    ? Math.max(creditAmount - subtotal, 0)
+    : 0
   const itemRef = useRef<number>(totalItems || 0)
   const { countryCode } = useParams() as { countryCode: string }
 
@@ -373,7 +379,7 @@ const CartDropdown = ({
                       para el monto mínimo de{" "}
                       <span className="font-bold">
                         {convertToLocale({
-                          amount: 20000,
+                          amount: creditAmount,
                           currency_code: currencyCode,
                           maximumFractionDigits: 0,
                           minimumFractionDigits: 0,

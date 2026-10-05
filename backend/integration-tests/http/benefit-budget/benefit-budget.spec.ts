@@ -9,6 +9,10 @@ import {
   createAdminUser,
   createStoreUser,
 } from "../../utils/admin";
+import {
+  createPickupSite,
+  ensureDefaultShippingProfile,
+} from "../../utils/pickup";
 import { salesChannelSeeder } from "../../utils/seeder";
 import {
   generatePublishableKey,
@@ -45,6 +49,7 @@ medusaIntegrationTestRunner({
     let product: any;
     let salesChannel: any;
     let service: BenefitBudgetModuleService;
+    let site: { id: string };
 
     const createCartWith = async (amountQuantity: number) => {
       const cart = (
@@ -61,6 +66,13 @@ medusaIntegrationTestRunner({
           storeHeaders
         )
       ).data.cart;
+
+      // Todo pedido necesita site de retiro (validate-cart-completion).
+      await api.post(
+        `/store/carts/${cart.id}/pickup-site`,
+        { stock_location_id: site.id },
+        storeHeaders
+      );
 
       const collection = (
         await api.post(
@@ -109,6 +121,11 @@ medusaIntegrationTestRunner({
       ).data.region;
 
       salesChannel = await salesChannelSeeder({ api, adminHeaders, data: {} });
+      const profile = await ensureDefaultShippingProfile(container);
+      site = await createPickupSite(container, {
+        name: "Sala Test",
+        catalogSalesChannelId: salesChannel.id,
+      });
 
       product = (
         await api.post(
@@ -116,6 +133,7 @@ medusaIntegrationTestRunner({
           {
             title: "Leche",
             status: "published",
+            shipping_profile_id: profile.id,
             options: [{ title: "formato", values: ["1L"] }],
             sales_channels: [{ id: salesChannel.id }],
             variants: [
