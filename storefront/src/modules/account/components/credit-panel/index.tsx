@@ -1,18 +1,17 @@
-import { getOrderTotalInSpendWindow, getSpendWindow } from "@/lib/util/check-spending-limit"
 import { convertToLocale } from "@/lib/util/money"
 import { B2BCustomer } from "@/types/global"
-import { HttpTypes } from "@medusajs/types"
 import { Badge, Container, Text } from "@medusajs/ui"
 
 /*
 
-Panel "Crédito" de "Mis datos". A diferencia de "Vendedores asignados" (ver
-más abajo), Total y Crédito restante SÍ tienen un dato real detrás:
-`employee.spending_limit` (modelo `Employee` del módulo `company`) es el
-mismo campo que ya usa `checkSpendingLimit` para bloquear el carrito
-(`lib/util/check-spending-limit.ts`) — acá se reutilizan las mismas
-`getSpendWindow`/`getOrderTotalInSpendWindow` para calcular cuánto queda
-disponible en el período vigente, en vez de duplicar esa lógica.
+Panel "Crédito" de "Mis datos". Muestra el saldo de beneficio del periodo
+vigente: `customer.benefit_budget`, que `retrieveCustomer`
+(`lib/data/customer.ts`) trae de `GET /store/benefit-budget` (módulo
+benefit-budget del backend). Total = tope del mes (incluye una excepción
+fijada por el Admin, si la hay); Crédito restante = disponible.
+
+Ya no se calcula acá sumando pedidos (`employee.spending_limit` del B2B
+Starter): el backend lleva el consumo y descuenta los pedidos anulados.
 
 Los separadores entre secciones siguen el mismo patrón que `ProfileCard`
 (`DIVIDER_CLASS_STANDALONE` ahí): NO son un `border-b` en el div de la
@@ -25,25 +24,9 @@ que en "Mis datos".
 const DIVIDER_CLASS = "h-px bg-neutral-200 ml-6 mr-10"
 
 const CreditPanel = ({ customer }: { customer: B2BCustomer }) => {
-  const employee = customer.employee
-  const spendingLimit = employee?.spending_limit ?? 0
-  const hasCreditLine = Boolean(employee) && spendingLimit > 0
-
-  const currencyCode =
-    employee?.company?.currency_code ||
-    customer.orders?.[0]?.currency_code ||
-    "clp"
-
-  let remaining = spendingLimit
-
-  if (hasCreditLine && employee?.company) {
-    const spendWindow = getSpendWindow(employee.company)
-    const spent = getOrderTotalInSpendWindow(
-      (customer.orders as HttpTypes.StoreOrder[]) || [],
-      spendWindow
-    )
-    remaining = Math.max(spendingLimit - spent, 0)
-  }
+  const budget = customer.benefit_budget ?? null
+  const hasCreditLine = Boolean(budget)
+  const currencyCode = "clp"
 
   return (
     <div className="h-fit">
@@ -88,7 +71,7 @@ const CreditPanel = ({ customer }: { customer: B2BCustomer }) => {
             <Text size="large" className="font-medium text-neutral-950">
               {hasCreditLine
                 ? convertToLocale({
-                    amount: spendingLimit,
+                    amount: budget!.tope,
                     currency_code: currencyCode,
                   })
                 : "—"}
@@ -101,7 +84,7 @@ const CreditPanel = ({ customer }: { customer: B2BCustomer }) => {
             <Text size="large" className="font-medium text-neutral-950">
               {hasCreditLine
                 ? convertToLocale({
-                    amount: remaining,
+                    amount: budget!.disponible,
                     currency_code: currencyCode,
                   })
                 : "—"}

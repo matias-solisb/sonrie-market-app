@@ -2,6 +2,7 @@ import { QUOTE_MODULE } from "./src/modules/quote";
 import { APPROVAL_MODULE } from "./src/modules/approval";
 import { BANNERS_MODULE } from "./src/modules/banners";
 import { COMPANY_MODULE } from "./src/modules/company";
+import { BENEFIT_BUDGET_MODULE } from "./src/modules/benefit-budget";
 import { loadEnv, defineConfig, Modules } from "@medusajs/framework/utils";
 
 loadEnv(process.env.NODE_ENV!, process.cwd());
@@ -30,6 +31,9 @@ module.exports = defineConfig({
     },
     [BANNERS_MODULE]: {
       resolve: "./modules/banners",
+    },
+    [BENEFIT_BUDGET_MODULE]: {
+      resolve: "./modules/benefit-budget",
     },
     // File Module — provider local por ahora (interino, mientras blob
     // storage no está configurado). Cuando esté listo, se cambia el

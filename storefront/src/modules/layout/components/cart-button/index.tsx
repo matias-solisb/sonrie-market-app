@@ -14,5 +14,11 @@ export default async function CartButton() {
     retrieveCustomer().catch(() => null),
   ])
 
-  return <CartDropdown cart={cart} isAuthenticated={Boolean(customer)} />
+  return (
+    <CartDropdown
+      cart={cart}
+      isAuthenticated={Boolean(customer)}
+      benefitBudget={customer?.benefit_budget ?? null}
+    />
+  )
 }

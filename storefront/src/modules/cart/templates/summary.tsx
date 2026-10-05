@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation"
 
 import { useCart } from "@/lib/context/cart-context"
 import { getCheckoutStep } from "@/lib/util/get-checkout-step"
+import { convertToLocale } from "@/lib/util/money"
 import { updateCart } from "@/lib/data/cart"
 import { StoreStockLocation } from "@/lib/data/stock-locations"
 import CartToCsvButton from "@/modules/cart/components/cart-to-csv-button"
@@ -127,9 +128,12 @@ const Summary = ({
         <div className="flex items-center gap-x-2 bg-neutral-100 p-3 rounded-md shadow-borders-base">
           <ExclamationCircle className="text-orange-500 w-fit overflow-visible" />
           <p className="text-neutral-950 text-xs">
-            This order exceeds your spending limit.
-            <br />
-            Please contact your manager for approval.
+            El pedido supera tu saldo de beneficio disponible (
+            {convertToLocale({
+              amount: customer?.benefit_budget?.disponible ?? 0,
+              currency_code: cart.currency_code,
+            })}
+            ). Quita productos para continuar.
           </p>
         </div>
       )}
@@ -147,7 +151,7 @@ const Summary = ({
       >
         {customer
           ? spendLimitExceeded
-            ? "Spending Limit Exceeded"
+            ? "Saldo insuficiente"
             : isConfirming
             ? "Guardando..."
             : "Confirmar pedido"

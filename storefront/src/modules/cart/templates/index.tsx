@@ -1,7 +1,7 @@
 "use client"
 
 import { useCart } from "@/lib/context/cart-context"
-import { checkSpendingLimit } from "@/lib/util/check-spending-limit"
+import { exceedsBenefitBudget } from "@/lib/util/check-benefit-budget"
 import { StoreStockLocation } from "@/lib/data/stock-locations"
 import ApprovalStatusBanner from "@/modules/cart/components/approval-status-banner"
 import DeliveryOptions from "@/modules/cart/components/delivery-options"
@@ -22,7 +22,7 @@ const CartTemplate = ({
   const { cart } = useCart()
 
   const spendLimitExceeded = useMemo(
-    () => checkSpendingLimit(cart, customer),
+    () => exceedsBenefitBudget(cart, customer),
     [cart, customer]
   )
 

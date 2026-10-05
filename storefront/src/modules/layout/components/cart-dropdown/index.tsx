@@ -16,6 +16,7 @@ import {
 import { convertToLocale } from "@/lib/util/money"
 import { deleteLineItem } from "@/lib/data/cart"
 import { B2BCart } from "@/types/global"
+import { StoreBenefitBudget } from "@/types/benefit-budget"
 import { Button, clx } from "@/modules/common/components/ui"
 import AddToCartStepper from "@/modules/products/components/product-preview/add-to-cart-stepper"
 import LineItemOptions from "@/modules/common/components/line-item-options"
@@ -83,8 +84,12 @@ const CartItemDeleteButton = ({
 const CartDropdown = ({
   cart: cartState,
   isAuthenticated = false,
+  benefitBudget = null,
 }: {
   cart?: B2BCart | null
+  // Saldo de beneficio del periodo (GET /store/benefit-budget); null sin
+  // sesión o sin campaña activa.
+  benefitBudget?: StoreBenefitBudget | null
   // Sin sesión, "Ir al carrito" lleva a login (/account) y, al entrar,
   // vuelve al carrito vía `redirect_to` (mismo parámetro que usa el
   // middleware y que lee el server action `login`).
@@ -401,14 +406,18 @@ const CartDropdown = ({
                   </Button>
                 </LocalizedClientLink>
 
-                {/* Placeholder estático hasta conectar el cupo real del
-                colaborador (customer.employee.spending_limit, ver
-                lib/util/check-spending-limit.ts) */}
-                <p className="text-center text-xs text-ui-fg-subtle">
-                  Recuerda que llevas disponible{" "}
-                  <span className="font-semibold">$50.000</span> en tu línea de
-                  crédito.
-                </p>
+                {benefitBudget && (
+                  <p className="text-center text-xs text-ui-fg-subtle">
+                    Recuerda que tienes disponible{" "}
+                    <span className="font-semibold">
+                      {convertToLocale({
+                        amount: benefitBudget.disponible,
+                        currency_code: currencyCode,
+                      })}
+                    </span>{" "}
+                    de tu beneficio este mes.
+                  </p>
+                )}
                 <br />
               </div>
             </div>

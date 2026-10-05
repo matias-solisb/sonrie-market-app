@@ -26,6 +26,8 @@ import {
   ProductStatus,
 } from "@medusajs/framework/utils";
 
+import { ensureBenefitCampaign } from "./seed-benefit-campaign";
+
 export default async function seedDemoData({ container }: ExecArgs) {
   const logger = container.resolve(ContainerRegistrationKeys.LOGGER);
   const link = container.resolve(ContainerRegistrationKeys.LINK);
@@ -969,4 +971,8 @@ export default async function seedDemoData({ container }: ExecArgs) {
   });
 
   logger.info("Finished seeding product data.");
+
+  logger.info("Seeding benefit campaign...");
+  await ensureBenefitCampaign(container);
+  logger.info("Finished seeding benefit campaign.");
 }

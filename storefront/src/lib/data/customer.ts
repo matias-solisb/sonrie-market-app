@@ -3,6 +3,7 @@
 import { sdk } from "@/lib/config"
 import medusaError from "@/lib/util/medusa-error"
 import { B2BCustomer } from "@/types/global"
+import { StoreBenefitBudget } from "@/types/benefit-budget"
 import { HttpTypes } from "@medusajs/types"
 import { track } from "@vercel/analytics/server"
 import { revalidateTag } from "next/cache"
@@ -32,19 +33,50 @@ export const retrieveCustomer = async (): Promise<B2BCustomer | null> => {
     ...(await getCacheOptions("customers")),
   }
 
-  return await sdk.client
-    .fetch<{ customer: B2BCustomer }>(`/store/customers/me`, {
-      method: "GET",
-      query: {
-        fields: "*employee, *orders",
-      },
-      headers,
-      next,
-      cache: "force-cache",
-    })
-    .then(({ customer }) => customer as B2BCustomer)
-    .catch(() => null)
+  // El saldo de beneficio va sin caché (no-store): cambia con cada pedido y
+  // también cuando el Admin anula uno o fija una excepción de tope, y esos
+  // cambios no pasan por este storefront para revalidar el tag.
+  const [customer, benefitBudget] = await Promise.all([
+    sdk.client
+      .fetch<{ customer: B2BCustomer }>(`/store/customers/me`, {
+        method: "GET",
+        query: {
+          fields: "*employee, *orders",
+        },
+        headers,
+        next,
+        cache: "force-cache",
+      })
+      .then(({ customer }) => customer as B2BCustomer)
+      .catch(() => null),
+    retrieveBenefitBudget(),
+  ])
+
+  if (!customer) return null
+
+  return { ...customer, benefit_budget: benefitBudget }
 }
+
+// Saldo de beneficio del colaborador logueado en el periodo vigente.
+// null si no hay sesión, no hay campaña activa o falla la consulta.
+export const retrieveBenefitBudget =
+  async (): Promise<StoreBenefitBudget | null> => {
+    const authHeaders = await getAuthHeaders()
+
+    if (!authHeaders) return null
+
+    return await sdk.client
+      .fetch<{ benefit_budget: StoreBenefitBudget | null }>(
+        `/store/benefit-budget`,
+        {
+          method: "GET",
+          headers: { ...authHeaders },
+          cache: "no-store",
+        }
+      )
+      .then(({ benefit_budget }) => benefit_budget)
+      .catch(() => null)
+  }
 
 export const updateCustomer = async (body: HttpTypes.StoreUpdateCustomer) => {
   const headers = {

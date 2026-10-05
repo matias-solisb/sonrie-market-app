@@ -1,5 +1,6 @@
 import { MiddlewareRoute } from "@medusajs/medusa";
 import { storeApprovalsMiddlewares } from "./approvals/middlewares";
+import { storeBenefitBudgetMiddlewares } from "./benefit-budget/middlewares";
 import { storeCartsMiddlewares } from "./carts/middlewares";
 import { storeCompaniesMiddlewares } from "./companies/middlewares";
 import { storeFreeShippingMiddlewares } from "./free-shipping/middlewares";
@@ -13,4 +14,5 @@ export const storeMiddlewares: MiddlewareRoute[] = [
   ...storeFreeShippingMiddlewares,
   ...storeApprovalsMiddlewares,
   ...storeOrdersMiddlewares,
+  ...storeBenefitBudgetMiddlewares,
 ];
