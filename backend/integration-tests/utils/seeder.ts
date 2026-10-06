@@ -25,6 +25,8 @@ export async function productSeeder({ api, adminHeaders, data }) {
       {
         title: `Test Product`,
         handle: `test-product`,
+        // Medusa 2.21 no deja agregar al carrito variantes de productos en borrador
+        status: "published",
         options: [
           { title: "size", values: ["large", "small"] },
           { title: "color", values: ["green"] },

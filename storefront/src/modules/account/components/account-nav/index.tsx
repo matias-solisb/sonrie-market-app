@@ -12,6 +12,9 @@ import { ArrowRightOnRectangle, BuildingStorefront, DocumentText } from "@medusa
 import { clx } from "@medusajs/ui"
 import { useParams, usePathname } from "next/navigation"
 
+// Cotizaciones del B2B Starter: apagadas en el backend salvo QUOTES_ENABLED=true.
+const QUOTES_ENABLED = process.env.NEXT_PUBLIC_QUOTES_ENABLED === "true"
+
 const AccountNav = ({
   customer,
   numPendingApprovals,
@@ -134,6 +137,8 @@ const AccountNav = ({
                     </LocalizedClientLink>
                   </li>
                 )}
+                {/* Cotizaciones desactivadas en el backend (quotes-disabled.ts) */}
+                {QUOTES_ENABLED && (
                 <li>
                   <LocalizedClientLink
                     href="/account/quotes"
@@ -147,6 +152,7 @@ const AccountNav = ({
                     <ChevronDown className="transform -rotate-90" />
                   </LocalizedClientLink>
                 </li>
+                )}
                 <li>
                   <button
                     type="button"
@@ -239,6 +245,7 @@ const AccountNav = ({
                 </AccountNavLink>
               </li>
             )}
+            {QUOTES_ENABLED && (
             <li>
               <AccountNavLink
                 href="/account/quotes"
@@ -248,6 +255,7 @@ const AccountNav = ({
                 Quotes
               </AccountNavLink>
             </li>
+            )}
             <li className="text-neutral-400 hover:text-neutral-950">
               <button
                 type="button"

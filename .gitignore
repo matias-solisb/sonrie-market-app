@@ -57,3 +57,6 @@ Thumbs.db
 
 /test-results/
 .env.e2e
+
+# Credenciales del Postgres local para los tests de integración
+.env.test

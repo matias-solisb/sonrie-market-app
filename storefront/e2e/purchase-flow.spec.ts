@@ -263,6 +263,29 @@ test.describe("confirmar pedido", () => {
         expect(await latestOrderNumber(page)).toBe(before + 1)
     })
 
+    // La regla del cupo (bloqueo al exceder, compras simultáneas) se prueba
+    // en el backend: integration-tests/http/benefit-budget/checkout-scenarios.spec.ts.
+    // Aquí solo se verifica lo que ve el colaborador.
+    test("el medio de pago muestra el saldo del mes y lo descuenta al comprar", async ({ page }) => {
+        const checkout = await goToCheckout(page)
+        await checkout.completeSteps()
+
+        const disponible = parseClp(await page.getByTestId("benefit-available").textContent())
+        const total = parseClp(await page.getByTestId("cart-total").first().textContent())
+        expect(total).toBeGreaterThan(0)
+        test.skip(disponible < total, "El usuario de prueba no tiene saldo para este pedido")
+
+        expect(parseClp(await page.getByTestId("benefit-after").textContent())).toBe(disponible - total)
+
+        await checkout.placeOrder.click()
+        await expect(page).toHaveURL(/\/cl\/order\/confirmed\//, { timeout: 30_000 })
+
+        await goToCheckout(page)
+        await expect
+            .poll(async () => parseClp(await page.getByTestId("benefit-available").textContent()), { timeout: 30_000 })
+            .toBe(disponible - total)
+    })
+
     test("volver atrás después de comprar no permite pagar de nuevo", async ({ page }) => {
         const checkout = await goToCheckout(page)
         await checkout.completeSteps()
@@ -280,8 +303,8 @@ test.describe("confirmar pedido", () => {
 // 5. Reglas del MVP aún no implementadas
 // ─────────────────────────────────────────────────────────────
 test.describe("reglas del MVP (pendientes)", () => {
-    test.fixme("cupo mensual: un pedido que supera los $50.000 se rechaza en el servidor", async () => { })
-    test.fixme("cupo mensual: dos pestañas comprando a la vez no superan el cupo", async () => { })
+    // Cupo mensual (pedido que supera el saldo, dos compras a la vez):
+    // cubierto en backend/integration-tests/http/benefit-budget/checkout-scenarios.spec.ts.
     test.fixme("cupo por día y site: una fecha llena deja de ofrecerse", async () => { })
     test.fixme("stock por site: la última unidad comprada a la vez solo la obtiene uno", async () => { })
 })

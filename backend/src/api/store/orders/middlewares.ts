@@ -1,10 +1,18 @@
 import {
+  AuthenticatedMedusaRequest,
   MedusaNextFunction,
   MedusaRequest,
   MedusaResponse,
 } from "@medusajs/framework";
-import { MedusaError } from "@medusajs/framework/utils";
-import { MiddlewareRoute } from "@medusajs/medusa";
+import {
+  ContainerRegistrationKeys,
+  MedusaError,
+} from "@medusajs/framework/utils";
+import { authenticate, MiddlewareRoute } from "@medusajs/medusa";
+import {
+  endOfSantiagoDay,
+  startOfSantiagoDay,
+} from "../../../utils/santiago-time";
 
 /*
 
@@ -32,8 +40,10 @@ Formato aceptado (el que manda el storefront, ver
 `storefront/src/app/[countryCode]/(main)/account/@dashboard/orders/page.tsx`):
   ?created_at[$gte]=YYYY-MM-DD&created_at[$lte]=YYYY-MM-DD
 
-Una fecha sola (sin hora) en `$lte` se toma hasta el final de ese día, para
-que "Fecha hasta" incluya los pedidos de ese mismo día.
+Una fecha sola (sin hora) es un día de calendario en hora de Santiago
+(src/utils/santiago-time.ts): `$gte` desde el inicio de ese día y `$lte`
+hasta su final, así "Fecha hasta" incluye los pedidos de ese mismo día y un
+pedido de las 22:30 en Chile no se corre al día siguiente por estar en UTC.
 
 */
 
@@ -54,7 +64,16 @@ const parseDate = (value: unknown, endOfDay: boolean): string => {
   }
 
   if (DATE_ONLY.test(value)) {
-    return endOfDay ? `${value}T23:59:59.999Z` : `${value}T00:00:00.000Z`;
+    try {
+      return (
+        endOfDay ? endOfSantiagoDay(value) : startOfSantiagoDay(value)
+      ).toISOString();
+    } catch {
+      throw new MedusaError(
+        MedusaError.Types.INVALID_DATA,
+        `Fecha inválida en el filtro created_at: ${value}`
+      );
+    }
   }
 
   return new Date(value).toISOString();
@@ -128,6 +147,53 @@ const applyCreatedAtFilter = (
   next();
 };
 
+/*
+
+Detalle de pedido (endpoint CORE `GET /store/orders/:id`): solo para su dueño.
+
+En el core de Medusa esa ruta no exige sesión (sirve para la confirmación de
+compras de invitados): basta el id del pedido para leer nombre, correo e
+ítems. En Sonríe Market todo pedido es de un colaborador logueado, así que se
+exige sesión y que el pedido sea suyo; si no, 404 (no se revela si existe).
+El storefront ya envía la sesión (lib/data/orders.ts → retrieveOrder).
+
+*/
+const ORDER_DETAIL_PATH = /^\/store\/orders\/[^/]+\/?$/;
+
+const ensureOrderOwner = async (
+  req: AuthenticatedMedusaRequest,
+  _res: MedusaResponse,
+  next: MedusaNextFunction
+) => {
+  if (!ORDER_DETAIL_PATH.test(req.originalUrl.split("?")[0])) {
+    return next();
+  }
+
+  try {
+    const query = req.scope.resolve(ContainerRegistrationKeys.QUERY);
+    const {
+      data: [order],
+    } = await query.graph({
+      entity: "order",
+      fields: ["id", "customer_id"],
+      filters: { id: req.params.id },
+    });
+
+    if (!order || order.customer_id !== req.auth_context?.actor_id) {
+      return next(
+        new MedusaError(
+          MedusaError.Types.NOT_FOUND,
+          `Order with id: ${req.params.id} was not found`
+        )
+      );
+    }
+
+    next();
+  } catch (e) {
+    next(e);
+  }
+};
+
 export const storeOrdersMiddlewares: MiddlewareRoute[] = [
   {
     matcher: "/store/orders",
@@ -137,5 +203,13 @@ export const storeOrdersMiddlewares: MiddlewareRoute[] = [
     method: ["GET"],
     matcher: "/store/orders",
     middlewares: [applyCreatedAtFilter],
+  },
+  {
+    method: ["GET"],
+    matcher: "/store/orders/:id",
+    middlewares: [
+      authenticate("customer", ["session", "bearer"]),
+      ensureOrderOwner,
+    ],
   },
 ];

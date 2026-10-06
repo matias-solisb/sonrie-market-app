@@ -1,4 +1,6 @@
 import { medusaIntegrationTestRunner } from "@medusajs/test-utils";
+import { quotesEnabled } from "../../../../src/api/middlewares/quotes-disabled";
+import { skippedSuite } from "../../../utils/skipped-suite";
 import {
   adminHeaders,
   createAdminUser,
@@ -17,7 +19,13 @@ import {
 
 jest.setTimeout(60 * 1000);
 
-medusaIntegrationTestRunner({
+// Cotizaciones desactivadas en Sonríe Market (src/api/middlewares/quotes-disabled.ts).
+// Para correr esta suite: QUOTES_ENABLED=true npm run test:integration:http
+const runner = quotesEnabled()
+  ? medusaIntegrationTestRunner
+  : skippedSuite("Cotizaciones desactivadas (QUOTES_ENABLED != true)");
+
+runner({
   inApp: true,
   env: {
     JWT_SECRET: "supersecret",
