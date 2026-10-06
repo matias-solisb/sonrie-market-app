@@ -1,10 +1,10 @@
 "use client"
 
 import {
-  addToCartBulk,
-  deleteLineItem,
+  tryAddToCartBulk,
+  tryDeleteLineItem,
   emptyCart,
-  updateLineItem,
+  tryUpdateLineItem,
 } from "@/lib/data/cart"
 import { addToCartEventBus } from "@/lib/data/cart-event-bus"
 import { ApprovalStatusType } from "@/types/approval/module"
@@ -82,7 +82,9 @@ export function CartProvider({
           (approval) => approval.status === ApprovalStatusType.PENDING
         )
       ) {
-        toast.error("Cart is locked for approval.")
+        toast.error(
+          "Tu carrito está esperando aprobación y no se puede modificar por ahora."
+        )
         return
       }
 
@@ -161,20 +163,18 @@ export function CartProvider({
 
         setIsUpdatingCart(true)
 
-        await addToCartBulk({
+        const { error } = await tryAddToCartBulk({
           lineItems: payload.lineItems.map((lineItem) => ({
             variant_id: lineItem.productVariant.id,
             quantity: lineItem.quantity,
           })),
           countryCode: countryCode as string,
-        }).catch((e) => {
-          if (e.message === "Cart is pending approval") {
-            toast.error("Cart is locked for approval.")
-          } else {
-            toast.error("Failed to add to cart")
-          }
-          setOptimisticCart(prevCart)
         })
+
+        if (error) {
+          toast.error(error)
+          setOptimisticCart(prevCart)
+        }
       })
     },
     [setOptimisticCart]
@@ -214,10 +214,12 @@ export function CartProvider({
 
     setIsUpdatingCart(true)
 
-    await deleteLineItem(lineItem).catch((e) => {
-      toast.error("Failed to delete item")
+    const { error } = await tryDeleteLineItem(lineItem)
+
+    if (error) {
+      toast.error(error)
       startTransition(() => setOptimisticCart(prevCart))
-    })
+    }
   }
 
   const handleUpdateCartQuantity = async (
@@ -272,13 +274,15 @@ export function CartProvider({
 
     if (!isOptimisticItemId(lineItem)) {
       setIsUpdatingCart(true)
-      await updateLineItem({
+      const { error } = await tryUpdateLineItem({
         lineId: lineItem,
         data: { quantity },
-      }).catch((e) => {
-        toast.error("Failed to update cart quantity")
-        startTransition(() => setOptimisticCart(prevCart))
       })
+
+      if (error) {
+        toast.error(error)
+        startTransition(() => setOptimisticCart(prevCart))
+      }
     }
   }
 
@@ -315,7 +319,7 @@ export function CartProvider({
     setIsUpdatingCart(true)
 
     await emptyCart().catch((e) => {
-      toast.error("Failed to empty cart")
+      toast.error("No se pudo vaciar el carrito. Intenta nuevamente.")
       startTransition(() => setOptimisticCart(prevCart))
     })
   }

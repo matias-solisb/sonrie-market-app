@@ -120,10 +120,13 @@ const CartDropdown = ({
     : "$0"
   // Monto de referencia del aviso: el crédito (beneficio) disponible del
   // colaborador este mes, en vez de un valor fijo. Sin saldo cargado (sin
-  // sesión o sin campaña activa) no se muestra el aviso.
+  // sesión o sin campaña activa) no se muestra el aviso. El saldo se
+  // descuenta con el total del carrito (IVA incluido), no con el subtotal
+  // neto, así que la resta se hace contra `total`.
   const creditAmount = benefitBudget?.disponible ?? 0
+  const cartTotal = cartState?.total ?? 0
   const amountMissingForMinimum = benefitBudget
-    ? Math.max(creditAmount - subtotal, 0)
+    ? Math.max(creditAmount - cartTotal, 0)
     : 0
   const itemRef = useRef<number>(totalItems || 0)
   const { countryCode } = useParams() as { countryCode: string }

@@ -68,9 +68,14 @@ const Summary = ({
     setIsConfirming(true)
 
     try {
-      const { unavailable_items } = await setCartPickupSite(
-        selectedStockLocation.id
-      )
+      const result = await setCartPickupSite(selectedStockLocation.id)
+
+      if (result.error !== undefined) {
+        toast.error(result.error)
+        return
+      }
+
+      const { unavailable_items } = result
 
       if (unavailable_items.length) {
         const detalle = unavailable_items
@@ -85,11 +90,12 @@ const Summary = ({
 
       // El checkout es una sola página: ya no hay ?step=.
       router.push(`/${countryCode}/checkout`)
-    } catch (e) {
+    } catch {
+      // Solo errores de red o de Next (la acción ya no lanza por errores
+      // del backend: los devuelve en `result.error`).
       toast.error(
         "No se pudo guardar el site de retiro elegido. Intenta nuevamente."
       )
-      console.error("Error al elegir el site de retiro:", e)
     } finally {
       setIsConfirming(false)
     }

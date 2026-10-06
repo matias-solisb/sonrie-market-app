@@ -1,12 +1,13 @@
 "use client"
 
 import {
-  addToCart,
-  deleteLineItem,
   retrieveCart,
-  updateLineItem,
+  tryAddToCart,
+  tryDeleteLineItem,
+  tryUpdateLineItem,
 } from "@/lib/data/cart"
 import { MinusMini, PlusMini } from "@medusajs/icons"
+import { toast } from "@medusajs/ui"
 import { useState, useTransition } from "react"
 
 type AddToCartStepperProps = {
@@ -45,19 +46,19 @@ const AddToCartStepper = ({
 
   const handleIncrement = () => {
     startTransition(async () => {
-      try {
-        if (!lineItemId) {
-          await addToCart({ variantId, quantity: 1, countryCode })
-        } else {
-          await updateLineItem({
+      const { error } = !lineItemId
+        ? await tryAddToCart({ variantId, quantity: 1, countryCode })
+        : await tryUpdateLineItem({
             lineId: lineItemId,
             data: { quantity: quantity + 1 },
           })
-        }
-        await syncFromCart()
-      } catch (error) {
-        console.error("No se pudo agregar el producto al carrito", error)
+
+      if (error) {
+        toast.error(error)
+        return
       }
+
+      await syncFromCart()
     })
   }
 
@@ -67,20 +68,24 @@ const AddToCartStepper = ({
     }
 
     startTransition(async () => {
-      try {
-        if (quantity <= 1) {
-          await deleteLineItem(lineItemId)
-          setLineItemId(undefined)
-          setQuantity(0)
-        } else {
-          await updateLineItem({
-            lineId: lineItemId,
-            data: { quantity: quantity - 1 },
-          })
-          await syncFromCart()
-        }
-      } catch (error) {
-        console.error("No se pudo actualizar el carrito", error)
+      const { error } =
+        quantity <= 1
+          ? await tryDeleteLineItem(lineItemId)
+          : await tryUpdateLineItem({
+              lineId: lineItemId,
+              data: { quantity: quantity - 1 },
+            })
+
+      if (error) {
+        toast.error(error)
+        return
+      }
+
+      if (quantity <= 1) {
+        setLineItemId(undefined)
+        setQuantity(0)
+      } else {
+        await syncFromCart()
       }
     })
   }

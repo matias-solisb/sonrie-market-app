@@ -2,6 +2,7 @@
 
 import { sdk } from "@/lib/config"
 import medusaError from "@/lib/util/medusa-error"
+import { userErrorMessage } from "@/lib/util/translate-medusa-error"
 import { StoreApprovalResponse } from "@/types/approval"
 import { HttpTypes } from "@medusajs/types"
 import { track } from "@vercel/analytics/server"
@@ -134,14 +135,14 @@ agrega la opción "Retiro en {site}". Devuelve el carrito actualizado y los
 ítems sin stock suficiente en ese site.
 
 */
-export async function setCartPickupSite(stockLocationId: string): Promise<{
-  cart: B2BCart
-  unavailable_items: UnavailableCartItem[]
-}> {
+export async function setCartPickupSite(stockLocationId: string): Promise<
+  | { cart: B2BCart; unavailable_items: UnavailableCartItem[]; error?: never }
+  | { error: string }
+> {
   const cartId = await getCartId()
 
   if (!cartId) {
-    throw new Error("No existing cart found when setting the pickup site")
+    return { error: "No encontramos tu carrito. Recarga la página e intenta de nuevo." }
   }
 
   const headers = {
@@ -162,7 +163,12 @@ export async function setCartPickupSite(stockLocationId: string): Promise<{
       revalidateTag(await getCacheTag("carts"))
       return res
     })
-    .catch(medusaError)
+    .catch((error) => ({
+      error: userErrorMessage(
+        error,
+        "No se pudo guardar el site de retiro elegido. Intenta nuevamente."
+      ),
+    }))
 }
 
 export async function addToCart({
@@ -237,7 +243,14 @@ export async function addToCartBulk({
       body: JSON.stringify({ line_items: lineItems }),
     }
   )
-    .then(async () => {
+    .then(async (res) => {
+      // fetch() no rechaza con 4xx/5xx: sin esto los errores (sin stock,
+      // carrito en aprobación...) pasaban en silencio.
+      if (!res.ok) {
+        const body = await res.json().catch(() => null)
+        throw new Error(body?.message || res.statusText)
+      }
+
       const fullfillmentCacheTag = await getCacheTag("fulfillment")
       revalidateTag(fullfillmentCacheTag)
       const cartCacheTag = await getCacheTag("carts")
@@ -301,6 +314,65 @@ export async function deleteLineItem(lineId: string) {
       revalidateTag(cartCacheTag)
     })
     .catch(medusaError)
+}
+
+/*
+
+Versiones "seguras" de las acciones del carrito para usar desde
+componentes cliente: en vez de lanzar devuelven `{ error }` con el mensaje
+en español. En producción Next.js oculta el mensaje de los errores
+lanzados por una server action, así que el colaborador vería un error
+genérico en vez de la causa real (por ejemplo, falta de stock).
+
+*/
+export type CartActionResult = { error?: string }
+
+async function toCartActionResult(
+  action: () => Promise<unknown>,
+  fallback: string
+): Promise<CartActionResult> {
+  try {
+    await action()
+    return {}
+  } catch (error) {
+    return { error: userErrorMessage(error, fallback) }
+  }
+}
+
+export async function tryAddToCart(
+  input: Parameters<typeof addToCart>[0]
+): Promise<CartActionResult> {
+  return toCartActionResult(
+    () => addToCart(input),
+    "No se pudo agregar el producto al carrito. Intenta nuevamente."
+  )
+}
+
+export async function tryAddToCartBulk(
+  input: Parameters<typeof addToCartBulk>[0]
+): Promise<CartActionResult> {
+  return toCartActionResult(
+    () => addToCartBulk(input),
+    "No se pudieron agregar los productos al carrito. Intenta nuevamente."
+  )
+}
+
+export async function tryUpdateLineItem(
+  input: Parameters<typeof updateLineItem>[0]
+): Promise<CartActionResult> {
+  return toCartActionResult(
+    () => updateLineItem(input),
+    "No se pudo actualizar la cantidad. Intenta nuevamente."
+  )
+}
+
+export async function tryDeleteLineItem(
+  lineId: string
+): Promise<CartActionResult> {
+  return toCartActionResult(
+    () => deleteLineItem(lineId),
+    "No se pudo quitar el producto del carrito. Intenta nuevamente."
+  )
 }
 
 export async function emptyCart() {
