@@ -27,8 +27,43 @@ export class StorePage {
         return this.products.filter({ has: this.page.locator(`a[href="${href}"]`) })
     }
 
+    /**
+     * Producto con botón "Agregar" de menor precio en la página, fijado por su
+     * link. Para los flujos de compra: el primero del catálogo puede costar más
+     * que el cupo mensual (p. ej. un pack de $56.000 con tope de $50.000) y el
+     * carrito queda bloqueado por "Saldo insuficiente". Si ninguna card
+     * muestra precio, cae en el primero.
+     */
+    async cheapestAddable(): Promise<Locator> {
+        const cards = this.products.filter({ has: this.page.getByTestId("add-to-cart-button") })
+        const count = await cards.count()
+        let cheapest: { href: string; price: number } | null = null
+
+        for (let i = 0; i < count; i++) {
+            const card = cards.nth(i)
+            // allTextContents no espera: una card sin precio no bloquea el test
+            const [priceText] = await card.getByTestId("price").allTextContents()
+            const price = parseClp(priceText ?? null)
+            const href = await card.getByRole("link").first().getAttribute("href")
+            if (price > 0 && href && (!cheapest || price < cheapest.price)) {
+                cheapest = { href, price }
+            }
+        }
+
+        if (!cheapest) return this.firstAddable()
+        return this.products.filter({ has: this.page.locator(`a[href="${cheapest.href}"]`) })
+    }
+
     async addFirstProduct(): Promise<string> {
-        const card = await this.firstAddable()
+        return this.addProduct(await this.firstAddable())
+    }
+
+    /** Agrega el producto más barato con stock (ver cheapestAddable). */
+    async addCheapestProduct(): Promise<string> {
+        return this.addProduct(await this.cheapestAddable())
+    }
+
+    private async addProduct(card: Locator): Promise<string> {
         const title = (await card.getByTestId("product-title").textContent())?.trim() ?? ""
         await card.getByTestId("add-to-cart-button").click()
         await expect(card.getByTestId("cart-quantity-value")).toHaveText("1", { timeout: 30_000 })

@@ -30,11 +30,15 @@ function trackServerActions(page: Page) {
     return calls
 }
 
-/** Agrega el primer producto del catálogo y abre el carrito. */
+/**
+ * Agrega el producto más barato del catálogo y abre el carrito. No el
+ * primero: si cuesta más que el cupo del mes, el carrito se bloquea por
+ * "Saldo insuficiente" y los tests de checkout fallan por los datos de dev.
+ */
 async function cartWithOneItem(page: Page) {
     const store = new StorePage(page)
     await store.goto()
-    const title = await store.addFirstProduct()
+    const title = await store.addCheapestProduct()
     const cart = new CartPage(page)
     await cart.goto()
     await expect(cart.quantityInput).toHaveValue("1")
