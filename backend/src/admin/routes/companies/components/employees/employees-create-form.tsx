@@ -1,6 +1,5 @@
 import {
   Button,
-  CurrencyInput,
   Drawer,
   Input,
   Label,
@@ -9,7 +8,6 @@ import {
 import { useState } from "react";
 import { AdminCreateEmployee, QueryCompany } from "../../../../../types";
 import { CoolSwitch } from "../../../../components/common";
-import { currencySymbolMap } from "../../../../utils";
 
 export function EmployeesCreateForm({
   handleSubmit,
@@ -22,14 +20,13 @@ export function EmployeesCreateForm({
   error: Error | null;
   company: QueryCompany;
 }) {
+  // Sin "Spending Limit": el límite de gasto del B2B Starter ya no se usa
+  // (el tope de compra es el cupo del módulo benefit-budget). Se guarda en 0.
   const [formData, setFormData] = useState<
-    Omit<AdminCreateEmployee, "spending_limit"> & {
-      spending_limit: string;
-    }
+    Omit<AdminCreateEmployee, "spending_limit">
   >({
     company_id: company.id,
     is_admin: false,
-    spending_limit: "0",
     customer_id: "",
   });
 
@@ -47,13 +44,9 @@ export function EmployeesCreateForm({
   const onSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
-    const spendingLimit = formData.spending_limit
-      ? parseInt(formData.spending_limit)
-      : 0;
-
     const data = {
       ...formData,
-      spending_limit: spendingLimit,
+      spending_limit: 0,
     };
 
     handleSubmit(data);
@@ -111,25 +104,6 @@ export function EmployeesCreateForm({
         </div>
         <div className="flex flex-col gap-3">
           <h2 className="h2-core">Permissions</h2>
-          <div className="flex flex-col gap-2">
-            <Label size="xsmall" className="txt-compact-small font-medium">
-              Spending Limit ({company.currency_code?.toUpperCase() || "USD"})
-            </Label>
-            <CurrencyInput
-              symbol={currencySymbolMap[company.currency_code || "USD"]}
-              code={company.currency_code || "USD"}
-              type="text"
-              name="spending_limit"
-              value={formData.spending_limit ? formData.spending_limit : ""}
-              onChange={(e) =>
-                setFormData({
-                  ...formData,
-                  spending_limit: e.target.value.replace(/[^0-9]/g, ""),
-                })
-              }
-              placeholder="1000"
-            />
-          </div>
           <div className="flex flex-col gap-2">
             <Label size="xsmall" className="txt-compact-small font-medium">
               Admin Access

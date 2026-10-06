@@ -1,7 +1,6 @@
 import {
   Button,
   Container,
-  CurrencyInput,
   Drawer,
   Label,
   Table,
@@ -14,7 +13,6 @@ import {
   QueryEmployee,
 } from "../../../../../types";
 import { CoolSwitch } from "../../../../components/common";
-import { currencySymbolMap } from "../../../../utils";
 
 export function EmployeesUpdateForm({
   company,
@@ -29,28 +27,21 @@ export function EmployeesUpdateForm({
   loading: boolean;
   error: Error | null;
 }) {
+  // Solo permisos: el "Spending Limit" del B2B Starter ya no se usa (el
+  // tope de compra es el cupo del módulo benefit-budget) y no se envía, así
+  // que el valor guardado no cambia.
   const [formData, setFormData] = useState<{
-    spending_limit: string;
     is_admin: boolean;
   }>({
-    spending_limit: employee?.spending_limit?.toString() || "0",
     is_admin: employee?.is_admin || false,
   });
 
   const onSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
-    const spendingLimit = formData.spending_limit
-      ? Number(formData.spending_limit)
-      : undefined;
-
     const data = {
       ...formData,
       id: employee?.id,
-      spending_limit: spendingLimit,
-      raw_spending_limit: {
-        value: spendingLimit,
-      },
     };
 
     handleSubmit(data);
@@ -106,24 +97,6 @@ export function EmployeesUpdateForm({
           </div>
           <div className="flex flex-col gap-4">
             <h2 className="h2-core">Permissions</h2>
-            <div className="flex flex-col gap-2">
-              <Label size="xsmall" className="txt-compact-small font-medium">
-                Spending Limit
-              </Label>
-              <CurrencyInput
-                symbol={currencySymbolMap[company.currency_code || "USD"]}
-                code={company.currency_code || "USD"}
-                name="spending_limit"
-                value={formData.spending_limit}
-                onChange={(e) =>
-                  setFormData({
-                    ...formData,
-                    spending_limit: e.target.value.replace(/[^0-9.]/g, ""),
-                  })
-                }
-                placeholder="1000"
-              />
-            </div>
             <div className="flex flex-col gap-2">
               <Label size="xsmall" className="txt-compact-small font-medium">
                 Admin Access

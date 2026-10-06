@@ -18,7 +18,6 @@ import {
   useRejectQuote,
   useSendQuote,
 } from "../../../hooks/api/quotes";
-import { formatAmount } from "../../../utils";
 import {
   CostBreakdown,
   QuoteDetailsHeader,
@@ -209,20 +208,6 @@ const QuoteDetails = () => {
 
               <Text size="small" leading="compact" className="text-pretty">
                 {quote.draft_order?.customer?.phone}
-              </Text>
-            </div>
-
-            <div className="text-ui-fg-subtle grid grid-cols-2 items-start px-6 py-4">
-              <Text size="small" weight="plus" leading="compact">
-                Spending Limit
-              </Text>
-
-              <Text size="small" leading="compact" className="text-pretty">
-                {formatAmount(
-                  quote?.customer?.employee?.spending_limit,
-                  (quote?.customer?.employee?.company
-                    ?.currency_code as string) || "USD"
-                )}
               </Text>
             </div>
           </Container>

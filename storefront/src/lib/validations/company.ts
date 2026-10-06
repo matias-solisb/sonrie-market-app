@@ -1,6 +1,5 @@
 import { z } from "zod"
 
-import { ModuleCompanySpendingLimitResetFrequency } from "@/types"
 import {
   optionalString,
   requiredEmail,
@@ -19,22 +18,14 @@ export const companySchema = z.object({
   zip: requiredString("Código postal"),
   country: requiredString("País"),
   currency_code: requiredStringF("Moneda"),
-  spending_limit_reset_frequency: z.nativeEnum(
-    ModuleCompanySpendingLimitResetFrequency,
-    { errorMap: () => ({ message: "Selecciona una frecuencia" }) }
-  ),
 })
 
 export type CompanyFormValues = z.infer<typeof companySchema>
 
-// Edición de un employee (EmployeesCard). El límite llega como string del
-// input y se convierte a número al validar; vacío = 0 (sin límite).
+// Edición de un employee (EmployeesCard). Solo los permisos: el límite de
+// gasto del B2B Starter (`spending_limit`) ya no se usa; el tope de compra
+// es el cupo mensual del módulo benefit-budget.
 export const employeeSchema = z.object({
-  spending_limit: z
-    .string()
-    .trim()
-    .refine((v) => v === "" || /^\d+([.,]\d+)?$/.test(v), "Debe ser un número")
-    .transform((v) => (v === "" ? 0 : Number(v.replace(",", ".")))),
   is_admin: z.enum(["true", "false"]),
 })
 

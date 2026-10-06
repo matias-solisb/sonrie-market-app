@@ -178,18 +178,6 @@ const QuoteDetails: React.FC<QuoteDetailsProps> = ({
                 <Text>Phone</Text>
                 <Text>{quote.customer?.phone || "-"}</Text>
               </div>
-
-              <div className="flex justify-between">
-                <Text>Spend Limit</Text>
-                <Text>
-                  {(quote.customer?.employee?.spending_limit &&
-                    formatAmount(
-                      quote.customer?.employee?.spending_limit || 0,
-                      order.currency_code.toUpperCase()
-                    )) ||
-                    "-"}
-                </Text>
-              </div>
             </div>
           </Container>
 

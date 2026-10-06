@@ -1,32 +1,21 @@
 "use client"
 
-import { currencySymbolMap } from "@/lib/constants"
 import { deleteEmployee, updateEmployee } from "@/lib/data/companies"
-import {
-  getOrderTotalInSpendWindow,
-  getSpendWindow,
-} from "@/lib/util/check-spending-limit"
 import { useZodForm } from "@/lib/forms/use-zod-form"
 import {
   employeeSchema,
   type EmployeeFormInput,
   type EmployeeFormValues,
 } from "@/lib/validations/company"
-import { formatAmount } from "@/modules/common/components/amount-cell"
 import Button from "@/modules/common/components/button"
-import {
-  FormSelectField,
-  FormTextField,
-} from "@/modules/common/components/form"
+import { FormSelectField } from "@/modules/common/components/form"
 import {
   B2BCustomer,
   QueryCompany,
   QueryEmployee,
   StoreUpdateEmployee,
 } from "@/types"
-import { HttpTypes } from "@medusajs/types"
 import { Prompt, Text, clx, toast } from "@medusajs/ui"
-import InputAdornment from "@mui/material/InputAdornment"
 import { useState } from "react"
 
 const PERMISSION_OPTIONS = [
@@ -77,15 +66,14 @@ const RemoveEmployeePrompt = ({ employee }: { employee: QueryEmployee }) => {
   )
 }
 
+// Sin "gastado / límite de gasto": ese límite del B2B Starter ya no se usa
+// (el tope de compra es el cupo mensual del módulo benefit-budget).
 const Employee = ({
   employee,
-  company,
-  orders,
   customer,
 }: {
   employee: QueryEmployee
   company: QueryCompany
-  orders: HttpTypes.StoreOrder[]
   customer: B2BCustomer | null
 }) => {
   const [isEditing, setIsEditing] = useState(false)
@@ -94,7 +82,6 @@ const Employee = ({
   const formId = `employee-form-${employee.id}`
 
   const defaultValues: EmployeeFormInput = {
-    spending_limit: employee.spending_limit.toString(),
     is_admin: employee.is_admin ? "true" : "false",
   }
 
@@ -117,7 +104,6 @@ const Employee = ({
       await updateEmployee({
         id: employee.id,
         company_id: employee.company_id,
-        spending_limit: values.spending_limit,
         is_admin: values.is_admin === "true",
       } as StoreUpdateEmployee)
     } catch {
@@ -128,9 +114,6 @@ const Employee = ({
     setIsEditing(false)
     toast.success("Empleado actualizado")
   }
-
-  const spent = getOrderTotalInSpendWindow(orders, getSpendWindow(company)) || 0
-  const amountSpent = formatAmount(spent, company.currency_code!)
 
   return (
     <div className="flex flex-col">
@@ -148,20 +131,16 @@ const Employee = ({
           </Text>
           <div className="flex gap-x-2 small:flex-row flex-col">
             <Text className=" text-neutral-500">{employee.customer.email}</Text>
-            <Text className=" text-neutral-500 hidden small:block">
-              {" • "}
-            </Text>
-            <Text className=" text-neutral-500">{employee.customer.phone}</Text>
-            <Text className=" text-neutral-500 hidden small:block">
-              {" • "}
-            </Text>
-            <Text className=" text-neutral-500">
-              {amountSpent} /{" "}
-              {employee.spending_limit > 0
-                ? formatAmount(employee.spending_limit, company.currency_code!)
-                : "No limit"}{" "}
-              spent
-            </Text>
+            {employee.customer.phone && (
+              <>
+                <Text className=" text-neutral-500 hidden small:block">
+                  {" • "}
+                </Text>
+                <Text className=" text-neutral-500">
+                  {employee.customer.phone}
+                </Text>
+              </>
+            )}
           </div>
         </div>
         <div className="flex items-center justify-end gap-2">
@@ -209,22 +188,6 @@ const Employee = ({
           }
         )}
       >
-        <FormTextField
-          control={control}
-          name="spending_limit"
-          label="Límite de gasto"
-          helperText="0 = sin límite"
-          slotProps={{
-            htmlInput: { inputMode: "decimal" },
-            input: {
-              startAdornment: (
-                <InputAdornment position="start">
-                  {currencySymbolMap[company.currency_code!]}
-                </InputAdornment>
-              ),
-            },
-          }}
-        />
         <FormSelectField
           control={control}
           name="is_admin"

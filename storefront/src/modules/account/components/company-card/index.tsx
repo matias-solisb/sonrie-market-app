@@ -12,25 +12,12 @@ import {
   FormSelectField,
   FormTextField,
 } from "@/modules/common/components/form"
-import {
-  ModuleCompanySpendingLimitResetFrequency,
-  StoreCompanyResponse,
-  StoreUpdateCompany,
-} from "@/types"
+import { StoreCompanyResponse, StoreUpdateCompany } from "@/types"
 import { AdminRegionCountry, HttpTypes } from "@medusajs/types"
 import { Container, Text, clx, toast } from "@medusajs/ui"
 import { useMemo, useState } from "react"
 
 const FORM_ID = "company-form"
-
-const FREQUENCY_LABELS: Record<ModuleCompanySpendingLimitResetFrequency, string> =
-  {
-    [ModuleCompanySpendingLimitResetFrequency.NEVER]: "Nunca",
-    [ModuleCompanySpendingLimitResetFrequency.DAILY]: "Diaria",
-    [ModuleCompanySpendingLimitResetFrequency.WEEKLY]: "Semanal",
-    [ModuleCompanySpendingLimitResetFrequency.MONTHLY]: "Mensual",
-    [ModuleCompanySpendingLimitResetFrequency.YEARLY]: "Anual",
-  }
 
 const toFormValues = (
   company: StoreCompanyResponse["company"]
@@ -44,9 +31,6 @@ const toFormValues = (
   zip: company.zip ?? "",
   country: company.country ?? "",
   currency_code: company.currency_code ?? "",
-  spending_limit_reset_frequency:
-    company.spending_limit_reset_frequency ??
-    ModuleCompanySpendingLimitResetFrequency.NEVER,
 })
 
 /*
@@ -54,7 +38,9 @@ const toFormValues = (
 Card de la empresa. En modo edición usa los campos compartidos de
 `common/components/form` + el esquema zod de `lib/validations/company`:
 Guardar valida primero y marca en rojo lo que falte, recién ahí llama a
-`updateCompany`. El botón Guardar vive fuera del <form> (en el footer de
+`updateCompany`. No muestra el "reinicio del límite de gasto" del B2B
+Starter: ese límite ya no se usa (el tope es el cupo de beneficio); el
+valor guardado se reenvía sin cambios. El botón Guardar vive fuera del <form> (en el footer de
 la card), por eso se asocia con `form={FORM_ID}` — así Enter dentro de un
 campo también envía, sin el `onKeyDown` manual que había antes.
 
@@ -111,10 +97,6 @@ const CompanyCard = ({
     ) as AdminRegionCountry[]
   ).map((country) => ({ value: country.id, label: country.name }))
 
-  const frequencyOptions = Object.values(
-    ModuleCompanySpendingLimitResetFrequency
-  ).map((value) => ({ value, label: FREQUENCY_LABELS[value] }))
-
   return (
     <div className="h-fit">
       <Container className="p-0 overflow-hidden">
@@ -159,12 +141,6 @@ const CompanyCard = ({
             label="Moneda"
             options={currencyOptions}
           />
-          <FormSelectField
-            control={control}
-            name="spending_limit_reset_frequency"
-            label="Reinicio del límite de gasto"
-            options={frequencyOptions}
-          />
         </form>
         <div
           className={clx(
@@ -199,16 +175,6 @@ const CompanyCard = ({
             <Text className=" text-neutral-500">
               {company.currency_code?.toUpperCase()} (
               {currencySymbolMap[company.currency_code!]})
-            </Text>
-          </div>
-          <div className="flex flex-col gap-y-2">
-            <Text className="font-medium text-neutral-950">
-              Reinicio del límite de gasto
-            </Text>
-            <Text className=" text-neutral-500">
-              {company.spending_limit_reset_frequency
-                ? FREQUENCY_LABELS[company.spending_limit_reset_frequency]
-                : "—"}
             </Text>
           </div>
         </div>
