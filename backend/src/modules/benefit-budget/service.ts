@@ -8,7 +8,12 @@ import {
   generateEntityId,
 } from "@medusajs/framework/utils";
 import { EntityManager } from "@mikro-orm/knex";
-import { BenefitCampaign, BenefitMovement, EmployeeBudget } from "./models";
+import {
+  BenefitCampaign,
+  BenefitCampaignChange,
+  BenefitMovement,
+  EmployeeBudget,
+} from "./models";
 import {
   BenefitBalance,
   RefundOrderInput,
@@ -61,6 +66,7 @@ const assertPeriod = (periodo: string) => {
 
 class BenefitBudgetModuleService extends MedusaService({
   BenefitCampaign,
+  BenefitCampaignChange,
   EmployeeBudget,
   BenefitMovement,
 }) {

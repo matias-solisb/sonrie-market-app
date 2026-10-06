@@ -1,4 +1,5 @@
 import { model } from "@medusajs/framework/utils";
+import { BenefitCampaignChange } from "./benefit-campaign-change";
 import { EmployeeBudget } from "./employee-budget";
 
 /*
@@ -27,6 +28,9 @@ export const BenefitCampaign = model.define("benefit_campaign", {
     .default("bloqueo_duro"),
   estado: model.enum(["activa", "inactiva"]).default("activa"),
   presupuestos: model.hasMany(() => EmployeeBudget, {
+    mappedBy: "campaign",
+  }),
+  cambios: model.hasMany(() => BenefitCampaignChange, {
     mappedBy: "campaign",
   }),
 });

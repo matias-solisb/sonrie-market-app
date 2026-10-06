@@ -86,3 +86,98 @@ export const useSetBenefitTopeOverride = (
     },
   });
 };
+
+// ── Campañas (página "Beneficio") ─────────────────────────────────────
+
+export type AdminBenefitCampaign = {
+  id: string;
+  nombre: string;
+  descripcion: string | null;
+  tope_por_colaborador: number;
+  periodo: "mensual" | "rango";
+  estado: "activa" | "inactiva";
+  created_at: string;
+  updated_at: string;
+};
+
+export type AdminBenefitCampaignsResponse = {
+  campaigns: AdminBenefitCampaign[];
+  /** "YYYY-MM" en hora de Santiago. */
+  periodo_actual: string;
+  periodo_siguiente: string;
+};
+
+export type AdminBenefitCampaignChange = {
+  id: string;
+  created_at: string;
+  cambios: Record<string, { anterior: unknown; nuevo: unknown }>;
+  rige_desde: string | null;
+  actor: {
+    id: string;
+    email: string | null;
+    first_name?: string | null;
+    last_name?: string | null;
+  } | null;
+};
+
+export type AdminUpdateBenefitCampaign = {
+  nombre?: string;
+  descripcion?: string | null;
+  tope_por_colaborador?: number;
+  estado?: "activa" | "inactiva";
+};
+
+export const benefitCampaignQueryKey = queryKeysFactory("benefit_campaign");
+
+export const useBenefitCampaigns = () =>
+  useQuery({
+    queryKey: benefitCampaignQueryKey.lists(),
+    queryFn: () =>
+      sdk.client.fetch<AdminBenefitCampaignsResponse>(
+        "/admin/benefit-budget/campaigns",
+        { method: "GET" }
+      ),
+  });
+
+export const useBenefitCampaignChanges = (campaignId?: string) =>
+  useQuery({
+    queryKey: benefitCampaignQueryKey.detail(campaignId ?? "", {
+      cambios: true,
+    }),
+    queryFn: () =>
+      sdk.client.fetch<{ cambios: AdminBenefitCampaignChange[] }>(
+        `/admin/benefit-budget/campaigns/${campaignId}/cambios`,
+        { method: "GET" }
+      ),
+    enabled: Boolean(campaignId),
+  });
+
+export const useUpdateBenefitCampaign = (
+  campaignId: string,
+  options?: UseMutationOptions<
+    { campaign: AdminBenefitCampaign; rige_desde: string | null },
+    FetchError,
+    AdminUpdateBenefitCampaign
+  >
+) => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (body: AdminUpdateBenefitCampaign) =>
+      sdk.client.fetch<{
+        campaign: AdminBenefitCampaign;
+        rige_desde: string | null;
+      }>(`/admin/benefit-budget/campaigns/${campaignId}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body,
+      }),
+    ...options,
+    onSuccess: (data, variables, context) => {
+      queryClient.invalidateQueries({ queryKey: benefitCampaignQueryKey.all });
+      // Los saldos sin fila del mes muestran el tope de la campaña
+      queryClient.invalidateQueries({ queryKey: benefitBudgetQueryKey.all });
+      options?.onSuccess?.(data, variables, context);
+    },
+  });
+};

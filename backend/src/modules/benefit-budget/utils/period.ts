@@ -36,3 +36,16 @@ export function getPeriod(date: Date = new Date()): string {
 export function isValidPeriod(periodo: string): boolean {
   return PERIOD_RE.test(periodo);
 }
+
+/** Periodo "YYYY-MM" siguiente: "2026-12" → "2027-01". */
+export function nextPeriod(periodo: string): string {
+  if (!isValidPeriod(periodo)) {
+    throw new Error(`nextPeriod: periodo inválido ${periodo}`);
+  }
+
+  const [year, month] = periodo.split("-").map(Number);
+
+  return month === 12
+    ? `${year + 1}-01`
+    : `${year}-${String(month + 1).padStart(2, "0")}`;
+}

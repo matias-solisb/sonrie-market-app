@@ -1,7 +1,12 @@
 import { moduleIntegrationTestRunner } from "@medusajs/test-utils";
 import { BENEFIT_BUDGET_MODULE } from "..";
 import BenefitBudgetModuleService from "../service";
-import { BenefitCampaign, BenefitMovement, EmployeeBudget } from "../models";
+import {
+  BenefitCampaign,
+  BenefitCampaignChange,
+  BenefitMovement,
+  EmployeeBudget,
+} from "../models";
 
 jest.setTimeout(60 * 1000);
 
@@ -20,7 +25,7 @@ const NOV = new Date("2026-11-01T03:00:00Z"); // 1-nov 00:00 Santiago
 
 moduleIntegrationTestRunner<BenefitBudgetModuleService>({
   moduleName: BENEFIT_BUDGET_MODULE,
-  moduleModels: [BenefitCampaign, EmployeeBudget, BenefitMovement],
+  moduleModels: [BenefitCampaign, BenefitCampaignChange, EmployeeBudget, BenefitMovement],
   resolve: "./src/modules/benefit-budget",
   testSuite: ({ service }) => {
     describe("sin campaña activa", () => {

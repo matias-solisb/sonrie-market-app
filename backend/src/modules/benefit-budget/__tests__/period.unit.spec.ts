@@ -1,4 +1,4 @@
-import { getPeriod, isValidPeriod } from "../utils/period";
+import { getPeriod, isValidPeriod, nextPeriod } from "../utils/period";
 
 describe("getPeriod (America/Santiago)", () => {
   it("usa el mes de Santiago aunque en UTC ya sea el mes siguiente", () => {
@@ -34,5 +34,16 @@ describe("isValidPeriod", () => {
     expect(isValidPeriod("2026-13")).toBe(false);
     expect(isValidPeriod("2026-1")).toBe(false);
     expect(isValidPeriod("10-2026")).toBe(false);
+  });
+});
+
+describe("nextPeriod", () => {
+  it("avanza un mes y cruza el año", () => {
+    expect(nextPeriod("2026-10")).toBe("2026-11");
+    expect(nextPeriod("2026-12")).toBe("2027-01");
+  });
+
+  it("rechaza periodos inválidos", () => {
+    expect(() => nextPeriod("2026-13")).toThrow("periodo inválido");
   });
 });

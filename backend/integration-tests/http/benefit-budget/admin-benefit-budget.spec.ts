@@ -1,5 +1,8 @@
 import { medusaIntegrationTestRunner } from "@medusajs/test-utils";
-import { getPeriod } from "../../../src/modules/benefit-budget/utils/period";
+import {
+  getPeriod,
+  nextPeriod,
+} from "../../../src/modules/benefit-budget/utils/period";
 import benefitBudgetPeriodJob from "../../../src/jobs/benefit-budget-period";
 import { adminHeaders } from "../../utils/admin";
 import {
@@ -25,12 +28,6 @@ Administración del beneficio desde la Admin API
 - Job de apertura de periodo sin campaña activa.
 
 */
-
-/** "YYYY-MM" del mes siguiente a `periodo`. */
-const nextPeriod = (periodo: string) => {
-  const [y, m] = periodo.split("-").map(Number);
-  return m === 12 ? `${y + 1}-01` : `${y}-${String(m + 1).padStart(2, "0")}`;
-};
 
 /** Una fecha a mediodía (Santiago) del periodo "YYYY-MM". */
 const dateIn = (periodo: string) => new Date(`${periodo}-15T15:00:00Z`);
@@ -222,6 +219,103 @@ medusaIntegrationTestRunner({
           fecha: dateIn(siguiente),
         });
         expect(r.periodo).toBe(siguiente);
+      });
+    });
+
+    describe("auditoría de cambios de la campaña", () => {
+      const cambios = async () =>
+        (
+          await api.get(
+            `/admin/benefit-budget/campaigns/${shop.campaignId}/cambios`,
+            adminHeaders
+          )
+        ).data.cambios;
+
+      it("registra quién cambió el tope, el valor anterior y desde cuándo rige", async () => {
+        const res = await api.post(
+          `/admin/benefit-budget/campaigns/${shop.campaignId}`,
+          { tope_por_colaborador: 60000 },
+          adminHeaders
+        );
+        expect(res.data.rige_desde).toBe(nextPeriod(getPeriod()));
+
+        const [cambio] = await cambios();
+        expect(cambio).toEqual(
+          expect.objectContaining({
+            cambios: {
+              tope_por_colaborador: { anterior: TOPE, nuevo: 60000 },
+            },
+            rige_desde: nextPeriod(getPeriod()),
+            actor: expect.objectContaining({ email: "admin@medusa.js" }),
+          })
+        );
+      });
+
+      it("el historial va del más reciente al más antiguo y omite ediciones sin cambios", async () => {
+        const post = (body: Record<string, unknown>) =>
+          api.post(
+            `/admin/benefit-budget/campaigns/${shop.campaignId}`,
+            body,
+            adminHeaders
+          );
+
+        await post({ tope_por_colaborador: 60000 });
+        const igual = await post({ tope_por_colaborador: 60000 });
+        expect(igual.data.rige_desde).toBeNull();
+        await post({ nombre: "Beneficio Sonríe" });
+
+        const lista = await cambios();
+        expect(lista).toHaveLength(2);
+        expect(lista[0].cambios).toEqual({
+          nombre: { anterior: "Beneficio mensual", nuevo: "Beneficio Sonríe" },
+        });
+        expect(lista[0].rige_desde).toBeNull();
+        expect(lista[1].cambios.tope_por_colaborador).toEqual({
+          anterior: TOPE,
+          nuevo: 60000,
+        });
+      });
+
+      it("un cambio rechazado no deja registro", async () => {
+        const otra = await shop.service.createBenefitCampaigns({
+          nombre: "Otra",
+          tope_por_colaborador: 1000,
+          estado: "inactiva",
+        });
+
+        const res = await noAuth(() =>
+          api.post(
+            `/admin/benefit-budget/campaigns/${otra.id}`,
+            { estado: "activa" },
+            adminHeaders
+          )
+        );
+        expect(res.status).toBe(400);
+        expect(await shop.service.listBenefitCampaignChanges({})).toHaveLength(0);
+      });
+
+      it("el historial exige admin y responde 404 si la campaña no existe", async () => {
+        const sinAdmin = await noAuth(() =>
+          api.get(
+            `/admin/benefit-budget/campaigns/${shop.campaignId}/cambios`,
+            shop.storeHeaders
+          )
+        );
+        expect(sinAdmin.status).toBe(401);
+
+        const noExiste = await noAuth(() =>
+          api.get("/admin/benefit-budget/campaigns/bcamp_no_existe/cambios", adminHeaders)
+        );
+        expect(noExiste.status).toBe(404);
+      });
+
+      it("GET campaigns informa el periodo actual y el siguiente", async () => {
+        const { data } = await api.get(
+          "/admin/benefit-budget/campaigns",
+          adminHeaders
+        );
+        expect(data.periodo_actual).toBe(getPeriod());
+        expect(data.periodo_siguiente).toBe(nextPeriod(getPeriod()));
       });
     });
 
