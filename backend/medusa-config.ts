@@ -3,6 +3,7 @@ import { APPROVAL_MODULE } from "./src/modules/approval";
 import { BANNERS_MODULE } from "./src/modules/banners";
 import { COMPANY_MODULE } from "./src/modules/company";
 import { BENEFIT_BUDGET_MODULE } from "./src/modules/benefit-budget";
+import { PICKUP_SCHEDULING_MODULE } from "./src/modules/pickup-scheduling";
 import { loadEnv, defineConfig, Modules } from "@medusajs/framework/utils";
 
 loadEnv(process.env.NODE_ENV!, process.cwd());
@@ -34,6 +35,9 @@ module.exports = defineConfig({
     },
     [BENEFIT_BUDGET_MODULE]: {
       resolve: "./modules/benefit-budget",
+    },
+    [PICKUP_SCHEDULING_MODULE]: {
+      resolve: "./modules/pickup-scheduling",
     },
     // File Module — provider local por ahora (interino, mientras blob
     // storage no está configurado). Cuando esté listo, se cambia el
