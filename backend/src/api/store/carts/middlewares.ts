@@ -8,6 +8,7 @@ import { retrieveCartTransformQueryConfig } from "./query-config";
 import {
   GetCartLineItemsBulkParams,
   StoreAddLineItemsBulk,
+  StoreSetCartPickupDate,
   StoreSetCartPickupSite,
 } from "./validators";
 
@@ -29,6 +30,14 @@ export const storeCartsMiddlewares: MiddlewareRoute[] = [
     middlewares: [
       authenticate("customer", ["bearer", "session"]),
       validateAndTransformBody(StoreSetCartPickupSite),
+    ],
+  },
+  {
+    method: ["POST"],
+    matcher: "/store/carts/:id/pickup-date",
+    middlewares: [
+      authenticate("customer", ["bearer", "session"]),
+      validateAndTransformBody(StoreSetCartPickupDate),
     ],
   },
   {

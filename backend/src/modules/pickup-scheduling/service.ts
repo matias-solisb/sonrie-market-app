@@ -52,7 +52,8 @@ Además del CRUD que genera `MedusaService`, expone:
 
 - Configuración: `getSettings` / `updateSettings`, `upsertSiteSlotConfig`,
   `upsertSiteSchedule`, `createException`.
-- Disponibilidad: `getWindow`, `resolveDays`, `listAvailableDates`.
+- Disponibilidad: `getWindow`, `resolveDays`, `listAvailableDates`,
+  `assertDateBookable` (valida sin reservar).
 - Ciclo del cupo:
     `reserveBooking` / `revertBooking`   checkout y su compensación
     `confirmBooking`                     order.placed
@@ -539,6 +540,81 @@ class PickupSchedulingModuleService extends MedusaService({
     });
   }
 
+  /**
+   * Valida que se pueda reservar (site, fecha) ahora mismo, sin reservar:
+   * rango elegible, día abierto, agenda configurada y cupo libre. Lanza el
+   * mismo error que daría `reserveBooking`, así el endpoint que guarda la
+   * fecha en el carrito y el checkout responden igual.
+   *
+   * El cupo libre es una foto: entre esta validación y el checkout otro
+   * colaborador puede tomar el último. La validación definitiva es la de
+   * `reserveBooking`.
+   */
+  @InjectManager()
+  async assertDateBookable(
+    stockLocationId: string,
+    fecha: string,
+    now: Date = new Date(),
+    @MedusaContext() sharedContext: Context = {}
+  ): Promise<{ capacidad: number; ocupados: number }> {
+    if (!isValidFecha(fecha)) {
+      throw notAllowed("Elige una fecha de retiro válida.");
+    }
+
+    const { desde, hasta } = await this.getWindow(
+      stockLocationId,
+      now,
+      sharedContext
+    );
+
+    if (fecha < desde) {
+      throw notAllowed(
+        `La fecha de retiro debe ser desde el ${formatFecha(desde)}.`
+      );
+    }
+
+    if (fecha > hasta) {
+      throw notAllowed(
+        `La fecha de retiro debe ser hasta el ${formatFecha(hasta)}.`
+      );
+    }
+
+    const [day] = await this.resolveDays(
+      stockLocationId,
+      [fecha],
+      sharedContext
+    );
+
+    if (!day.abierto) {
+      throw notAllowed(
+        `El site no atiende retiros el ${formatFecha(fecha)}${
+          day.motivo ? ` (${day.motivo})` : ""
+        }. Elige otra fecha.`
+      );
+    }
+
+    if (day.capacidad === null) {
+      throw notAllowed(
+        "La agenda de retiro no está configurada para este site. Contacta al administrador."
+      );
+    }
+
+    const [occupancy] = await this.listPickupOccupancies(
+      { stock_location_id: stockLocationId, fecha, bloque: null },
+      { take: 1 },
+      sharedContext
+    );
+    const ocupados = occupancy?.ocupados ?? 0;
+
+    if (ocupados >= day.capacidad) {
+      throw notAllowed(
+        `No quedan cupos de retiro para el ${formatFecha(fecha)}. Elige otra fecha.`
+      );
+    }
+
+    return { capacidad: day.capacidad, ocupados };
+  }
+
   // ---------------------------------------------------------------------
   // Ciclo del cupo
   // ---------------------------------------------------------------------
@@ -601,43 +677,12 @@ class PickupSchedulingModuleService extends MedusaService({
       await this.deleteBooking_(em, existing, sharedContext);
     }
 
-    const { desde, hasta } = await this.getWindow(
+    const { capacidad } = await this.assertDateBookable(
       stock_location_id,
+      fecha,
       input.now ?? new Date(),
       sharedContext
     );
-
-    if (fecha < desde) {
-      throw notAllowed(
-        `La fecha de retiro debe ser desde el ${formatFecha(desde)}.`
-      );
-    }
-
-    if (fecha > hasta) {
-      throw notAllowed(
-        `La fecha de retiro debe ser hasta el ${formatFecha(hasta)}.`
-      );
-    }
-
-    const [day] = await this.resolveDays(
-      stock_location_id,
-      [fecha],
-      sharedContext
-    );
-
-    if (!day.abierto) {
-      throw notAllowed(
-        `El site no atiende retiros el ${formatFecha(fecha)}${
-          day.motivo ? ` (${day.motivo})` : ""
-        }. Elige otra fecha.`
-      );
-    }
-
-    if (day.capacidad === null) {
-      throw notAllowed(
-        "La agenda de retiro no está configurada para este site. Contacta al administrador."
-      );
-    }
 
     await em.execute(
       `INSERT INTO pickup_occupancy
@@ -657,7 +702,7 @@ class PickupSchedulingModuleService extends MedusaService({
           AND deleted_at IS NULL
           AND ocupados < ?
       RETURNING id`,
-      [stock_location_id, fecha, day.capacidad],
+      [stock_location_id, fecha, capacidad],
       "all"
     );
 

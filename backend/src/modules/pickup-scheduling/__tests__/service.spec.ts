@@ -388,6 +388,41 @@ moduleIntegrationTestRunner<PickupSchedulingModuleService>({
       });
     });
 
+    describe("validación sin reservar (assertDateBookable)", () => {
+      beforeEach(async () => {
+        await service.updateSettings({ capacidad_por_defecto: 1 });
+      });
+
+      const validar = (fecha: string) =>
+        service.assertDateBookable(SITE, fecha, NOW);
+
+      it("devuelve la capacidad y la ocupación sin tomar el cupo", async () => {
+        expect(await validar(JUE)).toEqual({ capacidad: 1, ocupados: 0 });
+        expect(await ocupados(SITE, JUE)).toBe(0);
+        expect(await service.listPickupBookings({})).toHaveLength(0);
+      });
+
+      it("rechaza con los mismos mensajes que la reserva", async () => {
+        await expect(validar("2026-10-07")).rejects.toThrow("debe ser desde el 08-10-2026");
+        await expect(validar("2026-10-22")).rejects.toThrow("debe ser hasta el 21-10-2026");
+        await expect(validar(SAB)).rejects.toThrow("no atiende retiros el 10-10-2026");
+        await expect(validar("2026-13-01")).rejects.toThrow("Elige una fecha de retiro válida");
+
+        await service.reserveBooking({
+          cart_id: "cart_1",
+          stock_location_id: SITE,
+          fecha: JUE,
+          now: NOW,
+        });
+        await expect(validar(JUE)).rejects.toThrow(
+          "No quedan cupos de retiro para el 08-10-2026"
+        );
+
+        await service.updateSettings({ capacidad_por_defecto: null });
+        await expect(validar(VIE)).rejects.toThrow("agenda de retiro no está configurada");
+      });
+    });
+
     describe("reserva del cupo", () => {
       beforeEach(async () => {
         await service.updateSettings({ capacidad_por_defecto: 2 });

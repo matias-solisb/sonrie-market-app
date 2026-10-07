@@ -24,3 +24,12 @@ export const StoreSetCartPickupSite = z
     stock_location_id: z.string().min(1),
   })
   .strict();
+
+export type StoreSetCartPickupDateType = z.infer<typeof StoreSetCartPickupDate>;
+export const StoreSetCartPickupDate = z
+  .object({
+    fecha: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/, "La fecha debe tener formato YYYY-MM-DD."),
+  })
+  .strict();

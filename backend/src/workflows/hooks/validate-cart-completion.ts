@@ -8,6 +8,8 @@ import {
 import { getCartApprovalStatus } from "../../utils/get-cart-approval-status";
 import { BENEFIT_BUDGET_MODULE } from "../../modules/benefit-budget";
 import BenefitBudgetModuleService from "../../modules/benefit-budget/service";
+import { PICKUP_SCHEDULING_MODULE } from "../../modules/pickup-scheduling";
+import PickupSchedulingModuleService from "../../modules/pickup-scheduling/service";
 import {
   findUnavailableItems,
   getPickupSite,
@@ -27,15 +29,25 @@ Corre antes de crear el pedido.
    de ese site y tener su opción "Retiro en {site}". Lo deja así
    POST /store/carts/:id/pickup-site. Además se revisa el stock del site
    para responder en español antes de que el core falle al reservar.
-5. Cupo de beneficio (módulo benefit-budget): valida
+5. Fecha de retiro (módulo pickup-scheduling): el carrito debe tener
+   `metadata.pickup_date` (POST /store/carts/:id/pickup-date) y se toma el
+   cupo del día en el site (`reserveBooking`, UPDATE condicional: dos
+   checkouts por el último cupo no pasan ambos). Aplica también a pedidos
+   de $0: todo pedido ocupa un cupo de retiro.
+6. Cupo de beneficio (módulo benefit-budget): valida
    `consumido + total <= tope` del periodo vigente (hora de Santiago) y
-   registra el consumo en la misma transacción. El total incluye IVA.
+   registra el consumo. El total incluye IVA.
+
+Orden y fallas: primero el cupo de retiro, después el beneficio. Si el
+beneficio falla, el cupo de retiro se devuelve aquí mismo antes de relanzar
+el error (Medusa no compensa el paso que falla, solo los anteriores).
 
 Si un paso posterior del workflow falla (crear el pedido, reservar stock,
-autorizar el pago), Medusa ejecuta la compensación de abajo y el consumo
-se revierte. Si el carrito se completa por segunda vez (reintento),
-`reserveConsumption` detecta el consumo existente por `cart_id` y no
-descuenta de nuevo; en ese caso no hay nada que compensar.
+autorizar el pago), Medusa ejecuta la compensación de abajo: se revierten
+el consumo y el cupo de retiro. Si el carrito se completa por segunda vez
+(reintento), `reserveConsumption` y `reserveBooking` detectan lo existente
+por `cart_id` y no descuentan de nuevo; en ese caso no hay nada que
+compensar.
 
 Reemplaza la validación `checkSpendingLimit` del B2B Starter
 (`employee.spending_limit`), que solo comparaba el total del carrito
@@ -43,7 +55,10 @@ contra el tope y no sumaba los pedidos anteriores del mes.
 
 */
 
-type CompensationInput = { movement_id: string } | null;
+type CompensationInput = {
+  movement_id: string | null;
+  booking_id: string | null;
+} | null;
 
 completeCartWorkflow.hooks.validate(
   async ({ cart }, { container }) => {
@@ -131,27 +146,57 @@ completeCartWorkflow.hooks.validate(
       );
     }
 
+    const fecha = queryCart.metadata?.pickup_date as string | undefined;
+
+    if (!fecha) {
+      throw new MedusaError(
+        MedusaError.Types.NOT_ALLOWED,
+        "Elige una fecha de retiro antes de confirmar el pedido."
+      );
+    }
+
+    const pickup: PickupSchedulingModuleService = container.resolve(
+      PICKUP_SCHEDULING_MODULE
+    );
+
+    const booking = await pickup.reserveBooking({
+      cart_id: queryCart.id,
+      stock_location_id: site.id,
+      fecha,
+    });
+    const bookingId = booking.created ? booking.booking_id : null;
+
     // CLP no tiene decimales: se redondea por si el cálculo de IVA deja
     // fracciones de peso.
     const monto = Math.round(MathBN.convert(queryCart.total ?? 0).toNumber());
+    let movementId: string | null = null;
 
-    if (monto <= 0) {
-      return new StepResponse<undefined, CompensationInput>(undefined, null);
+    if (monto > 0) {
+      const benefitBudget: BenefitBudgetModuleService = container.resolve(
+        BENEFIT_BUDGET_MODULE
+      );
+
+      try {
+        const reservation = await benefitBudget.reserveConsumption({
+          customer_id: queryCart.customer_id,
+          cart_id: queryCart.id,
+          monto,
+        });
+        movementId = reservation.created ? reservation.movement_id : null;
+      } catch (error) {
+        if (bookingId) {
+          await pickup.revertBooking(bookingId);
+        }
+
+        throw error;
+      }
     }
-
-    const benefitBudget: BenefitBudgetModuleService = container.resolve(
-      BENEFIT_BUDGET_MODULE
-    );
-
-    const reservation = await benefitBudget.reserveConsumption({
-      customer_id: queryCart.customer_id,
-      cart_id: queryCart.id,
-      monto,
-    });
 
     return new StepResponse<undefined, CompensationInput>(
       undefined,
-      reservation.created ? { movement_id: reservation.movement_id } : null
+      movementId || bookingId
+        ? { movement_id: movementId, booking_id: bookingId }
+        : null
     );
   },
   async (input: CompensationInput, { container }) => {
@@ -159,10 +204,20 @@ completeCartWorkflow.hooks.validate(
       return;
     }
 
-    const benefitBudget: BenefitBudgetModuleService = container.resolve(
-      BENEFIT_BUDGET_MODULE
-    );
+    if (input.movement_id) {
+      const benefitBudget: BenefitBudgetModuleService = container.resolve(
+        BENEFIT_BUDGET_MODULE
+      );
 
-    await benefitBudget.revertConsumption(input.movement_id);
+      await benefitBudget.revertConsumption(input.movement_id);
+    }
+
+    if (input.booking_id) {
+      const pickup: PickupSchedulingModuleService = container.resolve(
+        PICKUP_SCHEDULING_MODULE
+      );
+
+      await pickup.revertBooking(input.booking_id);
+    }
   }
 );

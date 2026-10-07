@@ -5,7 +5,12 @@ import { BENEFIT_BUDGET_MODULE } from "../../src/modules/benefit-budget";
 import BenefitBudgetModuleService from "../../src/modules/benefit-budget/service";
 import { PickupSite } from "../../src/utils/pickup-sites";
 import { adminHeaders, createAdminUser, createStoreUser } from "./admin";
-import { createPickupSite, ensureDefaultShippingProfile } from "./pickup";
+import {
+  createPickupSite,
+  enablePickupScheduling,
+  ensureDefaultShippingProfile,
+  setFirstPickupDate,
+} from "./pickup";
 import { salesChannelSeeder } from "./seeder";
 import { generatePublishableKey, generateStoreHeaders } from "./store";
 
@@ -33,6 +38,8 @@ export type Shop = {
   customerId: string;
   region: any;
   site: PickupSite;
+  /** Sales channel del catálogo (para crear otros sites). */
+  catalogId: string;
   product: any;
   /** $10.000 */
   litro: string;
@@ -85,6 +92,9 @@ export const setupShop = async ({
     name: "Sala Test",
     catalogSalesChannelId: catalog.id,
   });
+
+  // Todo pedido necesita fecha de retiro con cupo (pickup-scheduling).
+  await enablePickupScheduling(container);
 
   const product = (
     await api.post(
@@ -147,6 +157,7 @@ export const setupShop = async ({
     customerId: user.customer.id,
     region,
     site,
+    catalogId: catalog.id,
     product,
     litro: byTitle("1L"),
     chica: byTitle("200ml"),
@@ -157,14 +168,15 @@ export const setupShop = async ({
 type Item = { variant_id: string; quantity: number };
 
 /**
- * Carrito listo para completar: ítems, site de retiro y sesión de pago
- * "Cargo beneficio" (pp_system_default), igual que el storefront.
+ * Carrito listo para completar: ítems, site de retiro, fecha de retiro (la
+ * primera disponible) y sesión de pago "Cargo beneficio"
+ * (pp_system_default), igual que el storefront.
  */
 export const readyCart = async (
   api: any,
   shop: Shop,
   items: Item[],
-  { pay = true, headers = shop.storeHeaders } = {}
+  { pay = true, pickupDate = true, headers = shop.storeHeaders } = {}
 ) => {
   const cart = (
     await api.post(
@@ -179,6 +191,10 @@ export const readyCart = async (
     { stock_location_id: shop.site.id },
     headers
   );
+
+  if (pickupDate) {
+    await setFirstPickupDate(api, cart.id, shop.site.id, headers);
+  }
 
   if (pay) {
     await addPaymentSession(api, cart.id, headers);

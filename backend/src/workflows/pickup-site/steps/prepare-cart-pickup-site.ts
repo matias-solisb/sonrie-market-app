@@ -28,7 +28,8 @@ export type PrepareCartPickupSiteOutput = {
 Valida que el carrito sea del colaborador y que el site exista y esté
 configurado, y arma los datos que se le escriben al carrito: canal del
 site, dirección del site como envío y facturación, correo del colaborador
-y `metadata.stock_location_id`.
+y `metadata.stock_location_id`. Si el carrito cambia de site, borra
+`metadata.pickup_date` (la fecha se eligió para el otro site).
 
 Solo lee; no tiene compensación.
 
@@ -70,6 +71,10 @@ export const prepareCartPickupSiteStep = createStep(
       );
     }
 
+    const siteChanged =
+      cart.metadata?.stock_location_id !== site.id &&
+      cart.metadata?.pickup_date !== undefined;
+
     const {
       data: [customer],
     } = await query.graph({
@@ -102,6 +107,9 @@ export const prepareCartPickupSiteStep = createStep(
         metadata: {
           ...((cart.metadata as Record<string, unknown>) ?? {}),
           stock_location_id: site.id,
+          // La fecha de retiro se validó para el site anterior: al cambiar
+          // de site se borra ("" elimina la clave al fusionar metadata).
+          ...(siteChanged && { pickup_date: "" }),
         },
       },
     });

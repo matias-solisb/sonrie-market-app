@@ -11,7 +11,9 @@ import {
 } from "../../utils/admin";
 import {
   createPickupSite,
+  enablePickupScheduling,
   ensureDefaultShippingProfile,
+  setFirstPickupDate,
 } from "../../utils/pickup";
 import { salesChannelSeeder } from "../../utils/seeder";
 import {
@@ -67,12 +69,13 @@ medusaIntegrationTestRunner({
         )
       ).data.cart;
 
-      // Todo pedido necesita site de retiro (validate-cart-completion).
+      // Todo pedido necesita site y fecha de retiro (validate-cart-completion).
       await api.post(
         `/store/carts/${cart.id}/pickup-site`,
         { stock_location_id: site.id },
         storeHeaders
       );
+      await setFirstPickupDate(api, cart.id, site.id, storeHeaders);
 
       const collection = (
         await api.post(
@@ -126,6 +129,7 @@ medusaIntegrationTestRunner({
         name: "Sala Test",
         catalogSalesChannelId: salesChannel.id,
       });
+      await enablePickupScheduling(container);
 
       product = (
         await api.post(

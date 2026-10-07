@@ -8,7 +8,12 @@ import {
   createAdminUser,
   createStoreUser,
 } from "../../utils/admin";
-import { createPickupSite, ensureDefaultShippingProfile } from "../../utils/pickup";
+import {
+  createPickupSite,
+  enablePickupScheduling,
+  ensureDefaultShippingProfile,
+  setFirstPickupDate,
+} from "../../utils/pickup";
 import { salesChannelSeeder } from "../../utils/seeder";
 import {
   generatePublishableKey,
@@ -76,6 +81,7 @@ medusaIntegrationTestRunner({
         name: "Sur",
         catalogSalesChannelId: catalog.id,
       });
+      await enablePickupScheduling(container);
 
       const product = (
         await api.post(
@@ -207,6 +213,7 @@ medusaIntegrationTestRunner({
     it("compra en Santiago y reserva el stock en Santiago", async () => {
       const cart = await newCart(2);
       await setSite(cart.id, santiago.id);
+      await setFirstPickupDate(api, cart.id, santiago.id, storeHeaders);
       await pay(cart.id);
 
       const res = await complete(cart.id);
