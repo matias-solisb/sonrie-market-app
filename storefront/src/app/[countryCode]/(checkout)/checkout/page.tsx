@@ -1,5 +1,6 @@
 import { retrieveCart } from "@/lib/data/cart"
 import { retrieveCustomer } from "@/lib/data/customer"
+import { listPickupSlots } from "@/lib/data/pickup-slots"
 import { listStockLocations } from "@/lib/data/stock-locations"
 import PickupCheckout from "@/modules/checkout/templates/pickup-checkout"
 import { Metadata } from "next"
@@ -52,5 +53,10 @@ export default async function Checkout(props: Props) {
     redirect(cartPath)
   }
 
-  return <PickupCheckout cart={cart} customer={customer} site={site} />
+  // Fechas de retiro del site (sin caché: los cupos cambian con cada compra).
+  const slots = await listPickupSlots(site.id)
+
+  return (
+    <PickupCheckout cart={cart} customer={customer} site={site} slots={slots} />
+  )
 }

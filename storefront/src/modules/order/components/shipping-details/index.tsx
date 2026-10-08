@@ -1,4 +1,5 @@
 import { HttpTypes } from "@medusajs/types"
+import { formatPickupDate, isPickupDate } from "@/lib/util/pickup-date"
 import { Heading, Text } from "@medusajs/ui"
 
 type ShippingDetailsProps = {
@@ -6,6 +7,10 @@ type ShippingDetailsProps = {
 }
 
 const ShippingDetails = ({ order }: ShippingDetailsProps) => {
+  const pickupDate = isPickupDate(order.metadata?.pickup_date)
+    ? (order.metadata?.pickup_date as string)
+    : null
+
   // order.shipping_address = {
   //   first_name: "Riqwan",
   //   last_name: "Thamir",
@@ -61,6 +66,15 @@ const ShippingDetails = ({ order }: ShippingDetailsProps) => {
               {order.shipping_address?.country_code?.toUpperCase()}
             </Text>
           </div>
+        )}
+
+        {pickupDate && (
+          <Text
+            className="txt-medium text-ui-fg-base mt-2"
+            data-testid="order-pickup-date"
+          >
+            Fecha de retiro: {formatPickupDate(pickupDate)}
+          </Text>
         )}
       </>
     )

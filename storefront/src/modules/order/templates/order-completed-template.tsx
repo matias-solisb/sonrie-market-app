@@ -1,4 +1,5 @@
 import { convertToLocale } from "@/lib/util/money"
+import { formatPickupDate, isPickupDate } from "@/lib/util/pickup-date"
 import CheckoutTotals from "@/modules/checkout/components/checkout-totals"
 import LocalizedClientLink from "@/modules/common/components/localized-client-link"
 import NextSteps from "@/modules/order/components/order-confirmation/next-steps"
@@ -56,6 +57,9 @@ export default async function OrderCompletedTemplate({
 }: OrderCompletedTemplateProps) {
   const firstName = order.shipping_address?.first_name?.trim()
   const siteName = order.shipping_address?.company
+  const pickupDate = isPickupDate(order.metadata?.pickup_date)
+    ? (order.metadata?.pickup_date as string)
+    : null
   const siteAddress = [order.shipping_address?.address_1, order.shipping_address?.city]
     .filter(Boolean)
     .join(", ")
@@ -109,7 +113,7 @@ export default async function OrderCompletedTemplate({
           <h2 id="next-steps-title" className="mb-5 text-xl font-semibold text-neutral-900">
             ¿Qué sigue?
           </h2>
-          <NextSteps siteName={siteName} />
+          <NextSteps siteName={siteName} pickupDate={pickupDate} />
         </Card>
 
         {/* 3. Retiro y pago */}
@@ -125,6 +129,14 @@ export default async function OrderCompletedTemplate({
               <p className="text-lg font-semibold text-neutral-900">{siteName}</p>
             )}
             {siteAddress && <p className="text-base text-neutral-600">{siteAddress}</p>}
+            {pickupDate && (
+              <p
+                className="mt-2 text-base font-semibold text-neutral-900"
+                data-testid="order-pickup-date"
+              >
+                Retiro el {formatPickupDate(pickupDate)}
+              </p>
+            )}
           </Card>
 
           <Card aria-labelledby="payment-title" data-testid="order-payment">

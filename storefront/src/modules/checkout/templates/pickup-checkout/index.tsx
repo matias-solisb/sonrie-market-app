@@ -1,5 +1,7 @@
+import { PickupSlots } from "@/lib/data/pickup-slots"
 import { StoreStockLocation } from "@/lib/data/stock-locations"
 import { exceedsBenefitBudget } from "@/lib/util/check-benefit-budget"
+import { formatPickupDate, isPickupDate } from "@/lib/util/pickup-date"
 import ItemsPreviewTemplate from "@/modules/cart/templates/preview"
 import BenefitPayment from "@/modules/checkout/components/benefit-payment"
 import CheckoutTotals from "@/modules/checkout/components/checkout-totals"
@@ -16,6 +18,9 @@ Checkout de una sola página (MVP). Todo lo que el B2B Starter pedía en
 pasos (dirección, facturación, despacho, contacto, medio de pago) ya viene
 resuelto desde el carrito:
 - site, dirección y "Retiro en {site}": POST /store/carts/:id/pickup-site;
+- fecha de retiro: se elige acá (PickupDetails → POST
+  /store/carts/:id/pickup-date). Sin una fecha con cupo no se puede
+  confirmar;
 - correo: el de la cuenta del colaborador;
 - pago: "Cargo beneficio" (se crea al confirmar, ver confirmOrder).
 
@@ -27,13 +32,22 @@ const PickupCheckout = ({
   cart,
   customer,
   site,
+  slots,
 }: {
   cart: B2BCart
   customer: B2BCustomer
   site: StoreStockLocation
+  slots: PickupSlots | null
 }) => {
   const total = cart.total ?? 0
   const exceeds = exceedsBenefitBudget(cart, customer)
+  const savedDate = cart.metadata?.pickup_date
+  const pickupDate = isPickupDate(savedDate) ? savedDate : null
+  // La fecha guardada vale solo si sigue con cupo (el backend lo vuelve a
+  // validar al confirmar).
+  const hasValidDate =
+    !!pickupDate &&
+    !!slots?.fechas.some((f) => f.fecha === pickupDate && f.disponible)
   const fullName = [customer.first_name, customer.last_name]
     .filter(Boolean)
     .join(" ")
@@ -54,7 +68,7 @@ const PickupCheckout = ({
 
       <div className="grid grid-cols-1 small:grid-cols-[1fr_416px] gap-4">
         <div className="flex flex-col gap-y-4">
-          <PickupDetails site={site} />
+          <PickupDetails site={site} slots={slots} pickupDate={pickupDate} />
 
           <Container className="flex flex-col gap-y-1 p-5" data-testid="customer-details">
             <Heading level="h2" className="text-base mb-2">
@@ -85,14 +99,17 @@ const PickupCheckout = ({
             <Divider className="my-3" />
             <Text className="text-xs text-ui-fg-subtle mb-3">
               Al confirmar, el total se descuenta de tu beneficio del mes y
-              el pedido queda para retiro en {site.name}.
+              el pedido queda para retiro en {site.name}
+              {hasValidDate && pickupDate ? ` el ${formatPickupDate(pickupDate)}` : ""}.
             </Text>
             <ConfirmOrderButton
-              disabled={exceeds}
+              disabled={exceeds || !hasValidDate}
               disabledReason={
                 exceeds
                   ? "El pedido supera tu saldo de beneficio disponible. Vuelve al carrito y quita productos."
-                  : undefined
+                  : !hasValidDate
+                    ? "Elige una fecha de retiro para confirmar el pedido."
+                    : undefined
               }
             />
           </Container>

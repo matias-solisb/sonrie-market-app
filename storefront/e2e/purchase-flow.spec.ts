@@ -13,6 +13,9 @@ Requisitos en el ambiente dev:
   (backend: `npx medusa exec ./src/scripts/setup-pickup-sites.ts`), stock del
   producto en el primer site, campaña de beneficio activa y saldo suficiente
   (cada corrida del flujo completo crea pedidos reales que consumen beneficio).
+- Agenda de retiro con capacidad
+  (backend: `npx medusa exec ./src/scripts/setup-pickup-scheduling.ts`) y al
+  menos una fecha con cupo en el site.
 
 Varios tests de "cantidades inválidas" están escritos con el comportamiento
 ESPERADO. Si fallan, probablemente encontraron un bug real en
@@ -228,13 +231,51 @@ test.describe("confirmar pedido", () => {
         await expect(page.getByTestId("submit-order-button")).toHaveCount(0)
     })
 
-    test("el checkout es una sola página con el site, el pago y el botón habilitado", async ({ page }) => {
+    test("el checkout es una sola página con el site, la fecha, el pago y el botón habilitado", async ({ page }) => {
         const checkout = await goToCheckout(page)
 
         await expect(page).not.toHaveURL(/step=/)
         await expect(checkout.pickupSiteName).toBeVisible()
+        await expect(checkout.dateOptions.first()).toBeVisible({ timeout: 30_000 })
         await expect(page.getByTestId("benefit-payment")).toContainText("Cargo beneficio")
+        await checkout.completeSteps()
+        await expect(checkout.placeOrder).toBeEnabled()
+    })
+
+    // Cada test parte con un carrito nuevo (la sesión guardada no trae
+    // carrito). Si igual llegara con fecha, no se puede volver a "sin fecha"
+    // desde la UI: se salta.
+    test("sin fecha de retiro el botón de pedido queda deshabilitado", async ({ page }) => {
+        const checkout = await goToCheckout(page)
+        await expect(checkout.dateOptions.first()).toBeVisible({ timeout: 30_000 })
+        test.skip(await checkout.selectedDate.isVisible(), "El carrito ya tenía fecha de retiro")
+
+        await expect(checkout.placeOrder).toBeDisabled()
+        await expect(checkout.disabledReason).toHaveText(
+            "Elige una fecha de retiro para confirmar el pedido."
+        )
+
+        await checkout.chooseFirstDate()
         await expect(checkout.placeOrder).toBeEnabled({ timeout: 30_000 })
+    })
+
+    test("la fecha de retiro elegida se mantiene al recargar", async ({ page }) => {
+        const checkout = await goToCheckout(page)
+        const fecha = await checkout.chooseFirstDate()
+
+        await page.reload()
+
+        await expect(checkout.selectedDate).toBeVisible({ timeout: 30_000 })
+        expect(await checkout.chosenDate()).toBe(fecha)
+    })
+
+    test("los días cerrados o sin cupo no se pueden elegir", async ({ page }) => {
+        const checkout = await goToCheckout(page)
+        await expect(checkout.dateOptions.first()).toBeVisible({ timeout: 30_000 })
+        // Con la configuración por defecto (lunes a viernes) siempre hay un fin de semana en 14 días.
+        test.skip((await checkout.unavailableDates.count()) === 0, "No hay días cerrados en el rango")
+
+        await expect(checkout.unavailableDates.first()).toBeDisabled()
     })
 
     test("flujo completo: el pedido se crea, se confirma y el carrito queda vacío", async ({ page }) => {
@@ -246,6 +287,7 @@ test.describe("confirmar pedido", () => {
 
         await expect(page).toHaveURL(/\/cl\/order\/confirmed\//, { timeout: 30_000 })
         await expect(page.getByTestId("order-complete-container")).toBeVisible()
+        await expect(page.getByTestId("order-pickup-date")).toContainText("Retiro el")
 
         const cart = new CartPage(page)
         await cart.goto()

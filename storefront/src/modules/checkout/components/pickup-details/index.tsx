@@ -1,18 +1,30 @@
-import LocalizedClientLink from "@/modules/common/components/localized-client-link"
+import { PickupSlots } from "@/lib/data/pickup-slots"
 import { StoreStockLocation } from "@/lib/data/stock-locations"
+import LocalizedClientLink from "@/modules/common/components/localized-client-link"
+import Divider from "@/modules/common/components/divider"
+import PickupDateSelector from "@/modules/checkout/components/pickup-date-selector"
 import { MapPin } from "@medusajs/icons"
 import { Container, Heading, Text } from "@medusajs/ui"
 
 /*
 
-"Retiro en sala": el site elegido en el carrito. Se cambia en el carrito
-(ahí el backend mueve el carrito al canal del site y revisa el stock), por
-eso acá solo hay un link de vuelta.
+"Retiro en sala": el site elegido en el carrito y la fecha de retiro.
 
-Paso 3 (pickup-scheduling): acá va el selector de fecha de retiro.
+El site se cambia en el carrito (ahí el backend mueve el carrito al canal
+del site y revisa el stock), por eso acá solo hay un link de vuelta; al
+cambiarlo, el backend borra la fecha elegida. La fecha se elige acá
+(PickupDateSelector).
 
 */
-const PickupDetails = ({ site }: { site: StoreStockLocation }) => {
+const PickupDetails = ({
+  site,
+  slots,
+  pickupDate,
+}: {
+  site: StoreStockLocation
+  slots: PickupSlots | null
+  pickupDate: string | null
+}) => {
   const address = [site.address?.address_1, site.address?.city]
     .filter(Boolean)
     .join(", ")
@@ -44,6 +56,12 @@ const PickupDetails = ({ site }: { site: StoreStockLocation }) => {
           </Text>
         )}
       </div>
+      <Divider />
+      <PickupDateSelector
+        slots={slots}
+        selected={pickupDate}
+        siteName={site.name}
+      />
     </Container>
   )
 }

@@ -1,3 +1,4 @@
+import { formatPickupDate } from "@/lib/util/pickup-date"
 import { clx } from "@medusajs/ui"
 
 /*
@@ -5,13 +6,20 @@ import { clx } from "@medusajs/ui"
 "¿Qué sigue?": los pasos del pedido después de confirmarlo, en lenguaje
 simple para colaboradores de todas las edades. El primero ya está hecho.
 
-Cuando exista el agendamiento (paso 3, pickup-scheduling), el paso de
-retiro puede mostrar la fecha elegida.
+El paso de retiro muestra la fecha elegida en el checkout
+(order.metadata.pickup_date), si la hay.
 
 */
 type Step = { title: string; description: string; done?: boolean }
 
-const NextSteps = ({ siteName }: { siteName?: string | null }) => {
+const NextSteps = ({
+  siteName,
+  pickupDate,
+}: {
+  siteName?: string | null
+  pickupDate?: string | null
+}) => {
+  const where = siteName ? ` en ${siteName}` : " en la sala de venta"
   const steps: Step[] = [
     {
       title: "Pedido recibido",
@@ -24,9 +32,9 @@ const NextSteps = ({ siteName }: { siteName?: string | null }) => {
     },
     {
       title: "Listo para retiro",
-      description: siteName
-        ? `Te avisaremos cuando puedas retirarlo en ${siteName}.`
-        : "Te avisaremos cuando puedas retirarlo en la sala de venta.",
+      description: pickupDate
+        ? `Retíralo el ${formatPickupDate(pickupDate)}${where}. Te avisaremos cuando esté listo.`
+        : `Te avisaremos cuando puedas retirarlo${where}.`,
     },
   ]
 

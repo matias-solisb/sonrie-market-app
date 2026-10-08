@@ -108,13 +108,50 @@ export class CheckoutPage {
     get placeOrder() { return this.page.getByTestId("submit-order-button") }
     get orderError() { return this.page.getByTestId("submit-order-error") }
     get pickupSiteName() { return this.page.getByTestId("pickup-site-name") }
+    get disabledReason() { return this.page.getByTestId("submit-disabled-reason") }
+
+    /** Botones de fecha de retiro (pickup-date-selector). */
+    get dateOptions() { return this.page.getByTestId("pickup-date-option") }
+    get availableDates() { return this.page.locator('[data-testid="pickup-date-option"][data-disponible="true"]') }
+    get unavailableDates() { return this.page.locator('[data-testid="pickup-date-option"][data-disponible="false"]') }
+    get selectedDate() { return this.page.getByTestId("pickup-date-selected") }
+    get dateError() { return this.page.getByTestId("pickup-date-error") }
+
+    /** Fecha elegida (data-fecha del botón presionado), o null. */
+    async chosenDate(): Promise<string | null> {
+        const pressed = this.page.locator('[data-testid="pickup-date-option"][aria-pressed="true"]')
+        return (await pressed.count()) ? pressed.first().getAttribute("data-fecha") : null
+    }
+
+    get savingDate() { return this.page.getByTestId("pickup-date-saving") }
+
+    /**
+     * Elige la primera fecha con cupo y espera a que el backend la guarde:
+     * "Retiras el …" (pickup-date-selected) aparece recién cuando termina de
+     * guardarse, no al hacer clic. Devuelve la fecha.
+     */
+    async chooseFirstDate(): Promise<string> {
+        await expect(this.availableDates.first()).toBeVisible({ timeout: 30_000 })
+        const option = this.availableDates.first()
+        const fecha = (await option.getAttribute("data-fecha"))!
+        await option.click()
+        await expect(this.savingDate).toHaveCount(0, { timeout: 30_000 })
+        await expect(this.selectedDate).toBeVisible({ timeout: 30_000 })
+        await expect(option).toHaveAttribute("aria-pressed", "true")
+        return fecha
+    }
 
     /**
      * El checkout es de una sola página: dirección, retiro, contacto y pago
-     * ("Cargo beneficio") ya vienen resueltos desde el carrito. Solo espera a
-     * que el botón "Confirmar pedido" esté habilitado.
+     * ("Cargo beneficio") ya vienen resueltos desde el carrito. Falta solo la
+     * fecha de retiro: si no hay una elegida con cupo, elige la primera.
+     * Después espera a que "Confirmar pedido" esté habilitado.
      */
     async completeSteps() {
+        await expect(this.dateOptions.first()).toBeVisible({ timeout: 30_000 })
+        if (!(await this.selectedDate.isVisible())) {
+            await this.chooseFirstDate()
+        }
         await expect(this.placeOrder).toBeEnabled({ timeout: 30_000 })
     }
 }

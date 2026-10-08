@@ -22,6 +22,7 @@ import {
 
 import { ensurePickupSite } from "../utils/pickup-sites";
 import { ensureBenefitCampaign } from "./seed-benefit-campaign";
+import { ensurePickupScheduling } from "./setup-pickup-scheduling";
 
 /*
 
@@ -325,4 +326,8 @@ export default async function seedDemoData({ container }: ExecArgs) {
   logger.info("Seeding benefit campaign...");
   await ensureBenefitCampaign(container);
   logger.info("Finished seeding benefit campaign.");
+
+  logger.info("Seeding pickup scheduling...");
+  await ensurePickupScheduling(container);
+  logger.info("Finished seeding pickup scheduling.");
 }

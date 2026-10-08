@@ -171,6 +171,48 @@ export async function setCartPickupSite(stockLocationId: string): Promise<
     }))
 }
 
+/*
+
+Guarda la fecha de retiro del carrito (POST /store/carts/:id/pickup-date,
+`metadata.pickup_date`). El backend valida que el carrito tenga site y que
+la fecha tenga cupo, pero no reserva el cupo: eso ocurre al confirmar el
+pedido. Si se cambia el site en el carrito, el backend borra la fecha.
+
+*/
+export async function setCartPickupDate(
+  fecha: string
+): Promise<{ fecha: string; error?: never } | { error: string }> {
+  const cartId = await getCartId()
+
+  if (!cartId) {
+    return { error: "No encontramos tu carrito. Recarga la página e intenta de nuevo." }
+  }
+
+  const headers = {
+    ...(await getAuthHeaders()),
+  }
+
+  return sdk.client
+    .fetch<{ pickup_date: { fecha: string } }>(
+      `/store/carts/${cartId}/pickup-date`,
+      {
+        method: "POST",
+        headers,
+        body: { fecha },
+      }
+    )
+    .then(async (res) => {
+      revalidateTag(await getCacheTag("carts"))
+      return { fecha: res.pickup_date.fecha }
+    })
+    .catch((error) => ({
+      error: userErrorMessage(
+        error,
+        "No se pudo guardar la fecha de retiro. Intenta nuevamente."
+      ),
+    }))
+}
+
 export async function addToCart({
   variantId,
   quantity,
