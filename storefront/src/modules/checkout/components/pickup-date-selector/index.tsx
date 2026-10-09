@@ -28,6 +28,9 @@ sala" del checkout.
   ocurre al confirmar el pedido; si alguien toma el último cupo entre
   medio, el checkout responde con el error del backend.
 - Con 5 cupos o menos avisa "Últimos cupos" (no muestra el número).
+- Si la fecha guardada ya no sirve (se llenó, se cerró, o ya pasó porque
+  el carrito quedó de un día para otro), lo dice y pide elegir otra; el
+  botón "Confirmar pedido" queda deshabilitado hasta entonces.
 - Mientras se guarda muestra "Guardando la fecha…"; "Retiras el …" aparece
   recién cuando el backend la guardó (si se recarga antes, la fecha no
   quedaría guardada).
@@ -58,6 +61,23 @@ const Notice = ({
     {children}
   </p>
 )
+
+/**
+ * Por qué la fecha guardada ya no sirve: el día se llenó o se cerró
+ * (sigue en la lista, deshabilitado), o ya pasó o quedó fuera del rango
+ * (no está en la lista, p. ej. un carrito que se dejó de un día para otro).
+ */
+const invalidMessage = (
+  fecha: string,
+  slot: PickupSlots["fechas"][number] | undefined
+) => {
+  if (!slot) {
+    return `El ${formatPickupDate(fecha)} ya no está disponible para retiro. Elige otra fecha.`
+  }
+  return `El ${formatPickupDate(fecha)} ya no está disponible${
+    slot.motivo ? ` (${slot.motivo})` : ""
+  }. Elige otra fecha.`
+}
 
 const PickupDateSelector = ({ slots, selected, siteName }: Props) => {
   const router = useRouter()
@@ -140,7 +160,7 @@ const PickupDateSelector = ({ slots, selected, siteName }: Props) => {
               data-testid="pickup-date-invalid"
             >
               <ExclamationCircleSolid aria-hidden="true" />
-              La fecha que elegiste ya no tiene cupo. Elige otra.
+              {invalidMessage(chosen, chosenSlot)}
             </p>
           ) : (
             <p className="text-base text-neutral-600">

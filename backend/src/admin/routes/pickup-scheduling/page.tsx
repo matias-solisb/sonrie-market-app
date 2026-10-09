@@ -1,5 +1,5 @@
 import { defineRouteConfig } from "@medusajs/admin-sdk";
-import { Calendar, PencilSquare, Trash } from "@medusajs/icons";
+import { Calendar, ExclamationCircle, PencilSquare, Trash } from "@medusajs/icons";
 import {
   Badge,
   Button,
@@ -15,11 +15,11 @@ import {
   Tabs,
   Text,
   toast,
-  Toaster,
   usePrompt,
 } from "@medusajs/ui";
 import { ReactNode, useEffect, useMemo, useState } from "react";
 import {
+  fetchPickupBookingsOn,
   PickupChange,
   PickupException,
   PickupExceptionTipo,
@@ -31,6 +31,7 @@ import {
   useDeletePickupException,
   useLoadPickupHolidays,
   usePickupChanges,
+  usePickupConflicts,
   usePickupExceptions,
   usePickupHolidayYears,
   usePickupOccupancy,
@@ -56,6 +57,15 @@ Pestañas:
   nacionales de Chile (los irrenunciables no se pueden abrir).
 - Ocupación: cupos tomados y libres de los próximos 14 días por site.
 - Historial: quién cambió qué (auditoría).
+
+Arriba de las pestañas se listan los pedidos agendados en días que hoy
+están cerrados (se cerró el día o se cargó un feriado después de que el
+colaborador eligió la fecha): cerrar un día no anula ni mueve pedidos, hay
+que avisarles. Antes de cerrar un día con pedidos, la página pide
+confirmación.
+
+Los avisos usan `toast` sin un <Toaster /> propio: el Admin ya tiene uno
+(con dos, cada aviso salía duplicado).
 
 Un campo vacío en un site = usa el valor general. En el MVP cualquier
 usuario del Admin puede editar la agenda (el RBAC llega en la Fase 2).
@@ -138,6 +148,40 @@ const Field = ({
     )}
   </div>
 );
+
+type PromptFn = ReturnType<typeof usePrompt>;
+
+/**
+ * Antes de cerrar un día: si tiene pedidos agendados, pide confirmación
+ * (cerrar no los anula ni los mueve). Devuelve false si el admin cancela.
+ * Si la consulta falla, deja seguir: el aviso de pedidos en días cerrados
+ * igual los va a mostrar.
+ */
+const confirmarCierre = async (
+  prompt: PromptFn,
+  fecha: string,
+  stockLocationId: string | null,
+  donde: string
+) => {
+  let pedidos = 0;
+
+  try {
+    pedidos = (await fetchPickupBookingsOn(fecha, stockLocationId)).bookings.length;
+  } catch {
+    return true;
+  }
+
+  if (!pedidos) return true;
+
+  return prompt({
+    title: "Hay pedidos agendados ese día",
+    description: `${pedidos} ${
+      pedidos === 1 ? "pedido tiene" : "pedidos tienen"
+    } retiro el ${fechaCorta(fecha)} en ${donde}. Cerrar el día no los anula ni los mueve: hay que avisar a esos colaboradores. ¿Guardar igual?`,
+    confirmText: "Guardar igual",
+    cancelText: "Cancelar",
+  });
+};
 
 // ─────────────────────────────────────────────────────────────────────
 // General
@@ -622,6 +666,7 @@ const ExceptionDrawer = ({
   const [motivo, setMotivo] = useState("");
   const create = useCreatePickupException();
   const update = useUpdatePickupException();
+  const prompt = usePrompt();
 
   const reset = () => {
     setFecha(exception?.fecha ?? "");
@@ -647,6 +692,25 @@ const ExceptionDrawer = ({
       capacidad: cap,
       motivo: motivo.trim() || null,
     };
+
+    // Cerrar un día (nuevo cierre, o un cierre que cambia de fecha o site)
+    // con pedidos agendados: confirmar antes.
+    const cierra =
+      tipo !== "abierto" &&
+      (!exception ||
+        exception.tipo === "abierto" ||
+        exception.fecha !== body.fecha ||
+        exception.stock_location_id !== body.stock_location_id);
+
+    if (cierra) {
+      const donde = esGlobal
+        ? "todos los sites"
+        : sites.find((s) => s.id === site)?.name ?? "el site";
+
+      if (!(await confirmarCierre(prompt, fecha, body.stock_location_id, donde))) {
+        return;
+      }
+    }
 
     try {
       if (exception) {
@@ -811,6 +875,19 @@ const CalendarioTab = ({ sites }: { sites: PickupSiteRow[] }) => {
   };
 
   const eliminar = async (exc: PickupException) => {
+    // Quitar una apertura especial puede dejar el día cerrado.
+    if (
+      exc.tipo === "abierto" &&
+      !(await confirmarCierre(
+        prompt,
+        exc.fecha,
+        exc.stock_location_id,
+        exc.site_name ?? "el site"
+      ))
+    ) {
+      return;
+    }
+
     const ok = await prompt({
       title: "Eliminar excepción",
       description: `¿Eliminar la excepción del ${fechaCorta(exc.fecha)} (${
@@ -1178,6 +1255,74 @@ const HistorialTab = () => {
 };
 
 // ─────────────────────────────────────────────────────────────────────
+// Pedidos en días cerrados
+// ─────────────────────────────────────────────────────────────────────
+
+const ConflictsAlert = () => {
+  const { data } = usePickupConflicts();
+  const conflicts = data?.conflicts ?? [];
+
+  if (!conflicts.length) return null;
+
+  return (
+    <Container
+      className="flex flex-col gap-y-3 border border-ui-tag-orange-border bg-ui-tag-orange-bg p-6"
+      data-testid="pickup-conflicts"
+    >
+      <div className="flex items-start gap-x-2">
+        <ExclamationCircle className="mt-0.5 shrink-0 text-ui-tag-orange-icon" />
+        <div className="flex flex-col gap-y-1">
+          <Heading level="h2">
+            {conflicts.length === 1
+              ? "1 pedido tiene retiro en un día cerrado"
+              : `${conflicts.length} pedidos tienen retiro en un día cerrado`}
+          </Heading>
+          <Text size="small" className="text-ui-fg-subtle">
+            El día se cerró después de que el colaborador eligió la fecha.
+            Cerrar un día no anula ni mueve pedidos: avisa al colaborador y,
+            si no puede retirar otro día, anula el pedido (se devuelven el
+            cupo y el beneficio).
+          </Text>
+        </div>
+      </div>
+      <Table>
+        <Table.Header>
+          <Table.Row>
+            <Table.HeaderCell>Pedido</Table.HeaderCell>
+            <Table.HeaderCell>Colaborador</Table.HeaderCell>
+            <Table.HeaderCell>Site</Table.HeaderCell>
+            <Table.HeaderCell>Fecha</Table.HeaderCell>
+            <Table.HeaderCell>Motivo del cierre</Table.HeaderCell>
+          </Table.Row>
+        </Table.Header>
+        <Table.Body>
+          {conflicts.map((c) => (
+            <Table.Row key={c.booking_id}>
+              <Table.Cell>
+                {c.order ? (
+                  <a
+                    href={`/app/orders/${c.order.id}`}
+                    className="text-ui-fg-interactive hover:underline"
+                  >
+                    #{c.order.display_id}
+                  </a>
+                ) : (
+                  <span className="text-ui-fg-subtle">En proceso</span>
+                )}
+              </Table.Cell>
+              <Table.Cell>{c.order?.email ?? "—"}</Table.Cell>
+              <Table.Cell>{c.site_name ?? c.stock_location_id}</Table.Cell>
+              <Table.Cell>{fechaCorta(c.fecha)}</Table.Cell>
+              <Table.Cell>{c.motivo ?? ORIGEN[c.origen]}</Table.Cell>
+            </Table.Row>
+          ))}
+        </Table.Body>
+      </Table>
+    </Container>
+  );
+};
+
+// ─────────────────────────────────────────────────────────────────────
 // Página
 // ─────────────────────────────────────────────────────────────────────
 
@@ -1195,6 +1340,8 @@ const PickupSchedulingPage = () => {
           ya hechos mantienen su fecha.
         </Text>
       </Container>
+
+      <ConflictsAlert />
 
       <Container className="p-0 overflow-hidden">
         {isPending ? (
@@ -1234,8 +1381,6 @@ const PickupSchedulingPage = () => {
           </Tabs>
         )}
       </Container>
-
-      <Toaster />
     </div>
   );
 };

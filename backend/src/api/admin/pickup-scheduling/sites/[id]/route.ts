@@ -21,7 +21,7 @@ export const POST = async (
 
   const config = await pickupService(req).upsertSiteSlotConfig(
     { stock_location_id: site.id, ...req.validatedBody },
-    actorOf(req)
+    await actorOf(req)
   );
 
   res.json({

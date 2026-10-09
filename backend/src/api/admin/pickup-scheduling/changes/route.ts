@@ -10,7 +10,8 @@ import { pickupService, siteNames } from "../utils";
 GET /admin/pickup-scheduling/changes
 
 Últimos 100 cambios de la agenda (auditoría), el más reciente primero, con
-el usuario del Admin que hizo cada uno y el nombre del site.
+el usuario del Admin que hizo cada uno (o el correo guardado, si ya no
+existe) y el nombre del site.
 
 */
 export const GET = async (req: AuthenticatedMedusaRequest, res: MedusaResponse) => {
@@ -46,7 +47,10 @@ export const GET = async (req: AuthenticatedMedusaRequest, res: MedusaResponse) 
       site_name: c.stock_location_id ? names.get(c.stock_location_id) ?? null : null,
       referencia: c.referencia,
       cambios: c.cambios,
-      actor: c.actor_id ? byId.get(c.actor_id) ?? { id: c.actor_id, email: null } : null,
+      // Si el usuario se eliminó, queda el correo que tenía al hacer el cambio.
+      actor: c.actor_id
+        ? byId.get(c.actor_id) ?? { id: c.actor_id, email: c.actor_email ?? null }
+        : null,
     })),
   });
 };

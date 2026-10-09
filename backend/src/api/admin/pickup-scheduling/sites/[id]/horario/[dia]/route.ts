@@ -39,7 +39,7 @@ export const POST = async (
 
   const horario = await pickupService(req).upsertSiteSchedule(
     { stock_location_id: site.id, dia_semana: dia, ...req.validatedBody },
-    actorOf(req)
+    await actorOf(req)
   );
 
   res.json({
@@ -58,7 +58,7 @@ export const DELETE = async (
   const site = await requireSite(req, req.params.id);
   const dia = parseDia(req.params.dia);
 
-  await pickupService(req).deleteSiteSchedule(site.id, dia, actorOf(req));
+  await pickupService(req).deleteSiteSchedule(site.id, dia, await actorOf(req));
 
   res.json({ dia_semana: dia, deleted: true });
 };

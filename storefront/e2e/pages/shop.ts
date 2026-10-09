@@ -115,6 +115,8 @@ export class CheckoutPage {
     get availableDates() { return this.page.locator('[data-testid="pickup-date-option"][data-disponible="true"]') }
     get unavailableDates() { return this.page.locator('[data-testid="pickup-date-option"][data-disponible="false"]') }
     get selectedDate() { return this.page.getByTestId("pickup-date-selected") }
+    /** Aviso de que la fecha guardada ya no sirve (se cerró, se llenó o ya pasó). */
+    get invalidDate() { return this.page.getByTestId("pickup-date-invalid") }
     get dateError() { return this.page.getByTestId("pickup-date-error") }
 
     /** Fecha elegida (data-fecha del botón presionado), o null. */

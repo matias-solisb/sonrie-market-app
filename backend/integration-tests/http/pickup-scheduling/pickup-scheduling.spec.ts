@@ -525,5 +525,249 @@ medusaIntegrationTestRunner({
         expect(await ocupados(b.fecha)).toBe(0);
       });
     });
+
+    /*
+    Errores y correcciones del colaborador: la fecha guardada en el carrito
+    deja de servir entre que la eligió y que confirma (el carrito quedó de
+    un día para otro, o el Admin cerró el día), o se intenta saltar la
+    validación escribiendo la metadata del carrito a mano. En todos los
+    casos el checkout rechaza sin tomar cupo ni beneficio, y el colaborador
+    puede corregir eligiendo otra fecha. Después de comprar, la única
+    corrección es que el Admin anule el pedido y el colaborador vuelva a
+    comprar.
+    */
+    describe("errores y correcciones del colaborador", () => {
+      const fechaDelCarrito = async (cartId: string) =>
+        (await api.get(`/store/carts/${cartId}`, shop.storeHeaders)).data.cart
+          .metadata.pickup_date as string;
+
+      /**
+       * Escribe `metadata.pickup_date` con la API estándar del carrito, que
+       * no pasa por la validación de POST /store/carts/:id/pickup-date.
+       * Conserva el resto de la metadata (el site elegido).
+       */
+      const metadataAMano = async (cartId: string, pickup_date: unknown) => {
+        const { metadata } = (
+          await api.get(`/store/carts/${cartId}`, shop.storeHeaders)
+        ).data.cart;
+        const res = await api.post(
+          `/store/carts/${cartId}`,
+          { metadata: { ...metadata, pickup_date } },
+          shop.storeHeaders
+        );
+        expect(res.status).toBe(200);
+      };
+
+      const sinEfectos = async (cartId: string) => {
+        expect(await pickup.listPickupBookings({ cart_id: cartId })).toHaveLength(0);
+        expect((await storeBalance(api, shop.storeHeaders)).consumido).toBe(0);
+      };
+
+      it("fecha vencida: la fecha guardada salió del rango, se rechaza y se corrige eligiendo otra", async () => {
+        const cart = await readyCart(api, shop, [{ variant_id: shop.litro, quantity: 1 }]);
+        const fecha = await fechaDelCarrito(cart.id);
+
+        // Mismo efecto que dejar el carrito de un día para otro: la fecha
+        // guardada queda antes del primer día elegible.
+        await pickup.upsertSiteSlotConfig({
+          stock_location_id: shop.site.id,
+          lead_time_dias: 3,
+        });
+
+        const res = await complete(api, cart.id, shop.storeHeaders);
+        expect(res.status).toBe(400);
+        expect(res.data.message).toContain("La fecha de retiro debe ser desde el");
+        await sinEfectos(cart.id);
+
+        // El storefront ya no la ofrece
+        expect((await slots()).fechas.map((f: any) => f.fecha)).not.toContain(fecha);
+
+        const [otra] = await fechasDisponibles();
+        expect((await setPickupDate(api, cart.id, otra, shop.storeHeaders)).status).toBe(200);
+        expect((await complete(api, cart.id, shop.storeHeaders)).status).toBe(200);
+        expect(await ocupados(otra)).toBe(1);
+      });
+
+      it("el Admin cierra el día después de que el colaborador lo eligió: se rechaza con el motivo", async () => {
+        const cart = await readyCart(api, shop, [{ variant_id: shop.litro, quantity: 1 }]);
+        const fecha = await fechaDelCarrito(cart.id);
+
+        const cierre = await api.post(
+          "/admin/pickup-scheduling/exceptions",
+          {
+            fecha,
+            stock_location_id: shop.site.id,
+            tipo: "cerrado",
+            motivo: "Inventario",
+          },
+          adminHeaders
+        );
+        expect(cierre.status).toBe(200);
+
+        const res = await complete(api, cart.id, shop.storeHeaders);
+        expect(res.status).toBe(400);
+        expect(res.data.message).toContain("El site no atiende retiros el");
+        expect(res.data.message).toContain("(Inventario)");
+        await sinEfectos(cart.id);
+
+        const dia = (await slots()).fechas.find((f: any) => f.fecha === fecha);
+        expect(dia).toMatchObject({ disponible: false, motivo: "Inventario" });
+
+        const otra = (await fechasDisponibles()).find((f) => f !== fecha)!;
+        expect((await setPickupDate(api, cart.id, otra, shop.storeHeaders)).status).toBe(200);
+        expect((await complete(api, cart.id, shop.storeHeaders)).status).toBe(200);
+      });
+
+      it("un feriado cargado después de elegir la fecha también se respeta", async () => {
+        const cart = await readyCart(api, shop, [{ variant_id: shop.litro, quantity: 1 }]);
+        const fecha = await fechaDelCarrito(cart.id);
+
+        await api.post(
+          "/admin/pickup-scheduling/exceptions",
+          { fecha, tipo: "feriado", motivo: "Feriado de prueba" },
+          adminHeaders
+        );
+
+        const res = await complete(api, cart.id, shop.storeHeaders);
+        expect(res.status).toBe(400);
+        expect(res.data.message).toContain("(Feriado de prueba)");
+        await sinEfectos(cart.id);
+      });
+
+      describe("saltarse la validación escribiendo la metadata del carrito", () => {
+        it.each([
+          ["un formato inválido", "mañana"],
+          ["una fecha que no existe", "2026-02-30"],
+          ["un número", 20261010],
+        ])("con %s, el checkout la rechaza", async (_caso, valor) => {
+          const cart = await cartWithoutDate();
+          await metadataAMano(cart.id, valor);
+
+          const res = await complete(api, cart.id, shop.storeHeaders);
+          expect(res.status).toBe(400);
+          expect(res.data.message).toMatch(
+            /Elige una fecha de retiro válida|Elige una fecha de retiro antes de confirmar/
+          );
+          await sinEfectos(cart.id);
+        });
+
+        it("con hoy (antes del lead-time), el checkout la rechaza", async () => {
+          const cart = await cartWithoutDate();
+          const [primera] = await fechasDisponibles();
+          const hoy = new Date(Date.parse(`${primera}T12:00:00Z`) - 86400000)
+            .toISOString()
+            .slice(0, 10);
+          await metadataAMano(cart.id, hoy);
+
+          const res = await complete(api, cart.id, shop.storeHeaders);
+          expect(res.status).toBe(400);
+          expect(res.data.message).toContain("La fecha de retiro debe ser desde el");
+          await sinEfectos(cart.id);
+        });
+
+        it("con un día cerrado, el checkout la rechaza", async () => {
+          const cart = await cartWithoutDate();
+          const [fecha] = await fechasDisponibles();
+          await pickup.createException({
+            fecha,
+            stock_location_id: shop.site.id,
+            tipo: "cerrado",
+            motivo: "Mantención",
+          });
+          await metadataAMano(cart.id, fecha);
+
+          const res = await complete(api, cart.id, shop.storeHeaders);
+          expect(res.status).toBe(400);
+          expect(res.data.message).toContain("(Mantención)");
+          await sinEfectos(cart.id);
+        });
+
+        it("con un día sin cupos, el checkout la rechaza", async () => {
+          await capacidadDelSite(0);
+          const cart = await cartWithoutDate();
+          const fecha = (await slots()).fechas[0].fecha;
+          await metadataAMano(cart.id, fecha);
+
+          const res = await complete(api, cart.id, shop.storeHeaders);
+          expect(res.status).toBe(400);
+          expect(res.data.message).toContain("No quedan cupos de retiro");
+          await sinEfectos(cart.id);
+        });
+      });
+
+      it("el mismo colaborador anula y vuelve a comprar para el mismo día lleno", async () => {
+        await capacidadDelSite(1);
+        const primero = await readyCart(api, shop, [{ variant_id: shop.litro, quantity: 2 }]);
+        const fecha = await fechaDelCarrito(primero.id);
+        const res = await complete(api, primero.id, shop.storeHeaders);
+        expect(res.status).toBe(200);
+        const [b] = await pickup.listPickupBookings({ cart_id: primero.id });
+        await waitFor(
+          async () => (await pickup.retrievePickupBooking(b.id)).estado === "confirmado"
+        );
+
+        // Lleno: el mismo colaborador no puede tomar un segundo cupo ese día
+        const segundo = await cartWithoutDate();
+        const lleno = await setPickupDate(api, segundo.id, fecha, shop.storeHeaders);
+        expect(lleno.status).toBe(400);
+        expect(lleno.data.message).toContain("No quedan cupos de retiro");
+
+        // Se equivocó: el Admin anula el primero y vuelve a comprar
+        await api.post(`/admin/orders/${res.data.order.id}/cancel`, {}, adminHeaders);
+        await waitFor(
+          async () => (await pickup.retrievePickupBooking(b.id)).estado === "liberado"
+        );
+        await waitFor(
+          async () => (await storeBalance(api, shop.storeHeaders)).consumido === 0
+        );
+
+        expect((await setPickupDate(api, segundo.id, fecha, shop.storeHeaders)).status).toBe(200);
+        expect((await complete(api, segundo.id, shop.storeHeaders)).status).toBe(200);
+
+        expect(await ocupados(fecha)).toBe(1);
+        // Solo cuenta el pedido vigente (1 × $10.000)
+        expect((await storeBalance(api, shop.storeHeaders)).consumido).toBe(10000);
+        const activos = (await pickup.listPickupBookings({ fecha })).filter(
+          (x: any) => x.estado !== "liberado"
+        );
+        expect(activos).toHaveLength(1);
+      });
+
+      it("editar un pedido en el Admin (quitar unidades) no mueve ni libera su cupo", async () => {
+        const cart = await readyCart(api, shop, [{ variant_id: shop.litro, quantity: 2 }]);
+        const fecha = await fechaDelCarrito(cart.id);
+        const res = await complete(api, cart.id, shop.storeHeaders);
+        expect(res.status).toBe(200);
+        const order = res.data.order;
+        const [b] = await pickup.listPickupBookings({ cart_id: cart.id });
+        await waitFor(
+          async () => (await pickup.retrievePickupBooking(b.id)).estado === "confirmado"
+        );
+
+        const { order_change } = (
+          await api.post("/admin/order-edits", { order_id: order.id }, adminHeaders)
+        ).data;
+        await api.post(
+          `/admin/order-edits/${order.id}/items/item/${order.items[0].id}`,
+          { quantity: 1 },
+          adminHeaders
+        );
+        await api.post(`/admin/order-edits/${order.id}/request`, {}, adminHeaders);
+        const confirmado = await api.post(
+          `/admin/order-edits/${order.id}/confirm`,
+          {},
+          adminHeaders
+        );
+        expect(order_change).toBeDefined();
+        expect(confirmado.status).toBe(200);
+
+        expect(await pickup.retrievePickupBooking(b.id)).toMatchObject({
+          estado: "confirmado",
+          order_id: order.id,
+          fecha,
+        });
+        expect(await ocupados(fecha)).toBe(1);
+      });
+    });
   },
 });

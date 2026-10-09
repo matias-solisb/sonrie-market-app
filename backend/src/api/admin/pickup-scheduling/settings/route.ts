@@ -27,7 +27,7 @@ export const POST = async (
 ) => {
   const settings = await pickupService(req).updateSettings(
     req.validatedBody,
-    actorOf(req)
+    await actorOf(req)
   );
 
   res.json({ settings });

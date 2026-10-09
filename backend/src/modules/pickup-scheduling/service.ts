@@ -24,6 +24,7 @@ import {
 import { FERIADOS_CHILE } from "./data/feriados-chile";
 import {
   AvailableDate,
+  BookingConflict,
   BookingWindow,
   CreateExceptionInput,
   EstadoBooking,
@@ -64,7 +65,8 @@ Además del CRUD que genera `MedusaService`, expone:
   validaciones y la auditoría.
 - Disponibilidad: `getWindow`, `resolveDays`, `listAvailableDates`,
   `listDays` (ocupación de un rango), `assertDateBookable` (valida sin
-  reservar).
+  reservar), `listBookingConflicts` (pedidos agendados en días que se
+  cerraron después).
 - Ciclo del cupo:
     `reserveBooking` / `revertBooking`   checkout y su compensación
     `confirmBooking`                     order.placed
@@ -159,8 +161,19 @@ const firstNonNull = (...values: (number | null | undefined)[]) =>
 
 type Cambios = Record<string, { anterior: unknown; nuevo: unknown }>;
 
+/**
+ * Quién hace un cambio administrativo: el usuario del Admin (id, o id y
+ * correo) o null si es un script o el sistema. El correo se guarda tal como
+ * estaba al momento del cambio, para que el historial lo conserve aunque el
+ * usuario se elimine después.
+ */
+export type AuditActor = string | { id: string; email?: string | null } | null;
+
+/** Clave del contexto donde se juntan los logs hasta el commit. */
+const AUDIT_LOGS = "pickupAuditLogs";
+
 type AuditInput = {
-  actor_id: string | null;
+  actor_id: AuditActor;
   entidad: "configuracion" | "site" | "horario" | "excepcion";
   accion: "crear" | "editar" | "eliminar";
   stock_location_id?: string | null;
@@ -299,10 +312,21 @@ class PickupSchedulingModuleService extends MedusaService({
    * Edita la configuración global. `actorId`: usuario del Admin, para la
    * auditoría (null = script o sistema).
    */
-  @InjectTransactionManager()
+  @InjectManager()
   async updateSettings(
     input: UpdatePickupSettingInput,
-    actorId: string | null = null,
+    actorId: AuditActor = null,
+    @MedusaContext() sharedContext: Context = {}
+  ): Promise<Setting> {
+    return this.withAuditLog_(sharedContext, (ctx) =>
+      this.updateSettings_(input, actorId, ctx)
+    );
+  }
+
+  @InjectTransactionManager()
+  protected async updateSettings_(
+    input: UpdatePickupSettingInput,
+    actorId: AuditActor = null,
     @MedusaContext() sharedContext: Context = {}
   ): Promise<Setting> {
     const current = await this.getSettings(sharedContext);
@@ -366,10 +390,21 @@ class PickupSchedulingModuleService extends MedusaService({
    * Crea o actualiza la configuración de un site. Los campos que no vienen
    * en `input` no se tocan; null = heredar el valor global.
    */
-  @InjectTransactionManager()
+  @InjectManager()
   async upsertSiteSlotConfig(
     input: UpsertSiteSlotConfigInput,
-    actorId: string | null = null,
+    actorId: AuditActor = null,
+    @MedusaContext() sharedContext: Context = {}
+  ) {
+    return this.withAuditLog_(sharedContext, (ctx) =>
+      this.upsertSiteSlotConfig_(input, actorId, ctx)
+    );
+  }
+
+  @InjectTransactionManager()
+  protected async upsertSiteSlotConfig_(
+    input: UpsertSiteSlotConfigInput,
+    actorId: AuditActor = null,
     @MedusaContext() sharedContext: Context = {}
   ) {
     const { stock_location_id, ...data } = input;
@@ -429,10 +464,21 @@ class PickupSchedulingModuleService extends MedusaService({
    * Crea o actualiza el horario de un día de la semana de un site. Si no
    * viene `capacidad`, se mantiene la actual; cerrar el día la limpia.
    */
-  @InjectTransactionManager()
+  @InjectManager()
   async upsertSiteSchedule(
     input: UpsertSiteScheduleInput,
-    actorId: string | null = null,
+    actorId: AuditActor = null,
+    @MedusaContext() sharedContext: Context = {}
+  ) {
+    return this.withAuditLog_(sharedContext, (ctx) =>
+      this.upsertSiteSchedule_(input, actorId, ctx)
+    );
+  }
+
+  @InjectTransactionManager()
+  protected async upsertSiteSchedule_(
+    input: UpsertSiteScheduleInput,
+    actorId: AuditActor = null,
     @MedusaContext() sharedContext: Context = {}
   ) {
     const { stock_location_id, dia_semana, abierto } = input;
@@ -491,11 +537,23 @@ class PickupSchedulingModuleService extends MedusaService({
    * Quita el horario propio de un día de la semana: el site vuelve a usar
    * los días abiertos y la capacidad generales. Si no había, no hace nada.
    */
-  @InjectTransactionManager()
+  @InjectManager()
   async deleteSiteSchedule(
     stockLocationId: string,
     diaSemana: number,
-    actorId: string | null = null,
+    actorId: AuditActor = null,
+    @MedusaContext() sharedContext: Context = {}
+  ): Promise<void> {
+    return this.withAuditLog_(sharedContext, (ctx) =>
+      this.deleteSiteSchedule_(stockLocationId, diaSemana, actorId, ctx)
+    );
+  }
+
+  @InjectTransactionManager()
+  protected async deleteSiteSchedule_(
+    stockLocationId: string,
+    diaSemana: number,
+    actorId: AuditActor = null,
     @MedusaContext() sharedContext: Context = {}
   ): Promise<void> {
     assertDiaSemana(diaSemana);
@@ -533,10 +591,21 @@ class PickupSchedulingModuleService extends MedusaService({
    * - No se puede abrir un site en un feriado irrenunciable.
    * - Una excepción por (fecha, site) y una global por fecha.
    */
-  @InjectTransactionManager()
+  @InjectManager()
   async createException(
     input: CreateExceptionInput,
-    actorId: string | null = null,
+    actorId: AuditActor = null,
+    @MedusaContext() sharedContext: Context = {}
+  ) {
+    return this.withAuditLog_(sharedContext, (ctx) =>
+      this.createException_(input, actorId, ctx)
+    );
+  }
+
+  @InjectTransactionManager()
+  protected async createException_(
+    input: CreateExceptionInput,
+    actorId: AuditActor = null,
     @MedusaContext() sharedContext: Context = {}
   ) {
     const data = {
@@ -571,11 +640,23 @@ class PickupSchedulingModuleService extends MedusaService({
    * Edita una excepción. Los campos que no vienen no se tocan. Aplica las
    * mismas reglas que al crearla.
    */
-  @InjectTransactionManager()
+  @InjectManager()
   async updateException(
     id: string,
     input: UpdateExceptionInput,
-    actorId: string | null = null,
+    actorId: AuditActor = null,
+    @MedusaContext() sharedContext: Context = {}
+  ) {
+    return this.withAuditLog_(sharedContext, (ctx) =>
+      this.updateException_(id, input, actorId, ctx)
+    );
+  }
+
+  @InjectTransactionManager()
+  protected async updateException_(
+    id: string,
+    input: UpdateExceptionInput,
+    actorId: AuditActor = null,
     @MedusaContext() sharedContext: Context = {}
   ) {
     const existing = await this.retrieveSiteScheduleException(
@@ -637,10 +718,21 @@ class PickupSchedulingModuleService extends MedusaService({
   }
 
   /** Elimina una excepción. Si no existe, no hace nada. */
-  @InjectTransactionManager()
+  @InjectManager()
   async deleteException(
     id: string,
-    actorId: string | null = null,
+    actorId: AuditActor = null,
+    @MedusaContext() sharedContext: Context = {}
+  ): Promise<void> {
+    return this.withAuditLog_(sharedContext, (ctx) =>
+      this.deleteException_(id, actorId, ctx)
+    );
+  }
+
+  @InjectTransactionManager()
+  protected async deleteException_(
+    id: string,
+    actorId: AuditActor = null,
     @MedusaContext() sharedContext: Context = {}
   ): Promise<void> {
     const [existing] = await this.listSiteScheduleExceptions(
@@ -674,10 +766,21 @@ class PickupSchedulingModuleService extends MedusaService({
    * excepción global se deja como está (puede haberla editado el admin).
    * Queda un solo registro de auditoría con las fechas creadas.
    */
-  @InjectTransactionManager()
+  @InjectManager()
   async loadHolidays(
     anio: number,
-    actorId: string | null = null,
+    actorId: AuditActor = null,
+    @MedusaContext() sharedContext: Context = {}
+  ): Promise<LoadHolidaysResult> {
+    return this.withAuditLog_(sharedContext, (ctx) =>
+      this.loadHolidays_(anio, actorId, ctx)
+    );
+  }
+
+  @InjectTransactionManager()
+  protected async loadHolidays_(
+    anio: number,
+    actorId: AuditActor = null,
     @MedusaContext() sharedContext: Context = {}
   ): Promise<LoadHolidaysResult> {
     const feriados = FERIADOS_CHILE[anio];
@@ -929,6 +1032,59 @@ class PickupSchedulingModuleService extends MedusaService({
     }
 
     return { capacidad: day.capacidad, ocupados };
+  }
+
+  /**
+   * Pedidos agendados (cupos reservados o confirmados, desde hoy) que caen
+   * en un día que hoy está cerrado: el admin cerró el día, cargó un feriado
+   * o cambió el horario después de que el colaborador eligió la fecha.
+   * Cerrar un día no anula ni mueve esos pedidos; el Admin los muestra para
+   * que alguien avise al colaborador.
+   */
+  @InjectManager()
+  async listBookingConflicts(
+    now: Date = new Date(),
+    @MedusaContext() sharedContext: Context = {}
+  ): Promise<BookingConflict[]> {
+    const hoy = toFecha(now);
+    const bookings = (await this.listPickupBookings(
+      { estado: ["reservado", "confirmado"], fecha: { $gte: hoy } } as any,
+      { order: { fecha: "ASC" } },
+      sharedContext
+    )) as BookingRow[];
+
+    const porSite = new Map<string, BookingRow[]>();
+    for (const b of bookings) {
+      porSite.set(b.stock_location_id, [...(porSite.get(b.stock_location_id) ?? []), b]);
+    }
+
+    const conflicts: BookingConflict[] = [];
+
+    for (const [site, rows] of porSite) {
+      const fechas = [...new Set(rows.map((b) => b.fecha))];
+      const days = await this.resolveDays(site, fechas, sharedContext);
+      const cerrados = new Map(
+        days.filter((d) => !d.abierto).map((d) => [d.fecha, d])
+      );
+
+      for (const b of rows) {
+        const day = cerrados.get(b.fecha);
+        if (day) {
+          conflicts.push({
+            booking_id: b.id,
+            cart_id: b.cart_id,
+            order_id: b.order_id,
+            stock_location_id: b.stock_location_id,
+            fecha: b.fecha,
+            estado: b.estado,
+            origen: day.origen,
+            motivo: day.motivo,
+          });
+        }
+      }
+    }
+
+    return conflicts.sort((a, b) => a.fecha.localeCompare(b.fecha));
   }
 
   // ---------------------------------------------------------------------
@@ -1276,17 +1432,24 @@ class PickupSchedulingModuleService extends MedusaService({
   }
 
   /**
-   * Registra un cambio administrativo (tabla + log). No registra nada si
-   * no cambió ningún campo.
+   * Registra un cambio administrativo en la tabla de auditoría, dentro de
+   * la transacción del cambio. No registra nada si no cambió ningún campo.
+   * El log se escribe después del commit (ver `withAuditLog_`).
    */
   private async audit_(input: AuditInput, sharedContext: Context) {
     if (!Object.keys(input.cambios).length) {
       return null;
     }
 
+    const actor =
+      typeof input.actor_id === "string"
+        ? { id: input.actor_id, email: null }
+        : input.actor_id;
+
     const change = await this.createPickupScheduleChanges(
       {
-        actor_id: input.actor_id,
+        actor_id: actor?.id ?? null,
+        actor_email: actor?.email ?? null,
         entidad: input.entidad,
         accion: input.accion,
         stock_location_id: input.stock_location_id ?? null,
@@ -1296,15 +1459,54 @@ class PickupSchedulingModuleService extends MedusaService({
       sharedContext
     );
 
-    this.logger_?.info(
-      `pickup-scheduling: ${input.entidad} ${input.accion}${
-        input.stock_location_id ? ` (site ${input.stock_location_id})` : ""
-      }${input.referencia ? ` [${input.referencia}]` : ""} por ${
-        input.actor_id ?? "sistema"
-      }: ${JSON.stringify(input.cambios)}`
-    );
+    const log = {
+      evento: "pickup_scheduling.cambio",
+      id: change.id,
+      fecha_hora: new Date(change.created_at ?? Date.now()).toISOString(),
+      actor_id: change.actor_id,
+      actor_email: change.actor_email,
+      entidad: change.entidad,
+      accion: change.accion,
+      stock_location_id: change.stock_location_id,
+      referencia: change.referencia,
+      cambios: input.cambios,
+    };
+
+    const pending = (sharedContext as any)[AUDIT_LOGS] as
+      | Record<string, unknown>[]
+      | undefined;
+
+    if (pending) {
+      pending.push(log);
+    } else {
+      this.logger_?.info(JSON.stringify(log));
+    }
 
     return change;
+  }
+
+  /**
+   * Corre `run` (un método con su propia transacción) y escribe en el log
+   * los cambios auditados recién después del commit: si la transacción
+   * falla, no queda un log de un cambio que no ocurrió.
+   *
+   * Cada línea es un JSON con `evento: "pickup_scheduling.cambio"`, para
+   * filtrarla en Log Analytics con `parse_json`. Si quien llama ya trae una
+   * transacción abierta, el log sale al terminar el método (antes del commit
+   * externo); solo pasa en scripts o tests.
+   */
+  private async withAuditLog_<T>(
+    sharedContext: Context,
+    run: (ctx: Context) => Promise<T>
+  ): Promise<T> {
+    const logs: Record<string, unknown>[] = [];
+    const result = await run({ ...sharedContext, [AUDIT_LOGS]: logs } as Context);
+
+    for (const log of logs) {
+      this.logger_?.info(JSON.stringify(log));
+    }
+
+    return result;
   }
 
   /** Carga en 4 consultas todo lo que se necesita para resolver `fechas`. */

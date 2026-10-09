@@ -614,6 +614,70 @@ moduleIntegrationTestRunner<PickupSchedulingModuleService>({
         });
       });
 
+      it("anular un pedido cuya fecha de retiro ya pasó libera el cupo sin error", async () => {
+        // JUE es anterior a hoy cuando corre el test: la liberación no
+        // depende de la fecha (un pedido no retirado se puede anular después).
+        const { booking_id } = await reservar("cart_1");
+        await service.confirmBooking("cart_1", "order_1");
+
+        const result = await service.releaseBookingByOrder({ order_id: "order_1" });
+
+        expect(result).toMatchObject({ booking_id, released: true });
+        expect(await ocupados(SITE, JUE)).toBe(0);
+        expect(await service.retrievePickupBooking(booking_id)).toMatchObject({
+          estado: "liberado",
+        });
+      });
+
+      it("listBookingConflicts: pedidos agendados en un día que después se cerró", async () => {
+        await reservar("cart_1");
+        await service.confirmBooking("cart_1", "order_1");
+        await service.reserveBooking({
+          cart_id: "cart_2",
+          stock_location_id: SITE_B,
+          fecha: JUE,
+          now: NOW,
+        });
+
+        expect(await service.listBookingConflicts(NOW)).toEqual([]);
+
+        await service.createException({
+          fecha: JUE,
+          stock_location_id: SITE,
+          tipo: "cerrado",
+          motivo: "Inventario",
+        });
+
+        // Solo el del site cerrado; el pedido sigue confirmado
+        expect(await service.listBookingConflicts(NOW)).toEqual([
+          expect.objectContaining({
+            cart_id: "cart_1",
+            order_id: "order_1",
+            stock_location_id: SITE,
+            fecha: JUE,
+            estado: "confirmado",
+            origen: "excepcion_site",
+            motivo: "Inventario",
+          }),
+        ]);
+
+        // Un feriado global alcanza también al otro site
+        await service.createException({ fecha: JUE, tipo: "feriado", motivo: "Feriado" });
+        expect((await service.listBookingConflicts(NOW)).map((c) => c.cart_id).sort()).toEqual([
+          "cart_1",
+          "cart_2",
+        ]);
+
+        // Los liberados y las fechas pasadas no cuentan
+        await service.releaseBookingByOrder({ order_id: "order_1" });
+        expect((await service.listBookingConflicts(NOW)).map((c) => c.cart_id)).toEqual([
+          "cart_2",
+        ]);
+        expect(
+          await service.listBookingConflicts(new Date("2026-10-09T15:00:00Z"))
+        ).toEqual([]);
+      });
+
       it("releaseBookingByOrder libera una sola vez", async () => {
         const { booking_id } = await reservar("cart_1");
         await service.confirmBooking("cart_1", "order_1");
@@ -686,6 +750,23 @@ moduleIntegrationTestRunner<PickupSchedulingModuleService>({
 
       const cambios = () =>
         service.listPickupScheduleChanges({}, { order: { created_at: "ASC" } });
+
+      it("guarda el correo del usuario si se lo pasan, y acepta solo el id", async () => {
+        await service.updateSettings(
+          { capacidad_por_defecto: 5 },
+          { id: "user_1", email: "ana@soprole.cl" }
+        );
+        await service.updateSettings({ capacidad_por_defecto: 6 }, "user_2");
+
+        const rows = await service.listPickupScheduleChanges(
+          { entidad: "configuracion" },
+          { order: { created_at: "ASC" } }
+        );
+        expect(rows.slice(-2)).toEqual([
+          expect.objectContaining({ actor_id: "user_1", actor_email: "ana@soprole.cl" }),
+          expect.objectContaining({ actor_id: "user_2", actor_email: null }),
+        ]);
+      });
 
       it("registra quién cambió la configuración y qué valores tenía", async () => {
         await service.updateSettings({ capacidad_por_defecto: 10 }, ADMIN);

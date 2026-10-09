@@ -29,7 +29,7 @@ export const POST = async (
 ) => {
   const result = await pickupService(req).loadHolidays(
     req.validatedBody.anio,
-    actorOf(req)
+    await actorOf(req)
   );
 
   res.json(result);

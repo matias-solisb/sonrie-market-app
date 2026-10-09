@@ -78,3 +78,13 @@ export const AdminPickupOccupancyQuery = z.object({
   desde: Fecha.optional(),
   hasta: Fecha.optional(),
 });
+
+export const AdminPickupBookingsQuery = z
+  .object({
+    order_id: z.string().min(1).optional(),
+    fecha: Fecha.optional(),
+    stock_location_id: z.string().min(1).optional(),
+  })
+  .refine((q) => q.order_id || q.fecha, {
+    message: "Indica order_id o fecha.",
+  });

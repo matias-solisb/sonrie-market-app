@@ -94,6 +94,39 @@ export type PickupChange = {
   } | null;
 };
 
+export type PickupBookingEstado = "reservado" | "confirmado" | "liberado";
+
+export type PickupOrderRef = {
+  id: string;
+  display_id: number;
+  email: string | null;
+  status: string;
+} | null;
+
+export type PickupBooking = {
+  id: string;
+  order_id: string | null;
+  cart_id: string;
+  stock_location_id: string;
+  site_name: string | null;
+  fecha: string;
+  estado: PickupBookingEstado;
+  order: PickupOrderRef;
+};
+
+export type PickupConflict = {
+  booking_id: string;
+  order_id: string | null;
+  cart_id: string;
+  stock_location_id: string;
+  site_name: string | null;
+  fecha: string;
+  estado: PickupBookingEstado;
+  origen: PickupOccupancyDay["origen"];
+  motivo: string | null;
+  order: PickupOrderRef;
+};
+
 export const pickupSchedulingQueryKey = queryKeysFactory("pickup_scheduling");
 
 const BASE = "/admin/pickup-scheduling";
@@ -147,6 +180,42 @@ export const usePickupChanges = () =>
         method: "GET",
       }),
   });
+
+/** Cupo de retiro de un pedido (widget del detalle del pedido). */
+export const usePickupOrderBooking = (orderId: string) =>
+  useQuery({
+    queryKey: pickupSchedulingQueryKey.list({ booking_order: orderId }),
+    queryFn: () =>
+      sdk.client.fetch<{ bookings: PickupBooking[] }>(
+        `${BASE}/bookings?order_id=${orderId}`,
+        { method: "GET" }
+      ),
+  });
+
+/** Pedidos agendados en días que hoy están cerrados. */
+export const usePickupConflicts = () =>
+  useQuery({
+    queryKey: pickupSchedulingQueryKey.list({ conflicts: true }),
+    queryFn: () =>
+      sdk.client.fetch<{ conflicts: PickupConflict[] }>(`${BASE}/conflicts`, {
+        method: "GET",
+      }),
+  });
+
+/**
+ * Pedidos agendados una fecha (de un site o de todos). Se llama antes de
+ * cerrar un día, para avisar cuántos pedidos quedan afectados.
+ */
+export const fetchPickupBookingsOn = (
+  fecha: string,
+  stockLocationId: string | null
+) =>
+  sdk.client.fetch<{ bookings: PickupBooking[] }>(
+    `${BASE}/bookings?fecha=${fecha}${
+      stockLocationId ? `&stock_location_id=${stockLocationId}` : ""
+    }`,
+    { method: "GET" }
+  );
 
 /** Mutación genérica: llama a la ruta e invalida toda la agenda. */
 const usePickupMutation = <TBody, TResult>(

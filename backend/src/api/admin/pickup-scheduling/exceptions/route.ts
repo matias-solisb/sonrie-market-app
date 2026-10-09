@@ -69,7 +69,7 @@ export const POST = async (
     await requireSite(req, body.stock_location_id);
   }
 
-  const created = await pickupService(req).createException(body, actorOf(req));
+  const created = await pickupService(req).createException(body, await actorOf(req));
 
   res.json({ exception: serialize(created, await siteNames(req)) });
 };

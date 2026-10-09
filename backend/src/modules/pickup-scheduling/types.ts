@@ -20,6 +20,18 @@ export type ResolvedDay = {
   motivo: string | null;
 };
 
+/** Pedido agendado en un día que hoy está cerrado (ver listBookingConflicts). */
+export type BookingConflict = {
+  booking_id: string;
+  cart_id: string;
+  order_id: string | null;
+  stock_location_id: string;
+  fecha: string;
+  estado: EstadoBooking;
+  origen: OrigenDia;
+  motivo: string | null;
+};
+
 export type AvailableDate = ResolvedDay & {
   ocupados: number;
   /** Cupos libres (0 si está cerrado o sin configurar). */

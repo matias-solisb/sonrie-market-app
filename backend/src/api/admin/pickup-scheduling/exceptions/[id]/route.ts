@@ -25,7 +25,7 @@ export const POST = async (
   }
 
   const service = pickupService(req);
-  const updated = await service.updateException(req.params.id, body, actorOf(req));
+  const updated = await service.updateException(req.params.id, body, await actorOf(req));
   const names = await siteNames(req);
 
   res.json({
@@ -52,7 +52,7 @@ export const DELETE = async (
 
   // 404 si no existe
   await service.retrieveSiteScheduleException(req.params.id);
-  await service.deleteException(req.params.id, actorOf(req));
+  await service.deleteException(req.params.id, await actorOf(req));
 
   res.json({ id: req.params.id, deleted: true });
 };

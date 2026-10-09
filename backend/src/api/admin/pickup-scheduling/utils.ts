@@ -24,9 +24,30 @@ retiro (src/utils/pickup-sites.ts) antes de llamar al módulo.
 export const pickupService = (req: MedusaRequest) =>
   req.scope.resolve<PickupSchedulingModuleService>(PICKUP_SCHEDULING_MODULE);
 
-/** Usuario del Admin que hace el cambio, para la auditoría. */
-export const actorOf = (req: AuthenticatedMedusaRequest) =>
-  req.auth_context?.actor_id ?? null;
+/**
+ * Usuario del Admin que hace el cambio, para la auditoría: id y correo (el
+ * correo se guarda tal como está hoy, por si el usuario se elimina después).
+ */
+export const actorOf = async (
+  req: AuthenticatedMedusaRequest
+): Promise<{ id: string; email: string | null } | null> => {
+  const id = req.auth_context?.actor_id;
+
+  if (!id) {
+    return null;
+  }
+
+  const query = req.scope.resolve(ContainerRegistrationKeys.QUERY);
+  const {
+    data: [user],
+  } = await query.graph({
+    entity: "user",
+    fields: ["id", "email"],
+    filters: { id },
+  });
+
+  return { id, email: (user as any)?.email ?? null };
+};
 
 /** El site de retiro, o 404. */
 export const requireSite = async (req: MedusaRequest, stockLocationId: string) => {
@@ -49,6 +70,27 @@ export const siteNames = async (req: MedusaRequest) => {
   const sites = await listPickupSites(query);
 
   return new Map(sites.map((s) => [s.id, s.name]));
+};
+
+/** Datos del pedido para mostrar en el Admin (n.º, correo, estado). */
+export const ordersById = async (req: MedusaRequest, orderIds: string[]) => {
+  if (!orderIds.length) {
+    return new Map<string, any>();
+  }
+
+  const query = req.scope.resolve(ContainerRegistrationKeys.QUERY);
+  const { data } = await query.graph({
+    entity: "order",
+    fields: ["id", "display_id", "email", "status"],
+    filters: { id: orderIds },
+  });
+
+  return new Map<string, any>(
+    data.map((o: any) => [
+      o.id,
+      { id: o.id, display_id: o.display_id, email: o.email, status: o.status },
+    ])
+  );
 };
 
 /** Valida un query string con zod; 400 con el primer error. */
