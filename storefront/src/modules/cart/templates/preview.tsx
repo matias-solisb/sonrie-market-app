@@ -10,19 +10,34 @@ import SkeletonLineItem from "@/modules/skeletons/components/skeleton-line-item"
 type ItemsTemplateProps = {
   items?: HttpTypes.StoreCartLineItem[] | HttpTypes.StoreOrderLineItem[]
   currencyCode: string
+  /** "large": versión del checkout de retiro (ver ItemPreview). */
+  size?: "default" | "large"
 }
 
-const ItemsPreviewTemplate = ({ items, currencyCode }: ItemsTemplateProps) => {
+const ItemsPreviewTemplate = ({
+  items,
+  currencyCode,
+  size = "default",
+}: ItemsTemplateProps) => {
   const hasOverflow = items && items.length > 4
 
   return (
     <div
       className={clx({
         "pl-[1px] overflow-y-scroll overflow-x-hidden no-scrollbar max-h-[420px]":
-          hasOverflow,
+          hasOverflow && size === "default",
+        // En el checkout la barra de scroll queda visible: así se nota que
+        // hay más productos abajo.
+        "overflow-y-auto overflow-x-hidden max-h-[360px] pr-2":
+          hasOverflow && size === "large",
       })}
     >
-      <div className="flex flex-col gap-y-2">
+      <div
+        className={clx(
+          "flex flex-col",
+          size === "large" ? "divide-y divide-neutral-100" : "gap-y-2"
+        )}
+      >
         {items
           ? items
               .sort((a, b) => {
@@ -39,6 +54,7 @@ const ItemsPreviewTemplate = ({ items, currencyCode }: ItemsTemplateProps) => {
                       }
                     }
                     showBorders={false}
+                    size={size}
                   />
                 )
               })

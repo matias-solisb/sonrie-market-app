@@ -8,3 +8,4 @@ export * from "./variants";
 export * from "./customers";
 export * from "./banners";
 export * from "./benefit-budget";
+export * from "./pickup-scheduling";

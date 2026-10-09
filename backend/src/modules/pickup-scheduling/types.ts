@@ -92,3 +92,20 @@ export type CreateExceptionInput = {
   capacidad?: number | null;
   motivo?: string | null;
 };
+
+export type UpdateExceptionInput = {
+  fecha?: string;
+  stock_location_id?: string | null;
+  tipo?: TipoExcepcion;
+  irrenunciable?: boolean;
+  capacidad?: number | null;
+  motivo?: string | null;
+};
+
+export type LoadHolidaysResult = {
+  anio: number;
+  /** Fechas creadas. */
+  creados: string[];
+  /** Fechas que ya tenían una excepción global (no se tocaron). */
+  omitidos: string[];
+};

@@ -4,6 +4,7 @@ import PickupSchedulingModuleService from "../service";
 import {
   PickupBooking,
   PickupOccupancy,
+  PickupScheduleChange,
   PickupSetting,
   SiteSchedule,
   SiteScheduleException,
@@ -43,6 +44,7 @@ moduleIntegrationTestRunner<PickupSchedulingModuleService>({
     SiteScheduleException,
     PickupOccupancy,
     PickupBooking,
+    PickupScheduleChange,
   ],
   resolve: "./src/modules/pickup-scheduling",
   testSuite: ({ service }) => {
@@ -675,6 +677,181 @@ moduleIntegrationTestRunner<PickupSchedulingModuleService>({
 
         expect((await service.retrievePickupBooking(booking_id)).estado).toBe(
           "liberado"
+        );
+      });
+    });
+
+    describe("administración: excepciones, horario, feriados y auditoría", () => {
+      const ADMIN = "user_admin_01";
+
+      const cambios = () =>
+        service.listPickupScheduleChanges({}, { order: { created_at: "ASC" } });
+
+      it("registra quién cambió la configuración y qué valores tenía", async () => {
+        await service.updateSettings({ capacidad_por_defecto: 10 }, ADMIN);
+        await service.updateSettings({ capacidad_por_defecto: 10 }, ADMIN); // sin cambios
+
+        const [change, ...rest] = await cambios();
+        expect(rest).toHaveLength(0);
+        expect(change).toMatchObject({
+          actor_id: ADMIN,
+          entidad: "configuracion",
+          accion: "editar",
+          cambios: { capacidad_por_defecto: { anterior: null, nuevo: 10 } },
+        });
+      });
+
+      it("audita la configuración del site y el horario, y quitar un día vuelve al general", async () => {
+        await service.updateSettings({ capacidad_por_defecto: 10 });
+        await service.upsertSiteSlotConfig(
+          { stock_location_id: SITE, capacidad_diaria: 5 },
+          ADMIN
+        );
+        await service.upsertSiteSchedule(
+          { stock_location_id: SITE, dia_semana: 6, abierto: true, capacidad: 3 },
+          ADMIN
+        );
+        expect(await dia(SITE, SAB)).toMatchObject({ abierto: true, capacidad: 3 });
+
+        await service.deleteSiteSchedule(SITE, 6, ADMIN);
+        await service.deleteSiteSchedule(SITE, 6, ADMIN); // ya no existe: nada
+
+        expect(await dia(SITE, SAB)).toMatchObject({
+          abierto: false,
+          origen: "por_defecto",
+        });
+
+        const registro = (await cambios()).filter((c) => c.actor_id === ADMIN);
+        expect(registro.map((c) => [c.entidad, c.accion, c.referencia])).toEqual([
+          ["site", "crear", null],
+          ["horario", "crear", "6"],
+          ["horario", "eliminar", "6"],
+        ]);
+        expect(registro[0]).toMatchObject({
+          stock_location_id: SITE,
+          cambios: { capacidad_diaria: { anterior: null, nuevo: 5 } },
+        });
+      });
+
+      it("edita una excepción con las mismas reglas que al crearla", async () => {
+        const exc = await service.createException(
+          { fecha: LUN_FERIADO, tipo: "feriado", motivo: "Encuentro" },
+          ADMIN
+        );
+
+        const editada = await service.updateException(
+          exc.id,
+          { irrenunciable: true, motivo: "Encuentro de Dos Mundos" },
+          ADMIN
+        );
+        expect(editada).toMatchObject({
+          irrenunciable: true,
+          motivo: "Encuentro de Dos Mundos",
+        });
+
+        // Pasar a "cerrado" limpia el irrenunciable (solo aplica a feriados).
+        const cerrada = await service.updateException(exc.id, { tipo: "cerrado" });
+        expect(cerrada.irrenunciable).toBe(false);
+
+        await expect(
+          service.updateException(exc.id, { stock_location_id: SITE, irrenunciable: true })
+        ).rejects.toThrow("irrenunciable");
+
+        // No puede chocar con otra excepción global de la misma fecha.
+        const otra = await service.createException({ fecha: JUE, tipo: "cerrado" });
+        await expect(
+          service.updateException(otra.id, { fecha: LUN_FERIADO })
+        ).rejects.toThrow("Ya existe una excepción global el 12-10-2026");
+
+        const registro = (await cambios()).filter(
+          (c) => c.entidad === "excepcion" && c.actor_id === ADMIN
+        );
+        expect(registro.map((c) => c.accion)).toEqual(["crear", "editar"]);
+        expect(registro[1].cambios).toEqual({
+          irrenunciable: { anterior: false, nuevo: true },
+          motivo: { anterior: "Encuentro", nuevo: "Encuentro de Dos Mundos" },
+        });
+      });
+
+      it("elimina una excepción y lo registra", async () => {
+        await service.updateSettings({ capacidad_por_defecto: 10 });
+        const exc = await service.createException({
+          fecha: JUE,
+          stock_location_id: SITE,
+          tipo: "cerrado",
+        });
+        expect((await dia(SITE, JUE)).abierto).toBe(false);
+
+        await service.deleteException(exc.id, ADMIN);
+        await service.deleteException(exc.id, ADMIN); // ya no existe: nada
+
+        expect((await dia(SITE, JUE)).abierto).toBe(true);
+        const [ultimo] = (await cambios()).slice(-1);
+        expect(ultimo).toMatchObject({
+          entidad: "excepcion",
+          accion: "eliminar",
+          referencia: JUE,
+          stock_location_id: SITE,
+        });
+      });
+
+      it("carga los feriados de Chile una sola vez y respeta los ya editados", async () => {
+        await service.createException({
+          fecha: LUN_FERIADO,
+          tipo: "cerrado",
+          motivo: "Editado a mano",
+        });
+
+        const first = await service.loadHolidays(2026, ADMIN);
+        const second = await service.loadHolidays(2026, ADMIN);
+
+        expect(first.creados).toHaveLength(15);
+        expect(first.omitidos).toEqual([LUN_FERIADO]);
+        expect(second.creados).toHaveLength(0);
+        expect(second.omitidos).toHaveLength(16);
+
+        const [navidad] = await service.listSiteScheduleExceptions({
+          fecha: NAVIDAD,
+          stock_location_id: null,
+        });
+        expect(navidad).toMatchObject({
+          tipo: "feriado",
+          irrenunciable: true,
+          motivo: "Navidad",
+        });
+        const [lunes] = await service.listSiteScheduleExceptions({ fecha: LUN_FERIADO });
+        expect(lunes.motivo).toBe("Editado a mano");
+
+        const registro = (await cambios()).filter((c) => c.referencia === "feriados-2026");
+        expect(registro).toHaveLength(1);
+
+        await expect(service.loadHolidays(2031)).rejects.toThrow(
+          "No hay feriados cargados para 2031"
+        );
+      });
+
+      it("listDays muestra la ocupación de cualquier rango", async () => {
+        await service.updateSettings({ capacidad_por_defecto: 2 });
+        await service.reserveBooking({
+          cart_id: "cart_1",
+          stock_location_id: SITE,
+          fecha: JUE,
+          now: NOW,
+        });
+
+        const dias = await service.listDays(SITE, "2026-10-01", "2026-10-10");
+        expect(dias).toHaveLength(10);
+        expect(dias.find((d) => d.fecha === JUE)).toMatchObject({
+          capacidad: 2,
+          ocupados: 1,
+          disponibles: 1,
+        });
+
+        await expect(service.listDays(SITE, "2026-10-10", "2026-10-01")).rejects.toThrow(
+          "no puede ser anterior"
+        );
+        await expect(service.listDays(SITE, "2026-01-01", "2026-12-31")).rejects.toThrow(
+          "93 días"
         );
       });
     });

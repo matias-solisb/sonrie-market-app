@@ -4,7 +4,14 @@ import { setCartPickupDate } from "@/lib/data/cart"
 import { PickupSlots } from "@/lib/data/pickup-slots"
 import { formatPickupDate, pickupDateParts } from "@/lib/util/pickup-date"
 import ErrorMessage from "@/modules/checkout/components/error-message"
-import { clx, Text } from "@medusajs/ui"
+import {
+  CalendarSolid,
+  CheckCircleSolid,
+  CheckMini,
+  ExclamationCircleSolid,
+  Spinner,
+} from "@medusajs/icons"
+import { clx } from "@medusajs/ui"
 import { useRouter } from "next/navigation"
 import { useState, useTransition } from "react"
 
@@ -28,6 +35,9 @@ sala" del checkout.
 Botones con aria-pressed (no radios): cada botón es una acción que guarda
 la fecha, y así se navega con Tab como el resto del checkout.
 
+Diseño: botones grandes (día en número grande) para que sea fácil de leer y
+de tocar a cualquier edad; el día elegido queda en azul sólido con un ✓.
+
 */
 const FEW_SLOTS = 5
 
@@ -37,6 +47,18 @@ type Props = {
   siteName: string
 }
 
+const Notice = ({
+  children,
+  ...props
+}: React.HTMLAttributes<HTMLParagraphElement>) => (
+  <p
+    className="rounded-xl bg-neutral-50 px-4 py-3 text-base text-neutral-700"
+    {...props}
+  >
+    {children}
+  </p>
+)
+
 const PickupDateSelector = ({ slots, selected, siteName }: Props) => {
   const router = useRouter()
   const [chosen, setChosen] = useState<string | null>(selected)
@@ -45,9 +67,9 @@ const PickupDateSelector = ({ slots, selected, siteName }: Props) => {
 
   if (!slots) {
     return (
-      <Text className="text-ui-fg-subtle" data-testid="pickup-dates-error">
+      <Notice data-testid="pickup-dates-error">
         No pudimos cargar las fechas de retiro. Recarga la página para intentar de nuevo.
-      </Text>
+      </Notice>
     )
   }
 
@@ -78,50 +100,69 @@ const PickupDateSelector = ({ slots, selected, siteName }: Props) => {
 
   if (!hasAvailable) {
     return (
-      <Text className="text-ui-fg-subtle" data-testid="pickup-dates-empty">
+      <Notice data-testid="pickup-dates-empty">
         No hay fechas de retiro disponibles en {siteName} por ahora. Intenta más
         tarde.
-      </Text>
+      </Notice>
     )
   }
 
   return (
-    <div className="flex flex-col gap-y-3" data-testid="pickup-date-selector">
-      <div>
-        <Text weight="plus" id="pickup-date-label">
+    <div className="flex flex-col gap-y-4" data-testid="pickup-date-selector">
+      <div className="flex flex-col gap-y-1">
+        <p
+          id="pickup-date-label"
+          className="flex items-center gap-x-2 text-base font-semibold text-neutral-900"
+        >
+          <CalendarSolid className="text-[#E01441]" aria-hidden="true" />
           Fecha de retiro
-        </Text>
-        {isPending ? (
-          <Text className="text-ui-fg-subtle" data-testid="pickup-date-saving">
-            Guardando la fecha…
-          </Text>
-        ) : chosen && chosenIsValid ? (
-          <Text className="text-ui-fg-subtle" data-testid="pickup-date-selected">
-            Retiras el {formatPickupDate(chosen)}.
-          </Text>
-        ) : chosen && !chosenIsValid ? (
-          <Text className="text-rose-500" data-testid="pickup-date-invalid">
-            La fecha que elegiste ya no tiene cupo. Elige otra.
-          </Text>
-        ) : (
-          <Text className="text-ui-fg-subtle">
-            Elige el día en que vas a retirar tu pedido.
-          </Text>
-        )}
+        </p>
+        <div aria-live="polite">
+          {isPending ? (
+            <p
+              className="flex items-center gap-x-2 text-base text-neutral-600"
+              data-testid="pickup-date-saving"
+            >
+              <Spinner className="animate-spin" aria-hidden="true" />
+              Guardando la fecha…
+            </p>
+          ) : chosen && chosenIsValid ? (
+            <p
+              className="flex items-center gap-x-2 text-base font-medium text-green-700"
+              data-testid="pickup-date-selected"
+            >
+              <CheckCircleSolid aria-hidden="true" />
+              Retiras el {formatPickupDate(chosen)}.
+            </p>
+          ) : chosen && !chosenIsValid ? (
+            <p
+              className="flex items-center gap-x-2 text-base font-medium text-rose-600"
+              data-testid="pickup-date-invalid"
+            >
+              <ExclamationCircleSolid aria-hidden="true" />
+              La fecha que elegiste ya no tiene cupo. Elige otra.
+            </p>
+          ) : (
+            <p className="text-base text-neutral-600">
+              Elige el día en que vas a retirar tu pedido.
+            </p>
+          )}
+        </div>
       </div>
 
       <div
         role="group"
         aria-labelledby="pickup-date-label"
-        className="grid grid-cols-3 gap-2 xsmall:grid-cols-4 small:grid-cols-7"
+        className="grid grid-cols-3 gap-2.5 xsmall:grid-cols-4 small:grid-cols-5 medium:grid-cols-7"
       >
         {fechas.map((slot) => {
           const { weekday, day, month } = pickupDateParts(slot.fecha)
-          const isChosen = slot.fecha === chosen
+          const isChosen = slot.fecha === chosen && slot.disponible
           const disabled = !slot.disponible || isPending
+          const fewSlots = slot.disponible && slot.cupos <= FEW_SLOTS
           const note = !slot.disponible
             ? slot.motivo ?? (slot.cupos === 0 ? "Sin cupos" : "Cerrado")
-            : slot.cupos <= FEW_SLOTS
+            : fewSlots
               ? "Últimos cupos"
               : null
 
@@ -131,30 +172,43 @@ const PickupDateSelector = ({ slots, selected, siteName }: Props) => {
               type="button"
               onClick={() => choose(slot.fecha)}
               disabled={disabled}
-              aria-pressed={isChosen}
+              aria-pressed={slot.fecha === chosen}
               aria-label={`${formatPickupDate(slot.fecha)}${note ? `, ${note}` : ""}`}
               title={note ?? undefined}
               data-testid="pickup-date-option"
               data-fecha={slot.fecha}
               data-disponible={slot.disponible}
               className={clx(
-                "flex min-h-[76px] flex-col items-center justify-center rounded-lg border px-1 py-2 text-center transition-colors",
-                isChosen && slot.disponible
-                  ? "border-blue-900 bg-blue-50 text-blue-900"
+                "relative flex min-h-[96px] flex-col items-center justify-center gap-y-0.5 rounded-xl border-2 px-1 py-2 text-center transition-all duration-150",
+                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-900 focus-visible:ring-offset-2",
+                isChosen
+                  ? "border-blue-900 bg-blue-900 text-white shadow-[0_6px_16px_rgba(30,58,138,0.25)]"
                   : slot.disponible
-                    ? "border-neutral-200 bg-white text-neutral-900 hover:border-blue-900"
-                    : "cursor-not-allowed border-neutral-100 bg-neutral-50 text-neutral-400",
+                    ? "border-neutral-200 bg-white text-neutral-900 hover:-translate-y-0.5 hover:border-blue-900 hover:bg-blue-50 motion-reduce:hover:translate-y-0"
+                    : "cursor-not-allowed border-dashed border-neutral-200 bg-neutral-50 text-neutral-400",
                 isPending && slot.disponible && "cursor-wait"
               )}
             >
-              <span className="text-xs">{weekday}</span>
-              <span className="text-lg font-bold leading-tight">{day}</span>
-              <span className="text-xs">{month}</span>
+              {isChosen && (
+                <span
+                  className="absolute right-1.5 top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-white text-blue-900"
+                  aria-hidden="true"
+                >
+                  <CheckMini />
+                </span>
+              )}
+              <span className="text-sm font-medium">{weekday}</span>
+              <span className="text-2xl font-bold leading-none">{day}</span>
+              <span className="text-sm">{month}</span>
               {note && (
                 <span
                   className={clx(
-                    "mt-0.5 w-full truncate text-[10px] leading-tight",
-                    slot.disponible ? "text-amber-700" : "text-neutral-400"
+                    "mt-1 max-w-full truncate rounded-full px-2 py-0.5 text-[11px] font-semibold leading-tight",
+                    isChosen
+                      ? "bg-white/20 text-white"
+                      : slot.disponible
+                        ? "bg-amber-100 text-amber-800"
+                        : "text-neutral-500"
                   )}
                 >
                   {note}
@@ -165,7 +219,7 @@ const PickupDateSelector = ({ slots, selected, siteName }: Props) => {
         })}
       </div>
 
-      <ErrorMessage error={error} data-testid="pickup-date-error" />
+      <ErrorMessage error={error} variant="box" data-testid="pickup-date-error" />
     </div>
   )
 }

@@ -3,12 +3,14 @@
 import { convertToLocale } from "@/lib/util/money"
 import Divider from "@/modules/common/components/divider"
 import { B2BCart, B2BOrder } from "@/types"
-import { Text } from "@medusajs/ui"
+import { clx, Text } from "@medusajs/ui"
 import React from "react"
 
 const CheckoutTotals: React.FC<{
   cartOrOrder: B2BCart | B2BOrder
-}> = ({ cartOrOrder }) => {
+  /** Checkout de retiro: letra más grande y total en un recuadro de color. */
+  highlightTotal?: boolean
+}> = ({ cartOrOrder, highlightTotal = false }) => {
   if (!cartOrOrder) return null
 
   const {
@@ -23,7 +25,12 @@ const CheckoutTotals: React.FC<{
 
   return (
     <div>
-      <div className="flex flex-col gap-y-2 txt-medium text-ui-fg-subtle ">
+      <div
+        className={clx(
+          "flex flex-col gap-y-2 txt-medium text-ui-fg-subtle",
+          highlightTotal && "text-base text-neutral-600"
+        )}
+      >
         <div className="flex items-center justify-between">
           <Text className="flex gap-x-1 items-center">
             Subtotal neto
@@ -74,11 +81,22 @@ const CheckoutTotals: React.FC<{
           </div>
         )}
       </div>
-      <Divider className="my-2" />
-      <div className="flex items-center justify-between text-ui-fg-base mb-2 txt-medium ">
-        <Text className="font-medium">Total (IVA incluido)</Text>
+      {!highlightTotal && <Divider className="my-2" />}
+      <div
+        className={clx(
+          "flex items-center justify-between text-ui-fg-base mb-2 txt-medium",
+          highlightTotal &&
+            "mb-0 mt-4 rounded-xl bg-[#FBF8F4] px-4 py-4 text-neutral-900"
+        )}
+      >
+        <Text className={clx("font-medium", highlightTotal && "text-base font-semibold")}>
+          Total (IVA incluido)
+        </Text>
         <Text
-          className="txt-xlarge-plus"
+          className={clx(
+            "txt-xlarge-plus",
+            highlightTotal && "text-2xl font-bold text-neutral-900"
+          )}
           data-testid="cart-total"
           data-value={total || 0}
         >

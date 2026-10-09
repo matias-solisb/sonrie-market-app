@@ -1,4 +1,4 @@
-import { Context } from "@medusajs/framework/types";
+import { Context, Logger } from "@medusajs/framework/types";
 import {
   InjectManager,
   InjectTransactionManager,
@@ -15,16 +15,20 @@ import {
   PICKUP_SETTING_KEY,
   PickupBooking,
   PickupOccupancy,
+  PickupScheduleChange,
   PickupSetting,
   SiteSchedule,
   SiteScheduleException,
   SiteSlotConfig,
 } from "./models";
+import { FERIADOS_CHILE } from "./data/feriados-chile";
 import {
   AvailableDate,
   BookingWindow,
   CreateExceptionInput,
   EstadoBooking,
+  LoadHolidaysResult,
+  UpdateExceptionInput,
   ReleaseBookingInput,
   ReleaseBookingResult,
   ReserveBookingInput,
@@ -50,10 +54,17 @@ día y site, sin bloques horarios.
 
 Además del CRUD que genera `MedusaService`, expone:
 
-- Configuración: `getSettings` / `updateSettings`, `upsertSiteSlotConfig`,
-  `upsertSiteSchedule`, `createException`.
+- Configuración (Admin), con auditoría en PickupScheduleChange:
+    `getSettings` / `updateSettings`, `upsertSiteSlotConfig`,
+    `upsertSiteSchedule` / `deleteSiteSchedule`,
+    `createException` / `updateException` / `deleteException`,
+    `loadHolidays` (feriados nacionales de Chile).
+  Los métodos que escriben reciben `actorId` (usuario del Admin; null =
+  script o sistema). Usar estos y no el CRUD genérico, que se salta las
+  validaciones y la auditoría.
 - Disponibilidad: `getWindow`, `resolveDays`, `listAvailableDates`,
-  `assertDateBookable` (valida sin reservar).
+  `listDays` (ocupación de un rango), `assertDateBookable` (valida sin
+  reservar).
 - Ciclo del cupo:
     `reserveBooking` / `revertBooking`   checkout y su compensación
     `confirmBooking`                     order.placed
@@ -146,6 +157,61 @@ const assertDiaSemana = (dia: unknown) => {
 const firstNonNull = (...values: (number | null | undefined)[]) =>
   values.find((v) => v !== null && v !== undefined) ?? null;
 
+type Cambios = Record<string, { anterior: unknown; nuevo: unknown }>;
+
+type AuditInput = {
+  actor_id: string | null;
+  entidad: "configuracion" | "site" | "horario" | "excepcion";
+  accion: "crear" | "editar" | "eliminar";
+  stock_location_id?: string | null;
+  referencia?: string | null;
+  cambios: Cambios;
+};
+
+const sameValue = (a: unknown, b: unknown) =>
+  JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
+
+/** Campos de `fields` que cambian entre `before` y `after`. */
+const diff = (
+  before: Record<string, any> | null,
+  after: Record<string, any>,
+  fields: readonly string[]
+): Cambios => {
+  const cambios: Cambios = {};
+
+  for (const field of fields) {
+    const anterior = before?.[field] ?? null;
+    const nuevo = after[field] ?? null;
+
+    if (!sameValue(anterior, nuevo)) {
+      cambios[field] = { anterior, nuevo };
+    }
+  }
+
+  return cambios;
+};
+
+const SETTING_FIELDS = [
+  "capacidad_por_defecto",
+  "lead_time_dias",
+  "horizonte_dias",
+  "dias_abiertos_por_defecto",
+] as const;
+const SITE_CONFIG_FIELDS = [
+  "capacidad_diaria",
+  "lead_time_dias",
+  "horizonte_dias",
+] as const;
+const SCHEDULE_FIELDS = ["abierto", "capacidad"] as const;
+const EXCEPTION_FIELDS = [
+  "fecha",
+  "stock_location_id",
+  "tipo",
+  "irrenunciable",
+  "capacidad",
+  "motivo",
+] as const;
+
 class PickupSchedulingModuleService extends MedusaService({
   PickupSetting,
   SiteSlotConfig,
@@ -153,7 +219,21 @@ class PickupSchedulingModuleService extends MedusaService({
   SiteScheduleException,
   PickupOccupancy,
   PickupBooking,
+  PickupScheduleChange,
 }) {
+  protected readonly logger_?: Logger;
+
+  constructor(container: Record<string, any>, ...rest: any[]) {
+    // @ts-ignore: MedusaService recibe los mismos argumentos
+    super(container, ...rest);
+
+    try {
+      this.logger_ = container.logger;
+    } catch {
+      this.logger_ = undefined;
+    }
+  }
+
   // ---------------------------------------------------------------------
   // Configuración
   // ---------------------------------------------------------------------
@@ -215,9 +295,14 @@ class PickupSchedulingModuleService extends MedusaService({
     };
   }
 
+  /**
+   * Edita la configuración global. `actorId`: usuario del Admin, para la
+   * auditoría (null = script o sistema).
+   */
   @InjectTransactionManager()
   async updateSettings(
     input: UpdatePickupSettingInput,
+    actorId: string | null = null,
     @MedusaContext() sharedContext: Context = {}
   ): Promise<Setting> {
     const current = await this.getSettings(sharedContext);
@@ -262,7 +347,19 @@ class PickupSchedulingModuleService extends MedusaService({
       sharedContext
     );
 
-    return await this.getSettings(sharedContext);
+    const updated = await this.getSettings(sharedContext);
+
+    await this.audit_(
+      {
+        actor_id: actorId,
+        entidad: "configuracion",
+        accion: "editar",
+        cambios: diff(current, updated, SETTING_FIELDS),
+      },
+      sharedContext
+    );
+
+    return updated;
   }
 
   /**
@@ -272,6 +369,7 @@ class PickupSchedulingModuleService extends MedusaService({
   @InjectTransactionManager()
   async upsertSiteSlotConfig(
     input: UpsertSiteSlotConfigInput,
+    actorId: string | null = null,
     @MedusaContext() sharedContext: Context = {}
   ) {
     const { stock_location_id, ...data } = input;
@@ -309,17 +407,22 @@ class PickupSchedulingModuleService extends MedusaService({
       }
     }
 
-    if (existing) {
-      return await this.updateSiteSlotConfigs(
-        { id: existing.id, ...data },
-        sharedContext
-      );
-    }
+    const saved = existing
+      ? await this.updateSiteSlotConfigs({ id: existing.id, ...data }, sharedContext)
+      : await this.createSiteSlotConfigs({ stock_location_id, ...data }, sharedContext);
 
-    return await this.createSiteSlotConfigs(
-      { stock_location_id, ...data },
+    await this.audit_(
+      {
+        actor_id: actorId,
+        entidad: "site",
+        accion: existing ? "editar" : "crear",
+        stock_location_id,
+        cambios: diff(existing ?? null, saved, SITE_CONFIG_FIELDS),
+      },
       sharedContext
     );
+
+    return saved;
   }
 
   /**
@@ -329,6 +432,7 @@ class PickupSchedulingModuleService extends MedusaService({
   @InjectTransactionManager()
   async upsertSiteSchedule(
     input: UpsertSiteScheduleInput,
+    actorId: string | null = null,
     @MedusaContext() sharedContext: Context = {}
   ) {
     const { stock_location_id, dia_semana, abierto } = input;
@@ -358,22 +462,72 @@ class PickupSchedulingModuleService extends MedusaService({
         ? input.capacidad
         : existing?.capacidad ?? null;
 
-    if (existing) {
-      return await this.updateSiteSchedules(
-        { id: existing.id, abierto, capacidad },
-        sharedContext
-      );
+    const saved = existing
+      ? await this.updateSiteSchedules(
+          { id: existing.id, abierto, capacidad },
+          sharedContext
+        )
+      : await this.createSiteSchedules(
+          { stock_location_id, dia_semana, abierto, capacidad },
+          sharedContext
+        );
+
+    await this.audit_(
+      {
+        actor_id: actorId,
+        entidad: "horario",
+        accion: existing ? "editar" : "crear",
+        stock_location_id,
+        referencia: String(dia_semana),
+        cambios: diff(existing ?? null, saved, SCHEDULE_FIELDS),
+      },
+      sharedContext
+    );
+
+    return saved;
+  }
+
+  /**
+   * Quita el horario propio de un día de la semana: el site vuelve a usar
+   * los días abiertos y la capacidad generales. Si no había, no hace nada.
+   */
+  @InjectTransactionManager()
+  async deleteSiteSchedule(
+    stockLocationId: string,
+    diaSemana: number,
+    actorId: string | null = null,
+    @MedusaContext() sharedContext: Context = {}
+  ): Promise<void> {
+    assertDiaSemana(diaSemana);
+
+    const [existing] = await this.listSiteSchedules(
+      { stock_location_id: stockLocationId, dia_semana: diaSemana },
+      { take: 1 },
+      sharedContext
+    );
+
+    if (!existing) {
+      return;
     }
 
-    return await this.createSiteSchedules(
-      { stock_location_id, dia_semana, abierto, capacidad },
+    await this.deleteSiteSchedules(existing.id, sharedContext);
+
+    await this.audit_(
+      {
+        actor_id: actorId,
+        entidad: "horario",
+        accion: "eliminar",
+        stock_location_id: stockLocationId,
+        referencia: String(diaSemana),
+        cambios: diff(existing, {}, SCHEDULE_FIELDS),
+      },
       sharedContext
     );
   }
 
   /**
    * Crea una excepción del calendario (feriado, cierre o apertura especial).
-   * Reglas:
+   * Reglas (ver `validateException_`):
    * - `irrenunciable` solo en feriados globales (sin site).
    * - `capacidad` solo en excepciones "abierto" de un site.
    * - No se puede abrir un site en un feriado irrenunciable.
@@ -382,74 +536,208 @@ class PickupSchedulingModuleService extends MedusaService({
   @InjectTransactionManager()
   async createException(
     input: CreateExceptionInput,
+    actorId: string | null = null,
     @MedusaContext() sharedContext: Context = {}
   ) {
-    const fecha = input.fecha;
-    const stock_location_id = input.stock_location_id ?? null;
-    const irrenunciable = input.irrenunciable ?? false;
-    const capacidad = input.capacidad ?? null;
+    const data = {
+      fecha: input.fecha,
+      stock_location_id: input.stock_location_id ?? null,
+      tipo: input.tipo,
+      irrenunciable: input.irrenunciable ?? false,
+      capacidad: input.capacidad ?? null,
+      motivo: input.motivo?.trim() || null,
+    };
 
-    assertFecha(fecha);
+    await this.validateException_(data, null, sharedContext);
 
-    if (!["feriado", "cerrado", "abierto"].includes(input.tipo)) {
-      throw invalid(`Tipo de excepción inválido: ${input.tipo}.`);
+    const created = await this.createSiteScheduleExceptions(data, sharedContext);
+
+    await this.audit_(
+      {
+        actor_id: actorId,
+        entidad: "excepcion",
+        accion: "crear",
+        stock_location_id: data.stock_location_id,
+        referencia: data.fecha,
+        cambios: diff(null, created, EXCEPTION_FIELDS),
+      },
+      sharedContext
+    );
+
+    return created;
+  }
+
+  /**
+   * Edita una excepción. Los campos que no vienen no se tocan. Aplica las
+   * mismas reglas que al crearla.
+   */
+  @InjectTransactionManager()
+  async updateException(
+    id: string,
+    input: UpdateExceptionInput,
+    actorId: string | null = null,
+    @MedusaContext() sharedContext: Context = {}
+  ) {
+    const existing = await this.retrieveSiteScheduleException(
+      id,
+      {},
+      sharedContext
+    );
+
+    const data = {
+      fecha: input.fecha ?? existing.fecha,
+      stock_location_id:
+        input.stock_location_id !== undefined
+          ? input.stock_location_id
+          : existing.stock_location_id,
+      tipo: input.tipo ?? existing.tipo,
+      irrenunciable: input.irrenunciable ?? existing.irrenunciable,
+      capacidad:
+        input.capacidad !== undefined ? input.capacidad : existing.capacidad,
+      motivo:
+        input.motivo !== undefined
+          ? input.motivo?.trim() || null
+          : existing.motivo,
+    };
+
+    // Una excepción que deja de ser feriado global no puede seguir
+    // marcada como irrenunciable, ni una que deja de ser apertura de un
+    // site conservar su capacidad.
+    if (input.irrenunciable === undefined && data.irrenunciable) {
+      data.irrenunciable =
+        data.tipo === "feriado" && !data.stock_location_id;
+    }
+    if (input.capacidad === undefined && data.capacidad !== null) {
+      data.capacidad =
+        data.tipo === "abierto" && data.stock_location_id
+          ? data.capacidad
+          : null;
     }
 
-    if (irrenunciable && (input.tipo !== "feriado" || stock_location_id)) {
-      throw invalid(
-        "Solo un feriado que aplica a todos los sites puede marcarse como irrenunciable."
-      );
-    }
+    await this.validateException_(data, id, sharedContext);
 
-    if (capacidad !== null) {
-      assertNonNegativeInt(capacidad, "La capacidad");
+    const updated = await this.updateSiteScheduleExceptions(
+      { id, ...data },
+      sharedContext
+    );
 
-      if (input.tipo !== "abierto" || !stock_location_id) {
-        throw invalid(
-          "La capacidad solo se puede indicar en una apertura especial de un site."
-        );
-      }
-    }
+    await this.audit_(
+      {
+        actor_id: actorId,
+        entidad: "excepcion",
+        accion: "editar",
+        stock_location_id: data.stock_location_id,
+        referencia: data.fecha,
+        cambios: diff(existing, updated, EXCEPTION_FIELDS),
+      },
+      sharedContext
+    );
 
-    if (input.tipo === "abierto" && stock_location_id) {
-      const [global] = await this.listSiteScheduleExceptions(
-        { fecha, stock_location_id: null },
-        { take: 1 },
-        sharedContext
-      );
+    return updated;
+  }
 
-      if (global?.irrenunciable) {
-        throw notAllowed(
-          `El ${formatFecha(fecha)} es feriado irrenunciable: ningún site puede abrir.`
-        );
-      }
-    }
-
-    const [duplicate] = await this.listSiteScheduleExceptions(
-      { fecha, stock_location_id },
+  /** Elimina una excepción. Si no existe, no hace nada. */
+  @InjectTransactionManager()
+  async deleteException(
+    id: string,
+    actorId: string | null = null,
+    @MedusaContext() sharedContext: Context = {}
+  ): Promise<void> {
+    const [existing] = await this.listSiteScheduleExceptions(
+      { id },
       { take: 1 },
       sharedContext
     );
 
-    if (duplicate) {
-      throw invalid(
-        stock_location_id
-          ? `Este site ya tiene una excepción el ${formatFecha(fecha)}. Edítala o elimínala.`
-          : `Ya existe una excepción global el ${formatFecha(fecha)}. Edítala o elimínala.`
-      );
+    if (!existing) {
+      return;
     }
 
-    return await this.createSiteScheduleExceptions(
+    await this.deleteSiteScheduleExceptions(id, sharedContext);
+
+    await this.audit_(
       {
-        fecha,
-        stock_location_id,
-        tipo: input.tipo,
-        irrenunciable,
-        capacidad,
-        motivo: input.motivo ?? null,
+        actor_id: actorId,
+        entidad: "excepcion",
+        accion: "eliminar",
+        stock_location_id: existing.stock_location_id,
+        referencia: existing.fecha,
+        cambios: diff(existing, {}, EXCEPTION_FIELDS),
       },
       sharedContext
     );
+  }
+
+  /**
+   * Carga los feriados nacionales de Chile de `anio` (data/feriados-chile.ts)
+   * como excepciones globales. Idempotente: una fecha que ya tiene una
+   * excepción global se deja como está (puede haberla editado el admin).
+   * Queda un solo registro de auditoría con las fechas creadas.
+   */
+  @InjectTransactionManager()
+  async loadHolidays(
+    anio: number,
+    actorId: string | null = null,
+    @MedusaContext() sharedContext: Context = {}
+  ): Promise<LoadHolidaysResult> {
+    const feriados = FERIADOS_CHILE[anio];
+
+    if (!feriados) {
+      throw notAllowed(
+        `No hay feriados cargados para ${anio}. Años disponibles: ${Object.keys(
+          FERIADOS_CHILE
+        ).join(", ")}.`
+      );
+    }
+
+    const existentes = await this.listSiteScheduleExceptions(
+      {
+        fecha: feriados.map((f) => f.fecha),
+        stock_location_id: null,
+      },
+      {},
+      sharedContext
+    );
+    const ocupadas = new Set(existentes.map((e) => e.fecha));
+    const nuevos = feriados.filter((f) => !ocupadas.has(f.fecha));
+
+    if (nuevos.length) {
+      await this.createSiteScheduleExceptions(
+        nuevos.map((f) => ({
+          fecha: f.fecha,
+          stock_location_id: null,
+          tipo: "feriado" as const,
+          irrenunciable: f.irrenunciable,
+          capacidad: null,
+          motivo: f.nombre,
+        })),
+        sharedContext
+      );
+
+      await this.audit_(
+        {
+          actor_id: actorId,
+          entidad: "excepcion",
+          accion: "crear",
+          referencia: `feriados-${anio}`,
+          cambios: {
+            feriados: {
+              anterior: null,
+              nuevo: nuevos.map((f) => `${f.fecha} ${f.nombre}`),
+            },
+          },
+        },
+        sharedContext
+      );
+    }
+
+    return {
+      anio,
+      creados: nuevos.map((f) => f.fecha),
+      omitidos: feriados
+        .filter((f) => ocupadas.has(f.fecha))
+        .map((f) => f.fecha),
+    };
   }
 
   // ---------------------------------------------------------------------
@@ -513,7 +801,35 @@ class PickupSchedulingModuleService extends MedusaService({
       now,
       sharedContext
     );
+
+    return await this.listDays(stockLocationId, desde, hasta, sharedContext);
+  }
+
+  /**
+   * Cada día de [desde, hasta] del site con su capacidad, ocupación y
+   * cupos libres, sin mirar el rango elegible (lo usa el Admin para ver la
+   * ocupación). Máximo 93 días.
+   */
+  @InjectManager()
+  async listDays(
+    stockLocationId: string,
+    desde: string,
+    hasta: string,
+    @MedusaContext() sharedContext: Context = {}
+  ): Promise<AvailableDate[]> {
+    assertFecha(desde);
+    assertFecha(hasta);
+
+    if (hasta < desde) {
+      throw invalid("La fecha final no puede ser anterior a la inicial.");
+    }
+
     const fechas = eachFecha(desde, hasta);
+
+    if (fechas.length > 93) {
+      throw invalid("El rango no puede superar los 93 días.");
+    }
+
     const days = await this.resolveDays(stockLocationId, fechas, sharedContext);
 
     const occupancies = await this.listPickupOccupancies(
@@ -893,6 +1209,103 @@ class PickupSchedulingModuleService extends MedusaService({
   // ---------------------------------------------------------------------
   // Internos
   // ---------------------------------------------------------------------
+
+  /** Reglas de una excepción (crear y editar). `excludeId`: la que se edita. */
+  private async validateException_(
+    data: {
+      fecha: string;
+      stock_location_id: string | null;
+      tipo: string;
+      irrenunciable: boolean;
+      capacidad: number | null;
+    },
+    excludeId: string | null,
+    sharedContext: Context
+  ): Promise<void> {
+    const { fecha, stock_location_id, tipo, irrenunciable, capacidad } = data;
+
+    assertFecha(fecha);
+
+    if (!["feriado", "cerrado", "abierto"].includes(tipo)) {
+      throw invalid(`Tipo de excepción inválido: ${tipo}.`);
+    }
+
+    if (irrenunciable && (tipo !== "feriado" || stock_location_id)) {
+      throw invalid(
+        "Solo un feriado que aplica a todos los sites puede marcarse como irrenunciable."
+      );
+    }
+
+    if (capacidad !== null) {
+      assertNonNegativeInt(capacidad, "La capacidad");
+
+      if (tipo !== "abierto" || !stock_location_id) {
+        throw invalid(
+          "La capacidad solo se puede indicar en una apertura especial de un site."
+        );
+      }
+    }
+
+    if (tipo === "abierto" && stock_location_id) {
+      const [global] = await this.listSiteScheduleExceptions(
+        { fecha, stock_location_id: null },
+        { take: 1 },
+        sharedContext
+      );
+
+      if (global?.irrenunciable) {
+        throw notAllowed(
+          `El ${formatFecha(fecha)} es feriado irrenunciable: ningún site puede abrir.`
+        );
+      }
+    }
+
+    const [duplicate] = await this.listSiteScheduleExceptions(
+      { fecha, stock_location_id },
+      { take: 1 },
+      sharedContext
+    );
+
+    if (duplicate && duplicate.id !== excludeId) {
+      throw invalid(
+        stock_location_id
+          ? `Este site ya tiene una excepción el ${formatFecha(fecha)}. Edítala o elimínala.`
+          : `Ya existe una excepción global el ${formatFecha(fecha)}. Edítala o elimínala.`
+      );
+    }
+  }
+
+  /**
+   * Registra un cambio administrativo (tabla + log). No registra nada si
+   * no cambió ningún campo.
+   */
+  private async audit_(input: AuditInput, sharedContext: Context) {
+    if (!Object.keys(input.cambios).length) {
+      return null;
+    }
+
+    const change = await this.createPickupScheduleChanges(
+      {
+        actor_id: input.actor_id,
+        entidad: input.entidad,
+        accion: input.accion,
+        stock_location_id: input.stock_location_id ?? null,
+        referencia: input.referencia ?? null,
+        cambios: input.cambios as any,
+      },
+      sharedContext
+    );
+
+    this.logger_?.info(
+      `pickup-scheduling: ${input.entidad} ${input.accion}${
+        input.stock_location_id ? ` (site ${input.stock_location_id})` : ""
+      }${input.referencia ? ` [${input.referencia}]` : ""} por ${
+        input.actor_id ?? "sistema"
+      }: ${JSON.stringify(input.cambios)}`
+    );
+
+    return change;
+  }
 
   /** Carga en 4 consultas todo lo que se necesita para resolver `fechas`. */
   private async loadRules_(

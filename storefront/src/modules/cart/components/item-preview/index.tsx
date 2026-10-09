@@ -10,10 +10,55 @@ type ItemProps = {
   item: HttpTypes.StoreCartLineItem
   showBorders?: boolean
   currencyCode: string
+  /** "large": foto y letra más grandes, precio siempre visible (checkout). */
+  size?: "default" | "large"
 }
 
-const ItemPreview = ({ item, showBorders = true, currencyCode }: ItemProps) => {
+const ItemPreview = ({
+  item,
+  showBorders = true,
+  currencyCode,
+  size = "default",
+}: ItemProps) => {
   const { handle } = item.variant?.product ?? {}
+
+  if (size === "large") {
+    return (
+      <div className="flex w-full items-center gap-x-4 py-3">
+        <LocalizedClientLink
+          href={`/products/${handle}`}
+          className="shrink-0"
+          tabIndex={-1}
+          aria-hidden="true"
+        >
+          <Thumbnail
+            thumbnail={item.thumbnail}
+            size="square"
+            className="h-14 w-14 rounded-xl bg-neutral-100"
+          />
+        </LocalizedClientLink>
+        <div className="flex min-w-0 flex-1 flex-col">
+          <span className="truncate text-base font-semibold text-neutral-900">
+            {item.product?.title}
+          </span>
+          {item.variant?.title && (
+            <span className="truncate text-sm text-neutral-600">
+              {item.variant.title}
+            </span>
+          )}
+          <span className="mt-1 w-fit rounded-full bg-neutral-100 px-2 py-0.5 text-sm font-medium text-neutral-700">
+            {item.quantity} {Number(item.quantity) === 1 ? "unidad" : "unidades"}
+          </span>
+        </div>
+        <LineItemPrice
+          className="shrink-0 text-base font-semibold text-neutral-900"
+          item={item}
+          style="tight"
+          currencyCode={currencyCode}
+        />
+      </div>
+    )
+  }
 
   const maxQuantity = item.variant?.inventory_quantity ?? 100
 

@@ -26,7 +26,7 @@ export default function CheckoutLayout({
         </nav>
       </div>
       <div
-        className="relative bg-neutral-100 min-h-[calc(100vh-4rem)]"
+        className="relative bg-[#FBF8F4] min-h-[calc(100vh-4rem)]"
         data-testid="checkout-container"
       >
         {children}

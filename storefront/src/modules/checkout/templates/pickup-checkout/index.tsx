@@ -4,13 +4,14 @@ import { exceedsBenefitBudget } from "@/lib/util/check-benefit-budget"
 import { formatPickupDate, isPickupDate } from "@/lib/util/pickup-date"
 import ItemsPreviewTemplate from "@/modules/cart/templates/preview"
 import BenefitPayment from "@/modules/checkout/components/benefit-payment"
+import CheckoutCard from "@/modules/checkout/components/checkout-card"
+import CheckoutProgress from "@/modules/checkout/components/checkout-progress"
 import CheckoutTotals from "@/modules/checkout/components/checkout-totals"
 import ConfirmOrderButton from "@/modules/checkout/components/confirm-order-button"
 import PickupDetails from "@/modules/checkout/components/pickup-details"
-import Divider from "@/modules/common/components/divider"
 import LocalizedClientLink from "@/modules/common/components/localized-client-link"
 import { B2BCart, B2BCustomer } from "@/types"
-import { Container, Heading, Text } from "@medusajs/ui"
+import { ArrowLeft, Heart, InformationCircleSolid, ShoppingBag, User } from "@medusajs/icons"
 
 /*
 
@@ -24,8 +25,13 @@ resuelto desde el carrito:
 - correo: el de la cuenta del colaborador;
 - pago: "Cargo beneficio" (se crea al confirmar, ver confirmOrder).
 
-Columna izquierda: retiro, datos del colaborador y medio de pago.
-Columna derecha: productos, totales y "Confirmar pedido".
+Columna izquierda, en bloques numerados: 1 retiro, 2 datos del
+colaborador, 3 medio de pago. Columna derecha: productos, totales y
+"Confirmar pedido".
+
+Diseño: el mismo de la confirmación del pedido (fondo crema, tarjetas
+redondeadas, letra grande), pensado para colaboradores de todas las
+edades. Azul para las acciones, rojo de marca para íconos y detalles.
 
 */
 const PickupCheckout = ({
@@ -48,60 +54,120 @@ const PickupCheckout = ({
   const hasValidDate =
     !!pickupDate &&
     !!slots?.fechas.some((f) => f.fecha === pickupDate && f.disponible)
+  const firstName = customer.first_name?.trim()
   const fullName = [customer.first_name, customer.last_name]
     .filter(Boolean)
     .join(" ")
+  const email = cart.email || customer.email
+  const units = (cart.items ?? []).reduce(
+    (sum, item) => sum + Number(item.quantity),
+    0
+  )
 
   return (
-    <div className="content-container py-8" data-testid="pickup-checkout">
-      <div className="flex items-center justify-between mb-6">
-        <Heading level="h1" className="text-2xl">
-          Confirmar pedido
-        </Heading>
+    <div
+      className="content-container py-8 small:py-12"
+      data-testid="pickup-checkout"
+    >
+      <header className="mb-8 flex flex-col gap-y-5">
         <LocalizedClientLink
           href="/cart"
-          className="text-sm text-ui-fg-subtle hover:text-ui-fg-base"
+          className="-ml-3 inline-flex w-fit items-center gap-x-2 rounded-full px-3 py-2 text-base text-neutral-700 transition-colors hover:bg-white hover:text-neutral-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-900"
         >
-          ← Volver al carrito
+          <ArrowLeft aria-hidden="true" />
+          Volver al carrito
         </LocalizedClientLink>
-      </div>
 
-      <div className="grid grid-cols-1 small:grid-cols-[1fr_416px] gap-4">
-        <div className="flex flex-col gap-y-4">
-          <PickupDetails site={site} slots={slots} pickupDate={pickupDate} />
+        <div className="flex flex-col gap-y-5 small:flex-row small:items-end small:justify-between">
+          <div className="flex flex-col gap-y-2">
+            <h1 className="text-3xl font-bold text-neutral-900 small:text-4xl">
+              Confirmar pedido
+            </h1>
+            <p className="text-lg text-neutral-700">
+              {firstName ? `Hola, ${firstName}. ` : ""}Revisa tu pedido y elige
+              cuándo retirarlo.
+            </p>
+          </div>
+          <CheckoutProgress />
+        </div>
+      </header>
 
-          <Container className="flex flex-col gap-y-1 p-5" data-testid="customer-details">
-            <Heading level="h2" className="text-base mb-2">
-              Colaborador
-            </Heading>
-            {fullName && <Text weight="plus">{fullName}</Text>}
-            <Text className="text-ui-fg-subtle">{cart.email || customer.email}</Text>
-          </Container>
+      <div className="grid grid-cols-1 items-start gap-6 small:grid-cols-[1fr_420px]">
+        <div className="flex flex-col gap-y-6">
+          <PickupDetails
+            step={1}
+            site={site}
+            slots={slots}
+            pickupDate={pickupDate}
+          />
+
+          <CheckoutCard
+            step={2}
+            icon={<User />}
+            title="Tus datos"
+            titleId="customer-details-title"
+            data-testid="customer-details"
+          >
+            <div className="flex items-center gap-x-4">
+              <span
+                className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-blue-50 text-lg font-bold uppercase text-blue-900"
+                aria-hidden="true"
+              >
+                {(firstName || email || "?").charAt(0)}
+              </span>
+              <div className="flex min-w-0 flex-col">
+                {fullName && (
+                  <p className="text-lg font-semibold text-neutral-900">
+                    {fullName}
+                  </p>
+                )}
+                <p className="truncate text-base text-neutral-600">{email}</p>
+              </div>
+            </div>
+          </CheckoutCard>
 
           <BenefitPayment
+            step={3}
             total={total}
             currencyCode={cart.currency_code}
             budget={customer.benefit_budget ?? null}
           />
         </div>
 
-        <div className="relative">
-          <Container className="sticky top-4 flex flex-col p-5">
-            <Heading level="h2" className="text-base mb-3">
-              Tu pedido
-            </Heading>
+        <aside className="small:sticky small:top-6" aria-label="Resumen del pedido">
+          <CheckoutCard
+            icon={<ShoppingBag />}
+            title="Tu pedido"
+            titleId="order-summary-title"
+            action={
+              <span className="rounded-full bg-neutral-100 px-3 py-1 text-sm font-medium text-neutral-700">
+                {units} {units === 1 ? "producto" : "productos"}
+              </span>
+            }
+          >
             <ItemsPreviewTemplate
               items={cart.items}
               currencyCode={cart.currency_code}
+              size="large"
             />
-            <Divider className="my-3" />
-            <CheckoutTotals cartOrOrder={cart} />
-            <Divider className="my-3" />
-            <Text className="text-xs text-ui-fg-subtle mb-3">
-              Al confirmar, el total se descuenta de tu beneficio del mes y
-              el pedido queda para retiro en {site.name}
-              {hasValidDate && pickupDate ? ` el ${formatPickupDate(pickupDate)}` : ""}.
-            </Text>
+            <div className="my-4 border-t border-neutral-200" />
+            <CheckoutTotals cartOrOrder={cart} highlightTotal />
+
+            <p className="my-4 flex items-start gap-x-2 text-sm text-neutral-600">
+              <InformationCircleSolid
+                className="mt-0.5 shrink-0 text-neutral-400"
+                aria-hidden="true"
+              />
+              <span>
+                Al confirmar, el total se descuenta de tu beneficio del mes y
+                el pedido queda para retiro en {site.name}
+                {hasValidDate && pickupDate
+                  ? ` el ${formatPickupDate(pickupDate)}`
+                  : ""}
+                .
+              </span>
+            </p>
+
             <ConfirmOrderButton
               disabled={exceeds || !hasValidDate}
               disabledReason={
@@ -112,8 +178,13 @@ const PickupCheckout = ({
                     : undefined
               }
             />
-          </Container>
-        </div>
+          </CheckoutCard>
+
+          <p className="mt-4 flex items-center justify-center gap-x-2 text-center text-base text-neutral-600">
+            <Heart className="shrink-0 text-[#E01441]" aria-hidden="true" />
+            Gracias por ser parte de Sonríe Market.
+          </p>
+        </aside>
       </div>
     </div>
   )

@@ -1,10 +1,9 @@
 import { PickupSlots } from "@/lib/data/pickup-slots"
 import { StoreStockLocation } from "@/lib/data/stock-locations"
-import LocalizedClientLink from "@/modules/common/components/localized-client-link"
-import Divider from "@/modules/common/components/divider"
+import CheckoutCard from "@/modules/checkout/components/checkout-card"
 import PickupDateSelector from "@/modules/checkout/components/pickup-date-selector"
+import LocalizedClientLink from "@/modules/common/components/localized-client-link"
 import { MapPin } from "@medusajs/icons"
-import { Container, Heading, Text } from "@medusajs/ui"
 
 /*
 
@@ -20,49 +19,68 @@ const PickupDetails = ({
   site,
   slots,
   pickupDate,
+  step,
 }: {
   site: StoreStockLocation
   slots: PickupSlots | null
   pickupDate: string | null
+  step?: number
 }) => {
   const address = [site.address?.address_1, site.address?.city]
     .filter(Boolean)
     .join(", ")
 
   return (
-    <Container className="flex flex-col gap-y-3 p-5" data-testid="pickup-details">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-x-2">
-          <MapPin />
-          <Heading level="h2" className="text-base">
-            Retiro en sala
-          </Heading>
-        </div>
+    <CheckoutCard
+      step={step}
+      icon={<MapPin />}
+      title="Retiro en sala"
+      titleId="pickup-details-title"
+      data-testid="pickup-details"
+      action={
         <LocalizedClientLink
           href="/cart"
-          className="text-sm text-ui-fg-interactive hover:underline"
+          className="rounded-full px-3 py-1.5 text-base font-medium text-blue-900 hover:bg-blue-50 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-900"
           data-testid="change-pickup-site-link"
+          aria-label="Cambiar la sala de retiro"
         >
           Cambiar
         </LocalizedClientLink>
+      }
+    >
+      <div className="flex flex-col gap-y-6">
+        <div className="flex items-start gap-x-4 rounded-xl bg-[#FBF8F4] p-4">
+          <span
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[#FDE7EC] text-[#E01441]"
+            aria-hidden="true"
+          >
+            <MapPin />
+          </span>
+          <div className="flex flex-col gap-y-0.5">
+            <p
+              className="text-lg font-semibold text-neutral-900"
+              data-testid="pickup-site-name"
+            >
+              {site.name}
+            </p>
+            {address && (
+              <p
+                className="text-base text-neutral-600"
+                data-testid="shipping-address-summary"
+              >
+                {address}
+              </p>
+            )}
+          </div>
+        </div>
+
+        <PickupDateSelector
+          slots={slots}
+          selected={pickupDate}
+          siteName={site.name}
+        />
       </div>
-      <div>
-        <Text weight="plus" data-testid="pickup-site-name">
-          {site.name}
-        </Text>
-        {address && (
-          <Text className="text-ui-fg-subtle" data-testid="shipping-address-summary">
-            {address}
-          </Text>
-        )}
-      </div>
-      <Divider />
-      <PickupDateSelector
-        slots={slots}
-        selected={pickupDate}
-        siteName={site.name}
-      />
-    </Container>
+    </CheckoutCard>
   )
 }
 
