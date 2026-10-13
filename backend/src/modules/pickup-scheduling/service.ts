@@ -584,7 +584,7 @@ class PickupSchedulingModuleService extends MedusaService({
   }
 
   /**
-   * Crea una excepción del calendario (feriado, cierre o apertura especial).
+   * Crea una excepción del calendario (feriado, cierre o día abierto con cupos especiales).
    * Reglas (ver `validateException_`):
    * - `irrenunciable` solo en feriados globales (sin site).
    * - `capacidad` solo en excepciones "abierto" de un site.
@@ -1397,7 +1397,7 @@ class PickupSchedulingModuleService extends MedusaService({
 
       if (tipo !== "abierto" || !stock_location_id) {
         throw invalid(
-          "La capacidad solo se puede indicar en una apertura especial de un site."
+          "La capacidad solo se puede indicar en un día abierto con cupos especiales de un site."
         );
       }
     }

@@ -643,7 +643,7 @@ const SitesTab = ({
 const TIPOS: Record<PickupExceptionTipo, { label: string; color: "red" | "orange" | "green" }> = {
   feriado: { label: "Feriado", color: "red" },
   cerrado: { label: "Cerrado", color: "orange" },
-  abierto: { label: "Abre", color: "green" },
+  abierto: { label: "Abierto", color: "green" },
 };
 
 const ALL_SITES = "__todos__";
@@ -770,7 +770,7 @@ const ExceptionDrawer = ({
                 ? "Abre aunque el horario o un feriado general digan lo contrario (no aplica a feriados irrenunciables)."
                 : tipo === "feriado"
                   ? "Cierra por feriado."
-                  : "Cierra por otro motivo (inventario, mantención…)."
+                  : "Cerrado por otro motivo (Ej: mantención)"
             }
           >
             <Select value={tipo} onValueChange={(v) => setTipo(v as PickupExceptionTipo)}>
@@ -780,7 +780,7 @@ const ExceptionDrawer = ({
               <Select.Content>
                 <Select.Item value="feriado">Feriado</Select.Item>
                 <Select.Item value="cerrado">Cerrado</Select.Item>
-                <Select.Item value="abierto">Abre (apertura especial)</Select.Item>
+                <Select.Item value="abierto">Abierto (apertura especial)</Select.Item>
               </Select.Content>
             </Select>
           </Field>
@@ -800,7 +800,7 @@ const ExceptionDrawer = ({
             <Field
               id="exc-cap"
               label="Capacidad ese día"
-              hint="Vacío = la capacidad que corresponda al día."
+              hint="Pedidos que se pueden agendar ese día en el site. Si lo dejas vacío, se usan los cupos normales de ese día."
             >
               <Input
                 id="exc-cap"
@@ -811,7 +811,11 @@ const ExceptionDrawer = ({
               />
             </Field>
           )}
-          <Field id="exc-motivo" label="Motivo" hint="Se muestra al colaborador si el día está cerrado.">
+          <Field
+            id="exc-motivo"
+            label="Mensaje para el colaborador (opcional)"
+            hint="Se muestra en el checkout explicando porque no se puede elegir."
+          >
             <Input
               id="exc-motivo"
               maxLength={200}
@@ -875,7 +879,7 @@ const CalendarioTab = ({ sites }: { sites: PickupSiteRow[] }) => {
   };
 
   const eliminar = async (exc: PickupException) => {
-    // Quitar una apertura especial puede dejar el día cerrado.
+    // Quitar un día abierto con cupos especiales puede dejar el día cerrado.
     if (
       exc.tipo === "abierto" &&
       !(await confirmarCierre(
