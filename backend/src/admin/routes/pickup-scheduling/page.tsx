@@ -769,7 +769,7 @@ const ExceptionDrawer = ({
               tipo === "abierto"
                 ? "Abre aunque el horario o un feriado general digan lo contrario (no aplica a feriados irrenunciables)."
                 : tipo === "feriado"
-                  ? "Cierra por feriado."
+                  ? "Cierra por feriado, interferiado o dia libre"
                   : "Cerrado por otro motivo (Ej: mantención)"
             }
           >
@@ -814,7 +814,7 @@ const ExceptionDrawer = ({
           <Field
             id="exc-motivo"
             label="Mensaje para el colaborador (opcional)"
-            hint="Se muestra en el checkout explicando porque no se puede elegir."
+            hint="Se muestra en el checkout explicando porque no se puede elegir dicha fecha."
           >
             <Input
               id="exc-motivo"
