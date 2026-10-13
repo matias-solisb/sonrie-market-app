@@ -6,7 +6,6 @@ import {
   Heading,
   Table,
   Text,
-  Toaster,
 } from "@medusajs/ui";
 import { QueryEmployee } from "../../../../types";
 import { useParams } from "react-router-dom";
@@ -218,7 +217,6 @@ const CompanyDetails = () => {
           </>
         )}
       </Container>
-      <Toaster />
     </div>
   );
 };

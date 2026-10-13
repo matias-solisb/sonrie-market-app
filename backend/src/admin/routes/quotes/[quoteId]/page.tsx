@@ -5,7 +5,6 @@ import {
   Heading,
   Text,
   toast,
-  Toaster,
   usePrompt,
 } from "@medusajs/ui";
 import { useEffect, useState } from "react";
@@ -233,8 +232,6 @@ const QuoteDetails = () => {
           </Container>
         </div>
       </div>
-
-      <Toaster />
     </div>
   );
 };

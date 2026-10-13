@@ -11,7 +11,6 @@ import {
   Table,
   Text,
   toast,
-  Toaster,
   usePrompt,
 } from "@medusajs/ui";
 import { useState } from "react";
@@ -377,8 +376,6 @@ const BenefitBudgetPage = () => {
       </Container>
 
       {active && <Historial campaignId={active.id} />}
-
-      <Toaster />
     </div>
   );
 };

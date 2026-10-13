@@ -28,3 +28,5 @@ build
 .medusa
 
 .env.test
+
+test-results/

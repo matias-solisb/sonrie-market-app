@@ -7,7 +7,6 @@ import {
   Heading,
   Table,
   Text,
-  Toaster,
 } from "@medusajs/ui";
 import { QueryCompany } from "../../../types";
 import { useAdminCustomerGroups, useCompanies } from "../../hooks/api";
@@ -84,7 +83,6 @@ const Companies = () => {
           )}
         </Table>
       </Container>
-      <Toaster />
     </>
   );
 };

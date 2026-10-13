@@ -7,7 +7,6 @@ import {
   IconButton,
   Switch,
   Text,
-  Toaster,
   toast,
 } from "@medusajs/ui";
 import { DragEvent, useRef, useState } from "react";
@@ -163,7 +162,6 @@ const Banners = () => {
           />
         ))}
       </div>
-      <Toaster />
     </Container>
   );
 };
