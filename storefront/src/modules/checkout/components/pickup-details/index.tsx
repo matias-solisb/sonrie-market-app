@@ -49,7 +49,7 @@ const PickupDetails = ({
       }
     >
       <div className="flex flex-col gap-y-6">
-        <div className="flex items-start gap-x-4 rounded-xl bg-[#FBF8F4] p-4">
+        <div className="flex items-start gap-x-4 rounded-xl border border-gray-200 bg-white p-4">
           <span
             className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[#FDE7EC] text-[#E01441]"
             aria-hidden="true"

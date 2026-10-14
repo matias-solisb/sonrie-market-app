@@ -86,7 +86,7 @@ const CheckoutTotals: React.FC<{
         className={clx(
           "flex items-center justify-between text-ui-fg-base mb-2 txt-medium",
           highlightTotal &&
-            "mb-0 mt-4 rounded-xl bg-[#FBF8F4] px-4 py-4 text-neutral-900"
+            "mb-0 mt-4 rounded-xl bg-neutral-100 px-4 py-4 text-neutral-950"
         )}
       >
         <Text className={clx("font-medium", highlightTotal && "text-base font-semibold")}>

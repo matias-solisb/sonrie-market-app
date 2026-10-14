@@ -29,8 +29,8 @@ Columna izquierda, en bloques numerados: 1 retiro, 2 datos del
 colaborador, 3 medio de pago. Columna derecha: productos, totales y
 "Confirmar pedido".
 
-Diseño: el mismo de la confirmación del pedido (fondo crema, tarjetas
-redondeadas, letra grande), pensado para colaboradores de todas las
+Diseño: colores del resto del flujo (fondo blanco, tarjetas
+con borde gris, letra grande), pensado para colaboradores de todas las
 edades. Azul para las acciones, rojo de marca para íconos y detalles.
 
 */
@@ -134,13 +134,13 @@ const PickupCheckout = ({
           />
         </div>
 
-        <aside className="small:sticky small:top-6" aria-label="Resumen del pedido">
+        <aside className="small:sticky small:top-32" aria-label="Resumen del pedido">
           <CheckoutCard
             icon={<ShoppingBag />}
             title="Tu pedido"
             titleId="order-summary-title"
             action={
-              <span className="rounded-full bg-neutral-100 px-3 py-1 text-sm font-medium text-neutral-700">
+              <span className="rounded-full bg-green-100 px-3 py-1 text-sm font-medium text-neutral-700">
                 {units} {units === 1 ? "producto" : "productos"}
               </span>
             }
@@ -150,7 +150,7 @@ const PickupCheckout = ({
               currencyCode={cart.currency_code}
               size="large"
             />
-            <div className="my-4 border-t border-neutral-200" />
+            <div className="my-4 border-t border-gray-200" />
             <CheckoutTotals cartOrOrder={cart} highlightTotal />
 
             <p className="my-4 flex items-start gap-x-2 text-sm text-neutral-600">

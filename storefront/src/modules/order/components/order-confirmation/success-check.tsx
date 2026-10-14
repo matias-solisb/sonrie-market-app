@@ -10,10 +10,10 @@ Rojo de marca: el mismo #E01441 de la barra de categorías del header.
 */
 const SuccessCheck = () => (
   <div
-    className="relative flex h-24 w-24 items-center justify-center rounded-full bg-[#E01441] shadow-[0_8px_24px_rgba(224,20,65,0.28)] ring-8 ring-[#FDE7EC] motion-safe:animate-pop-in"
+    className="relative flex h-16 w-16 items-center justify-center rounded-full bg-[#E01441] shadow-[0_6px_16px_rgba(224,20,65,0.25)] ring-4 ring-[#FDE7EC] motion-safe:animate-pop-in"
     aria-hidden="true"
   >
-    <svg viewBox="0 0 48 48" className="h-12 w-12" fill="none">
+    <svg viewBox="0 0 48 48" className="h-8 w-8" fill="none">
       <path
         d="M13 25l7 7 15-16"
         stroke="white"

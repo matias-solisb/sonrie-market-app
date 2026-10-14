@@ -59,7 +59,7 @@ const BenefitPayment = ({
             <div aria-hidden="true">
               <div className="flex h-3 w-full overflow-hidden rounded-full bg-neutral-100">
                 <div
-                  className="h-full bg-neutral-300"
+                  className="h-full bg-red-600"
                   style={{ width: `${usedPct}%` }}
                 />
                 <div
@@ -72,7 +72,7 @@ const BenefitPayment = ({
               </div>
               <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm text-neutral-600">
                 <span className="flex items-center gap-x-1.5">
-                  <span className="h-2.5 w-2.5 rounded-full bg-neutral-300" />
+                  <span className="h-2.5 w-2.5 rounded-full bg-red-600" />
                   Ya usado
                 </span>
                 <span className="flex items-center gap-x-1.5">
@@ -99,12 +99,12 @@ const BenefitPayment = ({
             </dd>
             <dt className="text-neutral-600">Este pedido</dt>
             <dd className="text-right text-neutral-900">− {money(total)}</dd>
-            <dt className="mt-1 border-t border-neutral-200 pt-3 font-semibold text-neutral-900">
+            <dt className="mt-1 border-t border-gray-200 pt-3 font-semibold text-neutral-900">
               Te quedará
             </dt>
             <dd
               className={clx(
-                "mt-1 border-t border-neutral-200 pt-3 text-right text-lg font-bold",
+                "mt-1 border-t border-gray-200 pt-3 text-right text-lg font-bold",
                 exceeds ? "text-rose-600" : "text-neutral-900"
               )}
               data-testid="benefit-after"
@@ -114,7 +114,7 @@ const BenefitPayment = ({
           </dl>
         </div>
       ) : (
-        <p className="rounded-xl bg-neutral-50 px-4 py-3 text-base text-neutral-700">
+        <p className="rounded-xl bg-neutral-100 px-4 py-3 text-base text-neutral-700">
           No pudimos cargar tu saldo de beneficio. Se validará al confirmar.
         </p>
       )}

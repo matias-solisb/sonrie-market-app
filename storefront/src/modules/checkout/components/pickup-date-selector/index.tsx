@@ -55,7 +55,7 @@ const Notice = ({
   ...props
 }: React.HTMLAttributes<HTMLParagraphElement>) => (
   <p
-    className="rounded-xl bg-neutral-50 px-4 py-3 text-base text-neutral-700"
+    className="rounded-xl bg-neutral-100 px-4 py-3 text-base text-neutral-700"
     {...props}
   >
     {children}
@@ -227,7 +227,7 @@ const PickupDateSelector = ({ slots, selected, siteName }: Props) => {
                     isChosen
                       ? "bg-white/20 text-white"
                       : slot.disponible
-                        ? "bg-amber-100 text-amber-800"
+                        ? "bg-orange-50 text-orange-700"
                         : "text-neutral-500"
                   )}
                 >

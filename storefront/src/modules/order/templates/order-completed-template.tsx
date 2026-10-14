@@ -44,7 +44,7 @@ const Card = ({
   ...props
 }: React.HTMLAttributes<HTMLElement>) => (
   <section
-    className={`rounded-2xl border border-neutral-200 bg-white p-6 shadow-[0_1px_2px_rgba(0,0,0,0.04)] ${className}`}
+    className={`rounded-2xl border border-gray-300 bg-white p-6 shadow-[0_1px_3px_rgba(0,0,0,0.08)] ${className}`}
     {...props}
   >
     {children}
@@ -71,7 +71,7 @@ export default async function OrderCompletedTemplate({
   const units = items.reduce((sum, item) => sum + Number(item.quantity), 0)
 
   return (
-    <div className="min-h-[calc(100vh-64px)] bg-[#FBF8F4] py-10 small:py-14">
+    <div className="min-h-[calc(100vh-64px)] bg-white py-10 small:py-14">
       <div
         className="content-container flex max-w-3xl flex-col gap-y-6"
         data-testid="order-complete-container"

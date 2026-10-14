@@ -53,8 +53,8 @@ const ConfirmOrderButton = ({
   return (
     <div className="flex flex-col gap-y-3">
       {disabled && disabledReason && (
-        <div className="flex items-start gap-x-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-amber-900">
-          <ExclamationCircleSolid className="mt-0.5 shrink-0" aria-hidden="true" />
+        <div className="flex items-start gap-x-2 rounded-xl bg-neutral-100 px-4 py-3 text-neutral-950">
+          <ExclamationCircleSolid className="mt-0.5 shrink-0 text-orange-500" aria-hidden="true" />
           <p className="text-base" data-testid="submit-disabled-reason">
             {disabledReason}
           </p>
