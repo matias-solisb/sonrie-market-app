@@ -6,12 +6,14 @@ import { ConfirmPickupBookingInput, confirmPickupBookingStep } from "../steps";
 
 /*
 
-Confirma el cupo de retiro reservado en el checkout (por `cart_id`) y le
-asocia el pedido. Lo dispara el subscriber de `order.placed`.
+Deja `agendado` el cupo de retiro que quedó `pendiente` en el checkout
+(por `cart_id`) y le asocia el pedido. Lo dispara el subscriber de
+`order.placed`.
 
-En el MVP no hay validación SAP: el cupo pasa de `reservado` a
-`confirmado` apenas se crea el pedido (Documento técnico §6). Un cupo ya
-liberado no se revive.
+Decisión del MVP: no hay validación SAP, así que el cupo queda agendado
+apenas se crea el pedido. (El Documento técnico §6 lo confirma recién en
+"Validada SAP"; en la Fase 4 esto pasará a depender de `sap-orders`.) Un
+cupo anulado no se revive.
 
 */
 export const confirmPickupBookingWorkflow = createWorkflow(

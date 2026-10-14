@@ -4,7 +4,7 @@ import { confirmPickupBookingWorkflow } from "../workflows/pickup-scheduling/wor
 
 /*
 
-Al crearse un pedido, confirma su cupo de retiro (reservado en el checkout
+Al crearse un pedido, deja agendado su cupo de retiro (pendiente desde el checkout
 por `cart_id`) y le asocia el pedido. Así el backoffice ve qué pedido
 ocupa cada cupo y la anulación lo encuentra por `order_id`.
 

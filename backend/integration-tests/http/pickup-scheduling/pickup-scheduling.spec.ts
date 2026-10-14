@@ -31,8 +31,11 @@ Fecha de retiro contra la API (npm run test:integration:http):
 - el checkout exige fecha y toma el cupo (también en pedidos de $0);
 - concurrencia por el último cupo;
 - compensaciones: beneficio insuficiente y falla después del hook;
-- ciclo del pedido: order.placed confirma el cupo y order.canceled lo
-  libera (junto con el reintegro del beneficio).
+- ciclo del pedido: order.placed agenda el cupo y order.canceled lo
+  anula (junto con el reintegro del beneficio);
+- entrega en sala de venta: POST /admin/pickup-scheduling/retiros/:id/entregar
+  (un clic, doble clic, anulado, cumplimiento previo, botones nativos) y
+  GET /admin/pickup-scheduling/retiros.
 
 setupShop deja la agenda abierta todos los días con capacidad 1000; cada
 test ajusta la capacidad del site si la necesita. Los tests usan la hora
@@ -430,13 +433,13 @@ medusaIntegrationTestRunner({
       const anular = (orderId: string) =>
         api.post(`/admin/orders/${orderId}/cancel`, {}, adminHeaders);
 
-      it("al crearse el pedido el cupo queda confirmado y asociado", async () => {
+      it("al crearse el pedido el cupo queda agendado y asociado", async () => {
         const { order, booking: b } = await comprar();
 
-        await waitFor(async () => (await booking(b.id)).estado === "confirmado");
+        await waitFor(async () => (await booking(b.id)).estado === "agendado");
         expect(await booking(b.id)).toMatchObject({
           order_id: order.id,
-          estado: "confirmado",
+          estado: "agendado",
         });
 
         // Link de solo lectura pickup_booking -> order
@@ -452,12 +455,12 @@ medusaIntegrationTestRunner({
 
       it("al anular el pedido se libera el cupo y se reintegra el beneficio", async () => {
         const { order, booking: b } = await comprar(2);
-        await waitFor(async () => (await booking(b.id)).estado === "confirmado");
+        await waitFor(async () => (await booking(b.id)).estado === "agendado");
         expect(await ocupados(b.fecha)).toBe(1);
 
         await anular(order.id);
 
-        await waitFor(async () => (await booking(b.id)).estado === "liberado");
+        await waitFor(async () => (await booking(b.id)).estado === "anulado");
         expect(await ocupados(b.fecha)).toBe(0);
         await waitFor(
           async () => (await storeBalance(api, shop.storeHeaders)).consumido === 0
@@ -482,9 +485,9 @@ medusaIntegrationTestRunner({
         expect(lleno.status).toBe(400);
         expect(lleno.data.message).toContain("No quedan cupos de retiro");
 
-        await waitFor(async () => (await booking(b.id)).estado === "confirmado");
+        await waitFor(async () => (await booking(b.id)).estado === "agendado");
         await anular(order.id);
-        await waitFor(async () => (await booking(b.id)).estado === "liberado");
+        await waitFor(async () => (await booking(b.id)).estado === "anulado");
 
         expect((await setPickupDate(api, cart.id, b.fecha, otro.headers)).status).toBe(200);
         expect((await complete(api, cart.id, otro.headers)).status).toBe(200);
@@ -493,7 +496,7 @@ medusaIntegrationTestRunner({
 
       it("liberar dos veces el mismo pedido devuelve el cupo una sola vez", async () => {
         const { order, cart, booking: b } = await comprar();
-        await waitFor(async () => (await booking(b.id)).estado === "confirmado");
+        await waitFor(async () => (await booking(b.id)).estado === "agendado");
 
         const first = await releasePickupBookingWorkflow(shop.container).run({
           input: { order_id: order.id, cart_id: cart.id },
@@ -504,7 +507,7 @@ medusaIntegrationTestRunner({
 
         expect(first.result).toMatchObject({
           booking_id: b.id,
-          estado_anterior: "confirmado",
+          estado_anterior: "agendado",
           released: true,
         });
         expect(second.result).toMatchObject({ released: false });
@@ -513,9 +516,9 @@ medusaIntegrationTestRunner({
 
       it("libera por carrito si el pedido aún no estaba asociado al cupo", async () => {
         const { order, cart, booking: b } = await comprar();
-        await waitFor(async () => (await booking(b.id)).estado === "confirmado");
+        await waitFor(async () => (await booking(b.id)).estado === "agendado");
         // Simula que order.placed no alcanzó a correr.
-        await pickup.updatePickupBookings({ id: b.id, order_id: null, estado: "reservado" });
+        await pickup.updatePickupBookings({ id: b.id, order_id: null, estado: "pendiente" });
 
         const { result } = await releasePickupBookingWorkflow(shop.container).run({
           input: { order_id: order.id, cart_id: cart.id },
@@ -523,6 +526,146 @@ medusaIntegrationTestRunner({
 
         expect(result).toMatchObject({ booking_id: b.id, released: true });
         expect(await ocupados(b.fecha)).toBe(0);
+      });
+
+      describe("entrega en sala de venta", () => {
+        const entregar = (orderId: string) =>
+          api.post(
+            `/admin/pickup-scheduling/retiros/${orderId}/entregar`,
+            {},
+            adminHeaders
+          );
+
+        const pedidoAgendado = async (quantity = 2) => {
+          const comprado = await comprar(quantity);
+          await waitFor(
+            async () => (await booking(comprado.booking.id)).estado === "agendado"
+          );
+          return comprado;
+        };
+
+        it("un clic: cupo retirado, cumplimiento creado y entregado, ocupación intacta", async () => {
+          const { order, booking: b } = await pedidoAgendado();
+
+          const res = await entregar(order.id);
+
+          expect(res.status).toBe(200);
+          expect(res.data.entregado_ahora).toBe(true);
+          expect(res.data.retiro).toMatchObject({
+            order_id: order.id,
+            estado: "retirado",
+            estado_retiro: "retirado",
+            total_unidades: 2,
+          });
+          expect(res.data.retiro.retirado_at).toBeTruthy();
+          expect(res.data.retiro.retirado_por_email).toBeTruthy();
+          expect(await ocupados(b.fecha)).toBe(1);
+
+          const { order: admin } = (
+            await api.get(
+              `/admin/orders/${order.id}?fields=fulfillment_status,*fulfillments`,
+              adminHeaders
+            )
+          ).data;
+          expect(admin.fulfillment_status).toBe("delivered");
+          expect(admin.fulfillments).toHaveLength(1);
+          expect(admin.fulfillments[0].delivered_at).toBeTruthy();
+        });
+
+        it("doble clic: la segunda vez responde 200 sin crear otro cumplimiento", async () => {
+          const { order } = await pedidoAgendado();
+
+          await entregar(order.id);
+          const second = await entregar(order.id);
+
+          expect(second.status).toBe(200);
+          expect(second.data.entregado_ahora).toBe(false);
+          const { order: admin } = (
+            await api.get(`/admin/orders/${order.id}?fields=*fulfillments`, adminHeaders)
+          ).data;
+          expect(admin.fulfillments).toHaveLength(1);
+        });
+
+        it("no entrega un pedido anulado", async () => {
+          const { order, booking: b } = await pedidoAgendado();
+          await anular(order.id);
+          await waitFor(async () => (await booking(b.id)).estado === "anulado");
+
+          const res = await entregar(order.id).catch((e) => e.response);
+
+          expect(res.status).toBe(400);
+          expect(res.data.message).toMatch(/anulado/);
+        });
+
+        it("si ya se había usado 'Cumplir artículos', entrega ese cumplimiento", async () => {
+          const { order } = await pedidoAgendado(1);
+          await api.post(
+            `/admin/orders/${order.id}/fulfillments`,
+            { items: [{ id: order.items[0].id, quantity: 1 }], location_id: shop.site.id },
+            adminHeaders
+          );
+
+          const res = await entregar(order.id);
+
+          expect(res.status).toBe(200);
+          const { order: admin } = (
+            await api.get(
+              `/admin/orders/${order.id}?fields=fulfillment_status,*fulfillments`,
+              adminHeaders
+            )
+          ).data;
+          expect(admin.fulfillment_status).toBe("delivered");
+          expect(admin.fulfillments).toHaveLength(1);
+        });
+
+        it("con los botones nativos del Admin el cupo también queda retirado", async () => {
+          const { order, booking: b } = await pedidoAgendado(1);
+          await api.post(
+            `/admin/orders/${order.id}/fulfillments`,
+            { items: [{ id: order.items[0].id, quantity: 1 }], location_id: shop.site.id },
+            adminHeaders
+          );
+          const { order: conCumplimiento } = (
+            await api.get(`/admin/orders/${order.id}?fields=*fulfillments`, adminHeaders)
+          ).data;
+          const fulfillmentId = conCumplimiento.fulfillments[0].id;
+
+          await api.post(
+            `/admin/orders/${order.id}/fulfillments/${fulfillmentId}/mark-as-delivered`,
+            {},
+            adminHeaders
+          );
+
+          await waitFor(async () => (await booking(b.id)).estado === "retirado");
+          expect(await booking(b.id)).toMatchObject({ retirado_por: null });
+        });
+
+        it("Retiros del día: lista por site y fecha, cuenta por estado y busca por n.º de pedido", async () => {
+          const { order, booking: b } = await pedidoAgendado();
+          const otro = await pedidoAgendado(1);
+          await entregar(otro.order.id);
+
+          const { data } = await api.get(
+            `/admin/pickup-scheduling/retiros?stock_location_id=${shop.site.id}&fecha=${b.fecha}`,
+            adminHeaders
+          );
+
+          expect(data.fecha).toBe(b.fecha);
+          expect(data.resumen).toMatchObject({ entregados: 1, anulados: 0 });
+          expect(data.resumen.por_entregar + data.resumen.no_retirados).toBeGreaterThanOrEqual(1);
+          const fila = data.retiros.find((r: any) => r.order_id === order.id);
+          expect(fila).toMatchObject({
+            display_id: order.display_id,
+            estado: "agendado",
+            productos: [expect.objectContaining({ cantidad: 2 })],
+          });
+
+          const busqueda = await api.get(
+            `/admin/pickup-scheduling/retiros?stock_location_id=${shop.site.id}&q=%23${order.display_id}`,
+            adminHeaders
+          );
+          expect(busqueda.data.retiros.map((r: any) => r.order_id)).toEqual([order.id]);
+        });
       });
     });
 
@@ -703,7 +846,7 @@ medusaIntegrationTestRunner({
         expect(res.status).toBe(200);
         const [b] = await pickup.listPickupBookings({ cart_id: primero.id });
         await waitFor(
-          async () => (await pickup.retrievePickupBooking(b.id)).estado === "confirmado"
+          async () => (await pickup.retrievePickupBooking(b.id)).estado === "agendado"
         );
 
         // Lleno: el mismo colaborador no puede tomar un segundo cupo ese día
@@ -715,7 +858,7 @@ medusaIntegrationTestRunner({
         // Se equivocó: el Admin anula el primero y vuelve a comprar
         await api.post(`/admin/orders/${res.data.order.id}/cancel`, {}, adminHeaders);
         await waitFor(
-          async () => (await pickup.retrievePickupBooking(b.id)).estado === "liberado"
+          async () => (await pickup.retrievePickupBooking(b.id)).estado === "anulado"
         );
         await waitFor(
           async () => (await storeBalance(api, shop.storeHeaders)).consumido === 0
@@ -728,7 +871,7 @@ medusaIntegrationTestRunner({
         // Solo cuenta el pedido vigente (1 × $10.000)
         expect((await storeBalance(api, shop.storeHeaders)).consumido).toBe(10000);
         const activos = (await pickup.listPickupBookings({ fecha })).filter(
-          (x: any) => x.estado !== "liberado"
+          (x: any) => x.estado !== "anulado"
         );
         expect(activos).toHaveLength(1);
       });
@@ -741,7 +884,7 @@ medusaIntegrationTestRunner({
         const order = res.data.order;
         const [b] = await pickup.listPickupBookings({ cart_id: cart.id });
         await waitFor(
-          async () => (await pickup.retrievePickupBooking(b.id)).estado === "confirmado"
+          async () => (await pickup.retrievePickupBooking(b.id)).estado === "agendado"
         );
 
         const { order_change } = (
@@ -762,7 +905,7 @@ medusaIntegrationTestRunner({
         expect(confirmado.status).toBe(200);
 
         expect(await pickup.retrievePickupBooking(b.id)).toMatchObject({
-          estado: "confirmado",
+          estado: "agendado",
           order_id: order.id,
           fecha,
         });

@@ -29,6 +29,8 @@ import {
   CreateExceptionInput,
   EstadoBooking,
   LoadHolidaysResult,
+  MarkRetiradoInput,
+  MarkRetiradoResult,
   UpdateExceptionInput,
   ReleaseBookingInput,
   ReleaseBookingResult,
@@ -69,8 +71,10 @@ Además del CRUD que genera `MedusaService`, expone:
   cerraron después).
 - Ciclo del cupo:
     `reserveBooking` / `revertBooking`   checkout y su compensación
-    `confirmBooking`                     order.placed
+    `confirmBooking`                     order.placed (pendiente → agendado)
+    `markRetirado` / `undoRetirado`      entrega del pedido y su compensación
     `releaseBookingByOrder` / `undoRelease`  order.canceled y su compensación
+  Estados en models/pickup-booking.ts.
 
 Resolución de un día (site, fecha). ¿Abre?, gana la primera regla que aplique:
   1. Feriado global irrenunciable → cerrado, sin excepción posible.
@@ -1035,7 +1039,7 @@ class PickupSchedulingModuleService extends MedusaService({
   }
 
   /**
-   * Pedidos agendados (cupos reservados o confirmados, desde hoy) que caen
+   * Pedidos agendados (cupos pendientes o agendados, desde hoy) que caen
    * en un día que hoy está cerrado: el admin cerró el día, cargó un feriado
    * o cambió el horario después de que el colaborador eligió la fecha.
    * Cerrar un día no anula ni mueve esos pedidos; el Admin los muestra para
@@ -1048,7 +1052,7 @@ class PickupSchedulingModuleService extends MedusaService({
   ): Promise<BookingConflict[]> {
     const hoy = toFecha(now);
     const bookings = (await this.listPickupBookings(
-      { estado: ["reservado", "confirmado"], fecha: { $gte: hoy } } as any,
+      { estado: ["pendiente", "agendado"], fecha: { $gte: hoy } } as any,
       { order: { fecha: "ASC" } },
       sharedContext
     )) as BookingRow[];
@@ -1097,7 +1101,7 @@ class PickupSchedulingModuleService extends MedusaService({
    *
    * Idempotente por `cart_id`: si el carrito ya tiene ese mismo cupo
    * (reintento de completeCart) devuelve `created: false` sin descontar de
-   * nuevo. Si tiene un cupo reservado con otro site/fecha (quedó de un
+   * nuevo. Si tiene un cupo pendiente con otro site/fecha (quedó de un
    * intento anterior), lo devuelve y toma el nuevo. Si el cupo ya está
    * asociado a un pedido, rechaza: nunca se toca el cupo de un pedido.
    */
@@ -1127,7 +1131,11 @@ class PickupSchedulingModuleService extends MedusaService({
     if (existing) {
       // El cupo ya pertenece a un pedido: no se mueve ni se borra desde el
       // checkout (eso sería reagendar, F2 2b).
-      if (existing.order_id || existing.estado === "confirmado") {
+      if (
+        existing.order_id ||
+        existing.estado === "agendado" ||
+        existing.estado === "retirado"
+      ) {
         throw notAllowed(
           "Este carrito ya tiene un pedido con fecha de retiro asignada."
         );
@@ -1136,7 +1144,7 @@ class PickupSchedulingModuleService extends MedusaService({
       if (
         existing.stock_location_id === stock_location_id &&
         existing.fecha === fecha &&
-        existing.estado !== "liberado"
+        existing.estado !== "anulado"
       ) {
         return {
           booking_id: existing.id,
@@ -1185,7 +1193,7 @@ class PickupSchedulingModuleService extends MedusaService({
     }
 
     const booking = await this.createPickupBookings(
-      { cart_id, stock_location_id, fecha, estado: "reservado" },
+      { cart_id, stock_location_id, fecha, estado: "pendiente" },
       sharedContext
     );
 
@@ -1223,9 +1231,9 @@ class PickupSchedulingModuleService extends MedusaService({
   }
 
   /**
-   * Asocia el pedido al cupo de su carrito y lo confirma. Idempotente.
-   * Devuelve el id del cupo, o null si el carrito no tenía cupo.
-   * Un cupo ya liberado no se revive.
+   * Asocia el pedido al cupo de su carrito y lo deja `agendado`.
+   * Idempotente. Devuelve el id del cupo, o null si el carrito no tenía
+   * cupo. Un cupo anulado no se revive.
    */
   @InjectTransactionManager()
   async confirmBooking(
@@ -1244,7 +1252,7 @@ class PickupSchedulingModuleService extends MedusaService({
     }
 
     const estado: EstadoBooking =
-      booking.estado === "reservado" ? "confirmado" : booking.estado;
+      booking.estado === "pendiente" ? "agendado" : booking.estado;
 
     if (booking.order_id !== orderId || booking.estado !== estado) {
       await this.updatePickupBookings(
@@ -1257,9 +1265,10 @@ class PickupSchedulingModuleService extends MedusaService({
   }
 
   /**
-   * Libera el cupo de un pedido anulado/rechazado. Idempotente: si ya
-   * estaba liberado no vuelve a descontar. Devuelve null si el pedido no
-   * tenía cupo.
+   * Anula el cupo de un pedido anulado/rechazado y lo devuelve a la
+   * ocupación del día. Idempotente: si ya estaba anulado no vuelve a
+   * descontar. Un cupo `retirado` no se toca (el pedido ya se entregó).
+   * Devuelve null si el pedido no tenía cupo.
    */
   @InjectTransactionManager()
   async releaseBookingByOrder(
@@ -1285,10 +1294,10 @@ class PickupSchedulingModuleService extends MedusaService({
       return null;
     }
 
-    if (booking.estado === "liberado") {
+    if (booking.estado === "anulado" || booking.estado === "retirado") {
       return {
         booking_id: booking.id,
-        estado_anterior: "liberado",
+        estado_anterior: booking.estado,
         released: false,
       };
     }
@@ -1297,7 +1306,7 @@ class PickupSchedulingModuleService extends MedusaService({
 
     const updated = await em.execute(
       `UPDATE pickup_booking
-          SET estado = 'liberado', updated_at = now()
+          SET estado = 'anulado', updated_at = now()
         WHERE id = ? AND estado = ? AND deleted_at IS NULL
       RETURNING id`,
       [booking.id, booking.estado],
@@ -1305,10 +1314,10 @@ class PickupSchedulingModuleService extends MedusaService({
     );
 
     if (!updated.length) {
-      // Otro proceso lo liberó entre la lectura y el UPDATE.
+      // Otro proceso lo anuló (o entregó) entre la lectura y el UPDATE.
       return {
         booking_id: booking.id,
-        estado_anterior: "liberado",
+        estado_anterior: "anulado",
         released: false,
       };
     }
@@ -1333,7 +1342,7 @@ class PickupSchedulingModuleService extends MedusaService({
     estadoAnterior: EstadoBooking,
     @MedusaContext() sharedContext: Context = {}
   ): Promise<void> {
-    if (estadoAnterior === "liberado") {
+    if (estadoAnterior === "anulado" || estadoAnterior === "retirado") {
       return;
     }
 
@@ -1342,7 +1351,7 @@ class PickupSchedulingModuleService extends MedusaService({
     const [row] = await em.execute(
       `UPDATE pickup_booking
           SET estado = ?, updated_at = now()
-        WHERE id = ? AND estado = 'liberado' AND deleted_at IS NULL
+        WHERE id = ? AND estado = 'anulado' AND deleted_at IS NULL
       RETURNING stock_location_id, fecha`,
       [estadoAnterior, bookingId],
       "all"
@@ -1358,6 +1367,91 @@ class PickupSchedulingModuleService extends MedusaService({
         WHERE stock_location_id = ? AND fecha = ?
           AND bloque IS NULL AND deleted_at IS NULL`,
       [row.stock_location_id, row.fecha],
+      "all"
+    );
+  }
+
+  /**
+   * Marca entregado el cupo de un pedido: `agendado` → `retirado`, con
+   * cuándo y quién. Idempotente: si ya estaba retirado devuelve
+   * `retirado: false` sin cambiar nada (doble clic, reintento o el
+   * subscriber de `delivery.created` después del workflow).
+   *
+   * No toca la ocupación: el cupo de ese día se usó y sigue contando.
+   * Rechaza un pedido sin cupo, anulado o que aún no se crea.
+   */
+  @InjectTransactionManager()
+  async markRetirado(
+    input: MarkRetiradoInput,
+    @MedusaContext() sharedContext: Context = {}
+  ): Promise<MarkRetiradoResult> {
+    const [booking] = (await this.listPickupBookings(
+      { order_id: input.order_id },
+      { take: 1 },
+      sharedContext
+    )) as BookingRow[];
+
+    if (!booking) {
+      throw notAllowed("Este pedido no tiene fecha de retiro agendada.");
+    }
+
+    if (booking.estado === "retirado") {
+      return { booking_id: booking.id, retirado: false };
+    }
+
+    if (booking.estado !== "agendado") {
+      throw notAllowed(
+        booking.estado === "anulado"
+          ? "Este pedido está anulado: no se puede entregar."
+          : "Este pedido todavía se está creando. Intenta en unos segundos."
+      );
+    }
+
+    const em = sharedContext.transactionManager as EntityManager;
+    const actor = input.actor ?? null;
+
+    const updated = await em.execute(
+      `UPDATE pickup_booking
+          SET estado = 'retirado',
+              retirado_at = ?,
+              retirado_por = ?,
+              retirado_por_email = ?,
+              updated_at = now()
+        WHERE id = ? AND estado = 'agendado' AND deleted_at IS NULL
+      RETURNING id`,
+      [
+        input.now ?? new Date(),
+        actor?.id ?? null,
+        actor?.email ?? null,
+        booking.id,
+      ],
+      "all"
+    );
+
+    // Otro proceso lo entregó entre la lectura y el UPDATE.
+    return { booking_id: booking.id, retirado: updated.length > 0 };
+  }
+
+  /**
+   * Compensación de `markRetirado`: vuelve el cupo a `agendado` y borra
+   * los datos de la entrega. Solo si sigue `retirado`.
+   */
+  @InjectTransactionManager()
+  async undoRetirado(
+    bookingId: string,
+    @MedusaContext() sharedContext: Context = {}
+  ): Promise<void> {
+    const em = sharedContext.transactionManager as EntityManager;
+
+    await em.execute(
+      `UPDATE pickup_booking
+          SET estado = 'agendado',
+              retirado_at = NULL,
+              retirado_por = NULL,
+              retirado_por_email = NULL,
+              updated_at = now()
+        WHERE id = ? AND estado = 'retirado' AND deleted_at IS NULL`,
+      [bookingId],
       "all"
     );
   }
@@ -1624,13 +1718,13 @@ class PickupSchedulingModuleService extends MedusaService({
     };
   }
 
-  /** Borra un cupo y, si no estaba liberado, lo descuenta de la ocupación. */
+  /** Borra un cupo y, si no estaba anulado, lo descuenta de la ocupación. */
   private async deleteBooking_(
     em: EntityManager,
     booking: BookingRow,
     sharedContext: Context
   ): Promise<void> {
-    if (booking.estado !== "liberado") {
+    if (booking.estado !== "anulado") {
       await this.decrementOccupancy_(em, booking);
     }
 

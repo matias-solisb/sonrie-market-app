@@ -438,7 +438,7 @@ moduleIntegrationTestRunner<PickupSchedulingModuleService>({
           now: NOW,
         });
 
-      it("toma el cupo y lo registra como reservado", async () => {
+      it("toma el cupo y lo registra como pendiente", async () => {
         const result = await reservar("cart_1");
 
         expect(result).toMatchObject({ fecha: JUE, created: true });
@@ -447,7 +447,7 @@ moduleIntegrationTestRunner<PickupSchedulingModuleService>({
         const booking = await service.retrievePickupBooking(result.booking_id);
         expect(booking).toMatchObject({
           cart_id: "cart_1",
-          estado: "reservado",
+          estado: "pendiente",
           order_id: null,
           bloque: null,
         });
@@ -485,7 +485,7 @@ moduleIntegrationTestRunner<PickupSchedulingModuleService>({
 
         expect(await service.retrievePickupBooking(booking_id)).toMatchObject({
           order_id: "order_1",
-          estado: "confirmado",
+          estado: "agendado",
           fecha: JUE,
         });
         expect(await ocupados(SITE, JUE)).toBe(1);
@@ -610,7 +610,7 @@ moduleIntegrationTestRunner<PickupSchedulingModuleService>({
 
         expect(await service.retrievePickupBooking(booking_id)).toMatchObject({
           order_id: "order_1",
-          estado: "confirmado",
+          estado: "agendado",
         });
       });
 
@@ -625,7 +625,7 @@ moduleIntegrationTestRunner<PickupSchedulingModuleService>({
         expect(result).toMatchObject({ booking_id, released: true });
         expect(await ocupados(SITE, JUE)).toBe(0);
         expect(await service.retrievePickupBooking(booking_id)).toMatchObject({
-          estado: "liberado",
+          estado: "anulado",
         });
       });
 
@@ -648,14 +648,14 @@ moduleIntegrationTestRunner<PickupSchedulingModuleService>({
           motivo: "Inventario",
         });
 
-        // Solo el del site cerrado; el pedido sigue confirmado
+        // Solo el del site cerrado; el pedido sigue agendado
         expect(await service.listBookingConflicts(NOW)).toEqual([
           expect.objectContaining({
             cart_id: "cart_1",
             order_id: "order_1",
             stock_location_id: SITE,
             fecha: JUE,
-            estado: "confirmado",
+            estado: "agendado",
             origen: "excepcion_site",
             motivo: "Inventario",
           }),
@@ -668,7 +668,7 @@ moduleIntegrationTestRunner<PickupSchedulingModuleService>({
           "cart_2",
         ]);
 
-        // Los liberados y las fechas pasadas no cuentan
+        // Los anulados y las fechas pasadas no cuentan
         await service.releaseBookingByOrder({ order_id: "order_1" });
         expect((await service.listBookingConflicts(NOW)).map((c) => c.cart_id)).toEqual([
           "cart_2",
@@ -687,13 +687,13 @@ moduleIntegrationTestRunner<PickupSchedulingModuleService>({
 
         expect(first).toEqual({
           booking_id,
-          estado_anterior: "confirmado",
+          estado_anterior: "agendado",
           released: true,
         });
         expect(second).toMatchObject({ released: false });
         expect(await ocupados(SITE, JUE)).toBe(0);
         expect((await service.retrievePickupBooking(booking_id)).estado).toBe(
-          "liberado"
+          "anulado"
         );
       });
 
@@ -706,7 +706,7 @@ moduleIntegrationTestRunner<PickupSchedulingModuleService>({
         });
 
         expect(result).toMatchObject({
-          estado_anterior: "reservado",
+          estado_anterior: "pendiente",
           released: true,
         });
         expect(await ocupados(SITE, JUE)).toBe(0);
@@ -729,19 +729,122 @@ moduleIntegrationTestRunner<PickupSchedulingModuleService>({
         await service.undoRelease(booking_id, release!.estado_anterior); // idempotente
 
         expect((await service.retrievePickupBooking(booking_id)).estado).toBe(
-          "confirmado"
+          "agendado"
         );
         expect(await ocupados(SITE, JUE)).toBe(1);
       });
 
-      it("un cupo liberado no se revive al confirmar", async () => {
+      it("un cupo anulado no se revive al agendar", async () => {
         const { booking_id } = await reservar("cart_1");
         await service.releaseBookingByOrder({ order_id: "x", cart_id: "cart_1" });
         await service.confirmBooking("cart_1", "order_1");
 
         expect((await service.retrievePickupBooking(booking_id)).estado).toBe(
-          "liberado"
+          "anulado"
         );
+      });
+
+      describe("entrega (markRetirado)", () => {
+        const ENTREGA = new Date("2026-10-08T14:30:00Z");
+
+        it("deja el cupo retirado con cuándo y quién, sin tocar la ocupación", async () => {
+          const { booking_id } = await reservar("cart_1");
+          await service.confirmBooking("cart_1", "order_1");
+
+          const result = await service.markRetirado({
+            order_id: "order_1",
+            actor: { id: "user_op", email: "op@soprole.cl" },
+            now: ENTREGA,
+          });
+
+          expect(result).toEqual({ booking_id, retirado: true });
+          const booking = await service.retrievePickupBooking(booking_id);
+          expect(booking).toMatchObject({
+            estado: "retirado",
+            retirado_por: "user_op",
+            retirado_por_email: "op@soprole.cl",
+          });
+          expect(new Date(booking.retirado_at as any).toISOString()).toBe(
+            ENTREGA.toISOString()
+          );
+          expect(await ocupados(SITE, JUE)).toBe(1);
+        });
+
+        it("es idempotente: la segunda vez no cambia quién ni cuándo", async () => {
+          const { booking_id } = await reservar("cart_1");
+          await service.confirmBooking("cart_1", "order_1");
+
+          await service.markRetirado({
+            order_id: "order_1",
+            actor: { id: "user_a", email: "a@soprole.cl" },
+            now: ENTREGA,
+          });
+          const second = await service.markRetirado({
+            order_id: "order_1",
+            actor: { id: "user_b", email: "b@soprole.cl" },
+          });
+
+          expect(second).toEqual({ booking_id, retirado: false });
+          expect(await service.retrievePickupBooking(booking_id)).toMatchObject({
+            retirado_por: "user_a",
+          });
+        });
+
+        it("rechaza un pedido anulado, uno sin cupo y uno que aún se está creando", async () => {
+          await reservar("cart_1");
+          await service.confirmBooking("cart_1", "order_1");
+          await service.releaseBookingByOrder({ order_id: "order_1" });
+          await expect(
+            service.markRetirado({ order_id: "order_1" })
+          ).rejects.toThrow(/anulado/);
+
+          await expect(
+            service.markRetirado({ order_id: "order_sin_cupo" })
+          ).rejects.toThrow(/no tiene fecha de retiro/);
+
+          const { booking_id } = await reservar("cart_2");
+          await service.updatePickupBookings({ id: booking_id, order_id: "order_2" });
+          await expect(
+            service.markRetirado({ order_id: "order_2" })
+          ).rejects.toThrow(/creando/);
+        });
+
+        it("undoRetirado lo vuelve a agendado y borra los datos de la entrega", async () => {
+          const { booking_id } = await reservar("cart_1");
+          await service.confirmBooking("cart_1", "order_1");
+          await service.markRetirado({
+            order_id: "order_1",
+            actor: { id: "user_op" },
+            now: ENTREGA,
+          });
+
+          await service.undoRetirado(booking_id);
+
+          expect(await service.retrievePickupBooking(booking_id)).toMatchObject({
+            estado: "agendado",
+            retirado_at: null,
+            retirado_por: null,
+            retirado_por_email: null,
+          });
+        });
+
+        it("un pedido retirado no se anula ni devuelve su cupo", async () => {
+          const { booking_id } = await reservar("cart_1");
+          await service.confirmBooking("cart_1", "order_1");
+          await service.markRetirado({ order_id: "order_1", now: ENTREGA });
+
+          const result = await service.releaseBookingByOrder({ order_id: "order_1" });
+
+          expect(result).toEqual({
+            booking_id,
+            estado_anterior: "retirado",
+            released: false,
+          });
+          expect((await service.retrievePickupBooking(booking_id)).estado).toBe(
+            "retirado"
+          );
+          expect(await ocupados(SITE, JUE)).toBe(1);
+        });
       });
     });
 

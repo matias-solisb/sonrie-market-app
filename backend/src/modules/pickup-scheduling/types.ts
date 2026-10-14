@@ -1,4 +1,25 @@
-export type EstadoBooking = "reservado" | "confirmado" | "liberado";
+/**
+ * Estado guardado del cupo de retiro (ver models/pickup-booking.ts).
+ * `pendiente` → `agendado` → `retirado`, o `anulado`.
+ */
+export type EstadoBooking = "pendiente" | "agendado" | "retirado" | "anulado";
+// F1: agregar "preparado" (el operador armó el pedido y está listo para
+// retiro) entre "agendado" y "retirado". Ver models/pickup-booking.ts.
+
+/**
+ * Estado del retiro tal como lo ve una persona. No se guarda: se calcula
+ * con el estado guardado y la fecha de hoy (ver utils/estado-retiro.ts).
+ * - `retira_hoy`: agendado para hoy.
+ * - `no_retirado`: agendado para un día que ya pasó y nadie lo entregó.
+ */
+export type EstadoRetiro =
+  | "pendiente"
+  | "agendado"
+  | "retira_hoy"
+  | "no_retirado"
+  | "retirado"
+  | "anulado";
+// F1: | "preparado"
 
 export type TipoExcepcion = "feriado" | "cerrado" | "abierto";
 
@@ -71,7 +92,7 @@ export type ReleaseBookingResult = {
   booking_id: string;
   /** Estado previo, para compensar con `undoRelease`. */
   estado_anterior: EstadoBooking;
-  /** false si ya estaba liberado. */
+  /** false si ya estaba anulado (o retirado: un pedido entregado no se anula). */
   released: boolean;
 };
 
@@ -120,4 +141,20 @@ export type LoadHolidaysResult = {
   creados: string[];
   /** Fechas que ya tenían una excepción global (no se tocaron). */
   omitidos: string[];
+};
+
+/** Usuario del Admin que entregó el pedido (null: sistema o desconocido). */
+export type RetiroActor = { id: string; email?: string | null } | null;
+
+export type MarkRetiradoInput = {
+  order_id: string;
+  actor?: RetiroActor;
+  /** Instante de la entrega. Por defecto, ahora. */
+  now?: Date;
+};
+
+export type MarkRetiradoResult = {
+  booking_id: string;
+  /** false si ya estaba retirado (reintento o doble clic). */
+  retirado: boolean;
 };

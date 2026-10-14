@@ -413,7 +413,7 @@ medusaIntegrationTestRunner({
         const order = res.data.order;
         await waitFor(async () => {
           const [b] = await pickup.listPickupBookings({ order_id: order.id });
-          return b?.estado === "confirmado";
+          return b?.estado === "agendado";
         });
         return { order, fecha };
       };
@@ -429,7 +429,7 @@ medusaIntegrationTestRunner({
             stock_location_id: shop.site.id,
             site_name: shop.site.name,
             fecha,
-            estado: "confirmado",
+            estado: "agendado",
             order: expect.objectContaining({ display_id: order.display_id }),
           }),
         ]);
@@ -438,7 +438,7 @@ medusaIntegrationTestRunner({
         await waitFor(
           async () =>
             (await get(`/bookings?order_id=${order.id}`)).data.bookings[0]?.estado ===
-            "liberado"
+            "anulado"
         );
 
         // Liberado ya no cuenta como pedido agendado ese día
@@ -478,7 +478,7 @@ medusaIntegrationTestRunner({
 
         // Cerrar no anula ni mueve el pedido
         const [b] = await pickup.listPickupBookings({ order_id: order.id });
-        expect(b).toMatchObject({ estado: "confirmado", fecha });
+        expect(b).toMatchObject({ estado: "agendado", fecha });
 
         const { conflicts } = (await get("/conflicts")).data;
         expect(conflicts).toEqual([

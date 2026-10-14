@@ -88,3 +88,14 @@ export const AdminPickupBookingsQuery = z
   .refine((q) => q.order_id || q.fecha, {
     message: "Indica order_id o fecha.",
   });
+
+export const AdminPickupRetirosQuery = z.object({
+  /** Un pedido (widget del detalle del pedido). Ignora los demás filtros. */
+  order_id: z.string().min(1).optional(),
+  /** Site. Sin site: todos. */
+  stock_location_id: z.string().min(1).optional(),
+  /** Día a mostrar. Por defecto, hoy (Santiago). */
+  fecha: Fecha.optional(),
+  /** Búsqueda por RUT, nombre, correo o n.º de pedido (cualquier día). */
+  q: z.string().trim().max(100).optional(),
+});

@@ -2,6 +2,8 @@
 
 import { convertToLocale } from "@/lib/util/money"
 import { getOrderStatusLabel } from "@/lib/util/order-status-labels"
+import { formatPickupDate, isPickupDate } from "@/lib/util/pickup-date"
+import { deliveredAt } from "@/lib/util/pickup-status"
 import LocalizedClientLink from "@/modules/common/components/localized-client-link"
 import { ChevronLeft, ChevronRight } from "@medusajs/icons"
 import { HttpTypes } from "@medusajs/types"
@@ -15,14 +17,14 @@ Tabla de "Mis pedidos" (reemplaza el listado de tarjetas
 ya expone en la orden — no hay ningún campo inventado acá:
 
 - Fecha pedido → order.created_at
-- Fecha de entrega → order.fulfillments[0]?.delivered_at (el flujo de
-  retiro/click&collect todavía no está construido, así que hoy va a venir
-  vacío para casi todos los pedidos — eso es correcto, no un mock)
+- Retiro → si ya se entregó, la fecha de entrega (fulfillments.delivered_at,
+  la marca el operador en "Retiros del día"); si no, la fecha agendada
+  (metadata.pickup_date)
 - ID del pedido → order.display_id
 - Dirección → order.shipping_address
 - Valor → order.total / order.currency_code
-- Estado → order.fulfillment_status / order.status, vía
-  `getOrderStatusLabel`
+- Estado → estado del retiro (Agendado, Retira hoy, No retirado,
+  Entregado, Anulado) vía `getOrderStatusLabel`
 
 */
 
@@ -42,6 +44,15 @@ const formatDate = (value?: string | Date | null) => {
     month: "2-digit",
     day: "2-digit",
   })
+}
+
+/** "Entregado 08-10-2026" si ya se retiró; si no, la fecha agendada ("jueves 16 de octubre"). */
+const formatPickup = (order: HttpTypes.StoreOrder) => {
+  const entregado = deliveredAt(order as any)
+  if (entregado) return `Entregado ${formatDate(entregado)}`
+
+  const fecha = order.metadata?.pickup_date
+  return isPickupDate(fecha) ? formatPickupDate(fecha) : "—"
 }
 
 const formatAddress = (address?: HttpTypes.StoreOrder["shipping_address"]) => {
@@ -90,7 +101,7 @@ const OrdersTable = ({
                 Fecha pedido
               </Table.HeaderCell>
               <Table.HeaderCell className="!text-neutral-700 !font-semibold">
-                Fecha de entrega
+                Retiro
               </Table.HeaderCell>
               <Table.HeaderCell className="!text-neutral-700 !font-semibold">
                 ID del pedido
@@ -120,8 +131,8 @@ const OrdersTable = ({
                     {formatDate(order.created_at)}
                   </LocalizedClientLink>
                 </Table.Cell>
-                <Table.Cell>
-                  {formatDate(order.fulfillments?.[0]?.delivered_at)}
+                <Table.Cell data-testid="order-pickup-cell">
+                  {formatPickup(order)}
                 </Table.Cell>
                 <Table.Cell data-testid="order-display-id">
                   #{order.display_id}

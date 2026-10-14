@@ -34,7 +34,7 @@ export default async function pickupSchedulingOrderCanceledHandler({
 
   if (result?.released) {
     logger.info(
-      `pickup-scheduling: cupo ${result.booking_id} liberado por anulación del pedido ${data.id}.`
+      `pickup-scheduling: cupo ${result.booking_id} devuelto (pedido ${data.id} anulado).`
     );
   }
 }

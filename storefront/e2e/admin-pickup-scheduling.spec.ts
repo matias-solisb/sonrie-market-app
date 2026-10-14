@@ -172,7 +172,7 @@ test("el detalle del pedido muestra el site y la fecha de retiro", async ({ page
     const widget = page.getByTestId("order-pickup-date")
     await expect(widget).toBeVisible({ timeout: 30_000 })
     await expect(widget).toContainText("Retiro")
-    await expect(widget).toContainText("Confirmado")
+    await expect(widget).toContainText(/Agendado|Retira hoy/)
     await expect(page.getByTestId("order-pickup-site")).toHaveText(booking.site_name)
 
     const dia = Number(booking.fecha.slice(8, 10))

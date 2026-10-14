@@ -1,5 +1,6 @@
 import { HttpTypes } from "@medusajs/types"
 import { formatPickupDate, isPickupDate } from "@/lib/util/pickup-date"
+import { getPickupSentence } from "@/lib/util/pickup-status"
 import { Heading, Text } from "@medusajs/ui"
 
 type ShippingDetailsProps = {
@@ -10,6 +11,7 @@ const ShippingDetails = ({ order }: ShippingDetailsProps) => {
   const pickupDate = isPickupDate(order.metadata?.pickup_date)
     ? (order.metadata?.pickup_date as string)
     : null
+  const pickupSentence = getPickupSentence(order as any)
 
   // order.shipping_address = {
   //   first_name: "Riqwan",
@@ -74,6 +76,15 @@ const ShippingDetails = ({ order }: ShippingDetailsProps) => {
             data-testid="order-pickup-date"
           >
             Fecha de retiro: {formatPickupDate(pickupDate)}
+          </Text>
+        )}
+
+        {pickupSentence && (
+          <Text
+            className="txt-medium-plus text-ui-fg-base mt-1"
+            data-testid="order-pickup-status"
+          >
+            {pickupSentence}
           </Text>
         )}
       </>

@@ -7,9 +7,9 @@ import { releasePickupBookingStep } from "../steps";
 
 /*
 
-Libera el cupo de retiro de un pedido anulado o rechazado: el cupo queda
-`liberado` y se descuenta de la ocupación del día, así otro colaborador
-puede tomarlo. Idempotente por pedido.
+Anula el cupo de retiro de un pedido anulado o rechazado: el cupo queda
+`anulado` y se descuenta de la ocupación del día, así otro colaborador
+puede tomarlo. Idempotente por pedido. Un cupo `retirado` no se toca.
 
 Lo dispara el subscriber de `order.canceled`. En el MVP el rechazo es una
 cancelación manual desde el Admin; en la Fase 4 la respuesta de SAP

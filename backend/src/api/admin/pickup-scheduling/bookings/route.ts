@@ -11,10 +11,12 @@ GET /admin/pickup-scheduling/bookings?order_id=
 GET /admin/pickup-scheduling/bookings?fecha=YYYY-MM-DD[&stock_location_id=]
 
 Cupos de retiro, para el Admin:
-- `order_id`: el cupo de un pedido, en cualquier estado (el widget del
-  detalle del pedido muestra site, fecha y si se liberó al anularlo).
-- `fecha`: los pedidos agendados ese día (reservados o confirmados), de un
-  site o de todos. Lo usa el aviso antes de cerrar un día.
+- `order_id`: el cupo de un pedido, en cualquier estado.
+- `fecha`: los pedidos aún por retirar ese día (pendientes o agendados),
+  de un site o de todos. Lo usa el aviso antes de cerrar un día.
+
+Para la entrega (pantalla "Retiros del día" y widget del pedido) usar
+/admin/pickup-scheduling/retiros, que trae nombre, RUT y productos.
 
   { bookings: [{ id, order_id, cart_id, stock_location_id, site_name, fecha,
                  estado, order: { id, display_id, email, status } | null }] }
@@ -27,7 +29,7 @@ export const GET = async (req: AuthenticatedMedusaRequest, res: MedusaResponse) 
     ? { order_id: q.order_id }
     : {
         fecha: q.fecha,
-        estado: ["reservado", "confirmado"],
+        estado: ["pendiente", "agendado"],
         ...(q.stock_location_id && { stock_location_id: q.stock_location_id }),
       };
 

@@ -1,6 +1,7 @@
 import { FetchError } from "@medusajs/js-sdk";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { sdk } from "../../lib/client";
+import { EstadoRetiro } from "../../lib/estado-retiro";
 import { queryKeysFactory } from "../../lib/query-key-factory";
 
 /*
@@ -94,7 +95,8 @@ export type PickupChange = {
   } | null;
 };
 
-export type PickupBookingEstado = "reservado" | "confirmado" | "liberado";
+/** Estado guardado del cupo (ver models/pickup-booking.ts del módulo). */
+export type PickupBookingEstado = "pendiente" | "agendado" | "retirado" | "anulado";
 
 export type PickupOrderRef = {
   id: string;
@@ -181,16 +183,103 @@ export const usePickupChanges = () =>
       }),
   });
 
-/** Cupo de retiro de un pedido (widget del detalle del pedido). */
-export const usePickupOrderBooking = (orderId: string) =>
-  useQuery({
-    queryKey: pickupSchedulingQueryKey.list({ booking_order: orderId }),
+// ---------------------------------------------------------------------
+// Retiros (entrega en sala de venta)
+// ---------------------------------------------------------------------
+
+export type Retiro = {
+  booking_id: string;
+  order_id: string | null;
+  display_id: number | null;
+  stock_location_id: string;
+  site_name: string | null;
+  fecha: string;
+  estado: PickupBookingEstado;
+  estado_retiro: EstadoRetiro;
+  colaborador: { nombre: string | null; rut: string | null; email: string | null };
+  productos: { titulo: string; variante: string | null; cantidad: number }[];
+  total_unidades: number;
+  retirado_at: string | null;
+  retirado_por_email: string | null;
+  retirado_fuera_de_pantalla: boolean;
+};
+
+export type RetirosResponse = {
+  hoy: string;
+  fecha: string;
+  busqueda: string | null;
+  retiros: Retiro[];
+  no_retirados: Retiro[];
+  resumen: {
+    por_entregar: number;
+    entregados: number;
+    no_retirados: number;
+    anulados: number;
+  } | null;
+};
+
+export const retirosQueryKey = queryKeysFactory("pickup_retiros");
+
+/**
+ * Retiros de un día y site (o búsqueda por RUT, nombre o n.º de pedido).
+ * Se refresca solo cada minuto, por si otra persona entrega en otro
+ * computador del mismo site.
+ */
+export const useRetiros = (params: {
+  stock_location_id?: string;
+  fecha?: string;
+  q?: string;
+}) => {
+  const search = new URLSearchParams();
+  if (params.stock_location_id) search.set("stock_location_id", params.stock_location_id);
+  if (params.fecha) search.set("fecha", params.fecha);
+  if (params.q) search.set("q", params.q);
+
+  return useQuery({
+    queryKey: retirosQueryKey.list(params),
     queryFn: () =>
-      sdk.client.fetch<{ bookings: PickupBooking[] }>(
-        `${BASE}/bookings?order_id=${orderId}`,
-        { method: "GET" }
-      ),
+      sdk.client.fetch<RetirosResponse>(`${BASE}/retiros?${search.toString()}`, {
+        method: "GET",
+      }),
+    refetchInterval: 60_000,
+    placeholderData: (previous) => previous,
   });
+};
+
+/** Retiro de un pedido (widget "Retiro" del detalle del pedido). */
+export const usePickupOrderRetiro = (orderId: string) =>
+  useQuery({
+    queryKey: retirosQueryKey.detail(orderId),
+    queryFn: () =>
+      sdk.client.fetch<RetirosResponse>(`${BASE}/retiros?order_id=${orderId}`, {
+        method: "GET",
+      }),
+  });
+
+/**
+ * Entrega un pedido (cupo retirado + cumplimiento entregado). Refresca los
+ * retiros, la agenda y el detalle del pedido de Medusa.
+ */
+export const useEntregarPedido = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation<
+    { retiro: Retiro; entregado_ahora: boolean },
+    FetchError,
+    string
+  >({
+    mutationFn: (orderId: string) =>
+      sdk.client.fetch(`${BASE}/retiros/${orderId}/entregar`, {
+        method: "POST",
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: retirosQueryKey.all });
+      queryClient.invalidateQueries({ queryKey: pickupSchedulingQueryKey.all });
+      // Detalle del pedido del Admin de Medusa (sección de cumplimientos).
+      queryClient.invalidateQueries({ queryKey: ["orders"] });
+    },
+  });
+};
 
 /** Pedidos agendados en días que hoy están cerrados. */
 export const usePickupConflicts = () =>

@@ -1,4 +1,5 @@
 import { HttpTypes } from "@medusajs/types"
+import { getPickupStatus, PICKUP_STATUS_LABELS } from "@/lib/util/pickup-status"
 
 /*
 
@@ -9,6 +10,11 @@ preparación/entrega: not_fulfilled/fulfilled/shipped/delivered/...). Para el
 colaborador lo relevante es el estado de entrega, así que se prioriza
 `fulfillment_status` y solo se cae a `status` para los casos que ese campo
 no cubre (orden cancelada, o con acción pendiente).
+
+Los pedidos con fecha de retiro (todos los que pasan por el checkout) usan
+el estado del retiro (lib/util/pickup-status.ts): Agendado, Retira hoy, No
+retirado, Entregado, Anulado. Los textos de `fulfillment_status` quedan
+para pedidos sin fecha (p. ej. creados a mano desde el Admin).
 
 */
 
@@ -33,7 +39,8 @@ const ORDER_STATUS_LABELS: Record<string, string> = {
 }
 
 export const getOrderStatusLabel = (
-  order: Pick<HttpTypes.StoreOrder, "status" | "fulfillment_status">
+  order: Pick<HttpTypes.StoreOrder, "status" | "fulfillment_status"> &
+    Partial<Pick<HttpTypes.StoreOrder, "metadata" | "fulfillments">>
 ): string => {
   if (order.status === "canceled") {
     return ORDER_STATUS_LABELS.canceled
@@ -41,6 +48,11 @@ export const getOrderStatusLabel = (
 
   if (order.status === "requires_action") {
     return ORDER_STATUS_LABELS.requires_action
+  }
+
+  const pickup = getPickupStatus(order as any)
+  if (pickup) {
+    return PICKUP_STATUS_LABELS[pickup]
   }
 
   if (order.fulfillment_status && FULFILLMENT_STATUS_LABELS[order.fulfillment_status]) {
