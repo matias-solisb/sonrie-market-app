@@ -116,4 +116,9 @@ export const AdminPickupRetirosQuery = z.object({
   fecha: Fecha.optional(),
   /** Búsqueda por RUT, nombre, correo o n.º de pedido (cualquier día). */
   q: z.string().trim().max(100).optional(),
+  /**
+   * Página de "No retirados" o de los resultados de la búsqueda (10 por
+   * página, desde 1). La lista del día no se pagina: la acota la capacidad.
+   */
+  pagina: z.coerce.number().int().min(1).max(10_000).optional(),
 });

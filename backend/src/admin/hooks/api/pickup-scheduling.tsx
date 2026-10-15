@@ -210,6 +210,8 @@ export type RetirosResponse = {
   busqueda: string | null;
   retiros: Retiro[];
   no_retirados: Retiro[];
+  /** Página de "No retirados" (o de la búsqueda). Null en el widget del pedido. */
+  paginacion: { pagina: number; por_pagina: number; total: number; paginas: number } | null;
   resumen: {
     por_entregar: number;
     entregados: number;
@@ -229,11 +231,14 @@ export const useRetiros = (params: {
   stock_location_id?: string;
   fecha?: string;
   q?: string;
+  /** Página de "No retirados" o de la búsqueda (10 por página). */
+  pagina?: number;
 }) => {
   const search = new URLSearchParams();
   if (params.stock_location_id) search.set("stock_location_id", params.stock_location_id);
   if (params.fecha) search.set("fecha", params.fecha);
   if (params.q) search.set("q", params.q);
+  if (params.pagina && params.pagina > 1) search.set("pagina", String(params.pagina));
 
   return useQuery({
     queryKey: retirosQueryKey.list(params),
@@ -246,7 +251,6 @@ export const useRetiros = (params: {
   });
 };
 
-/** Retiro de un pedido (widget "Retiro" del detalle del pedido). */
 /**
  * Retiro de un pedido (widget del detalle). `orderStatus` va en la clave:
  * cuando Medusa cambia el pedido (p. ej. "Cancel"), el widget vuelve a

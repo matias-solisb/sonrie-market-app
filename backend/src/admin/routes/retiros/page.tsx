@@ -124,7 +124,11 @@ const RetirosPage = () => {
   const [pestana, setPestana] = useState<Pestana>("por_entregar");
   const [busqueda, setBusqueda] = useState("");
   const [confirmando, setConfirmando] = useState<Retiro | null>(null);
+  const [pagina, setPagina] = useState(1);
   const q = useDebounced(busqueda.trim());
+
+  // Otra lista: vuelve a la primera página.
+  useEffect(() => setPagina(1), [siteId, fecha, q, pestana]);
 
   // Si el site recordado ya no existe, usar el primero.
   useEffect(() => {
@@ -133,11 +137,23 @@ const RetirosPage = () => {
     }
   }, [sites, siteId]);
 
+  // Se paginan "No retirados" y la búsqueda (10 por página, en el servidor).
+  const paginada = !!q || pestana === "no_retirados";
   const { data, isPending, isError, refetch, isFetching } = useRetiros({
     stock_location_id: siteId,
     fecha,
     q: q || undefined,
+    pagina: paginada ? pagina : 1,
   });
+  const pag = paginada ? data?.paginacion ?? null : null;
+
+  // Si la página quedó vacía (p. ej. se entregó el último de la última
+  // página), ir a la última que tiene pedidos.
+  useEffect(() => {
+    if (pag && pagina > pag.paginas) {
+      setPagina(pag.paginas);
+    }
+  }, [pag, pagina]);
 
   const hoy = data?.hoy;
   const dia = fecha ?? hoy;
@@ -241,7 +257,7 @@ const RetirosPage = () => {
             />
           </div>
           <Text size="small" className="text-ui-fg-subtle">
-            Busca en todos los días, por si el colaborador viene otro día.
+            Busca en los últimos 90 días de este site, por si el colaborador viene otro día. Con # (p. ej. #1234), en cualquier fecha.
           </Text>
         </div>
 
@@ -325,11 +341,74 @@ const RetirosPage = () => {
             ))}
           </ul>
         )}
+
+        {pag && pag.total > pag.por_pagina && (
+          <Paginador
+            pagina={pag.pagina}
+            paginas={pag.paginas}
+            total={pag.total}
+            porPagina={pag.por_pagina}
+            cargando={isFetching}
+            onCambiar={setPagina}
+          />
+        )}
       </Container>
 
       {hoy && (
         <EntregarPrompt retiro={confirmando} hoy={hoy} onClose={() => setConfirmando(null)} />
       )}
+    </div>
+  );
+};
+
+/**
+ * "Anteriores / Siguientes" con el rango que se ve ("11 a 20 de 120"):
+ * botones grandes con texto, como el resto de la pantalla.
+ */
+const Paginador = ({
+  pagina,
+  paginas,
+  total,
+  porPagina,
+  cargando,
+  onCambiar,
+}: {
+  pagina: number;
+  paginas: number;
+  total: number;
+  porPagina: number;
+  cargando: boolean;
+  onCambiar: (pagina: number) => void;
+}) => {
+  const desde = (pagina - 1) * porPagina + 1;
+  const hasta = Math.min(pagina * porPagina, total);
+
+  return (
+    <div
+      className="flex flex-wrap items-center justify-between gap-3 border-t px-6 py-4"
+      data-testid="retiros-paginador"
+    >
+      <Text size="base" data-testid="retiros-paginador-texto">
+        {desde} a {hasta} de {total} pedidos · página {pagina} de {paginas}
+      </Text>
+      <div className="flex gap-2">
+        <Button
+          variant="secondary"
+          size="large"
+          disabled={pagina <= 1 || cargando}
+          onClick={() => onCambiar(pagina - 1)}
+        >
+          <TriangleLeftMini /> Anteriores
+        </Button>
+        <Button
+          variant="secondary"
+          size="large"
+          disabled={pagina >= paginas || cargando}
+          onClick={() => onCambiar(pagina + 1)}
+        >
+          Siguientes <TriangleRightMini />
+        </Button>
+      </div>
     </div>
   );
 };

@@ -154,28 +154,99 @@ export const toRetiros = async (
   });
 };
 
-/** Quita puntos, guiones y espacios, y pasa a minúsculas ("12.345.678-K" → "12345678k"). */
-const normalizar = (s: string) => s.toLowerCase().replace(/[.\-\s]/g, "");
+/** Filas por página de "No retirados" y de la búsqueda. */
+export const POR_PAGINA = 10;
 
-/** ¿La fila calza con lo que escribió el operador (RUT, nombre, correo o n.º)? */
-export const calzaBusqueda = (r: Retiro, q: string): boolean => {
-  const texto = q.trim().toLowerCase();
-  if (!texto) {
-    return true;
+export type Paginacion = {
+  pagina: number;
+  por_pagina: number;
+  total: number;
+  paginas: number;
+};
+
+export const paginacion = (pagina: number, total: number): Paginacion => ({
+  pagina,
+  por_pagina: POR_PAGINA,
+  total,
+  paginas: Math.max(1, Math.ceil(total / POR_PAGINA)),
+});
+
+/** Solo dígitos y K ("12.345.678-K" → "12345678k"). */
+const soloRut = (s: string) => s.toLowerCase().replace(/[^0-9k]/g, "");
+
+/** Escapa % y _ para usar el texto dentro de un LIKE. */
+const likeSeguro = (s: string) => s.replace(/[\\%_]/g, (c) => `\\${c}`);
+
+/*
+
+Búsqueda de mostrador: devuelve los ids de los pedidos que calzan, sin
+cargar cupos ni pedidos completos (eso se hace después, solo para la
+página que se muestra).
+
+- N.º de pedido ("1234" o "#1234"): directo por display_id.
+- RUT (desde 4 dígitos, con o sin puntos y guion): clientes cuyo
+  `metadata.rut`, sin puntos ni guion, empieza con lo escrito.
+- Nombre o correo (desde 2 caracteres): clientes cuyo nombre completo o
+  correo contiene lo escrito.
+
+Un texto solo de dígitos puede ser n.º de pedido o RUT sin puntos: se
+buscan ambos. Los clientes se buscan con SQL sobre la tabla `customer`
+(PG_CONNECTION) porque el RUT vive en metadata (JSON) y hay que compararlo
+sin puntos ni guion; cuando exista el campo definitivo (rut-auth), cambiar
+solo esta función.
+
+*/
+export const buscarPedidos = async (
+  req: MedusaRequest,
+  texto: string
+): Promise<string[]> => {
+  const query = req.scope.resolve(ContainerRegistrationKeys.QUERY);
+  const t = texto.trim().toLowerCase();
+  const ids = new Set<string>();
+
+  const numero = t.replace(/^#/, "");
+  if (/^\d+$/.test(numero) && numero.length <= 9) {
+    const { data } = await query.graph({
+      entity: "order",
+      fields: ["id"],
+      filters: { display_id: Number(numero) } as any,
+    });
+    data.forEach((o: any) => ids.add(o.id));
   }
 
-  const numero = texto.replace(/^#/, "");
-  if (/^\d+$/.test(numero) && String(r.display_id ?? "") === numero) {
-    return true;
+  if (t.startsWith("#")) {
+    return [...ids];
   }
 
-  const rutBuscado = normalizar(texto);
-  if (r.colaborador.rut && rutBuscado.length >= 4 &&
-      normalizar(r.colaborador.rut).startsWith(rutBuscado)) {
-    return true;
+  const rut = /^[0-9.\-\sk]+$/.test(t) ? soloRut(t) : "";
+  const conRut = rut.length >= 4;
+  const conTexto = t.length >= 2;
+
+  if (conRut || conTexto) {
+    const pg = req.scope.resolve(ContainerRegistrationKeys.PG_CONNECTION);
+    const patron = `%${likeSeguro(t)}%`;
+    const { rows } = await pg.raw(
+      `SELECT id FROM customer
+        WHERE deleted_at IS NULL
+          AND (
+            (? AND regexp_replace(lower(coalesce(metadata->>'rut', '')), '[^0-9k]', '', 'g') LIKE ?)
+            OR (? AND lower(trim(coalesce(first_name, '') || ' ' || coalesce(last_name, ''))) LIKE ?)
+            OR (? AND lower(coalesce(email, '')) LIKE ?)
+          )
+        LIMIT 200`,
+      [conRut, `${likeSeguro(rut)}%`, conTexto, patron, conTexto, patron]
+    );
+    const clientes = (rows as { id: string }[]).map((r) => r.id);
+
+    if (clientes.length) {
+      const { data } = await query.graph({
+        entity: "order",
+        fields: ["id"],
+        filters: { customer_id: clientes } as any,
+      });
+      data.forEach((o: any) => ids.add(o.id));
+    }
   }
 
-  return [r.colaborador.nombre, r.colaborador.email]
-    .filter(Boolean)
-    .some((v) => (v as string).toLowerCase().includes(texto));
+  return [...ids];
 };

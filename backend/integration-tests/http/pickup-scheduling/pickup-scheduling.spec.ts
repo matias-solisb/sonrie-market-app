@@ -701,6 +701,83 @@ medusaIntegrationTestRunner({
           );
           expect(busqueda.data.retiros.map((r: any) => r.order_id)).toEqual([order.id]);
         });
+
+        // 3.1: "No retirados" y la búsqueda se paginan en la base de datos.
+        it("No retirados se pagina de 10 en 10, del más reciente al más antiguo, con el total", async () => {
+          const hoy = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Santiago" }).format(new Date());
+          const diasAtras = (n: number) => {
+            const d = new Date(`${hoy}T12:00:00Z`);
+            d.setUTCDate(d.getUTCDate() - n);
+            return d.toISOString().slice(0, 10);
+          };
+          await pickup.createPickupBookings(
+            Array.from({ length: 23 }, (_, i) => ({
+              cart_id: `cart_np_${i}`,
+              order_id: `order_np_${i}`,
+              stock_location_id: shop.site.id,
+              fecha: diasAtras(1 + i),
+              estado: "agendado" as const,
+            }))
+          );
+          const pagina = (n?: number) =>
+            api
+              .get(
+                `/admin/pickup-scheduling/retiros?stock_location_id=${shop.site.id}${n !== undefined ? `&pagina=${n}` : ""}`,
+                adminHeaders
+              )
+              .catch((e: any) => e.response);
+
+          const p1 = (await pagina()).data;
+          expect(p1.paginacion).toEqual({ pagina: 1, por_pagina: 10, total: 23, paginas: 3 });
+          expect(p1.resumen.no_retirados).toBe(23);
+          expect(p1.no_retirados).toHaveLength(10);
+          expect(p1.no_retirados[0].fecha).toBe(diasAtras(1));
+          expect(p1.no_retirados.every((r: any) => r.estado_retiro === "no_retirado")).toBe(true);
+
+          const p3 = (await pagina(3)).data;
+          expect(p3.no_retirados.map((r: any) => r.fecha)).toEqual([diasAtras(21), diasAtras(22), diasAtras(23)]);
+
+          // Sin repetidos entre páginas
+          const p2 = (await pagina(2)).data;
+          const ids = [...p1.no_retirados, ...p2.no_retirados, ...p3.no_retirados].map((r: any) => r.booking_id);
+          expect(new Set(ids).size).toBe(23);
+
+          expect((await pagina(4)).data.no_retirados).toEqual([]);
+          expect((await pagina(0)).status).toBe(400);
+        });
+
+        it("busca por RUT con o sin puntos, nombre, correo o n.º de pedido, y pagina los resultados", async () => {
+          await api.post(
+            `/admin/customers/${shop.customerId}`,
+            { first_name: "Ana María", last_name: "Pérez", metadata: { rut: "12.345.678-5" } },
+            adminHeaders
+          );
+          const { order } = await pedidoAgendado(1);
+          const buscar = async (texto: string) =>
+            (
+              await api.get(
+                `/admin/pickup-scheduling/retiros?stock_location_id=${shop.site.id}&q=${encodeURIComponent(texto)}`,
+                adminHeaders
+              )
+            ).data;
+
+          for (const texto of ["12345678", "12.345.678-5", "12.345", "ana maría", "PÉREZ", order.email.slice(0, 6), `#${order.display_id}`]) {
+            const r = await buscar(texto);
+            expect({ texto, ids: r.retiros.map((x: any) => x.order_id) }).toEqual({ texto, ids: [order.id] });
+            expect(r.paginacion).toMatchObject({ pagina: 1, total: 1 });
+            expect(r.retiros[0].colaborador).toMatchObject({ rut: "12.345.678-5", nombre: "Ana María Pérez" });
+          }
+
+          // Muy corto o sin coincidencias: vacío (el RUT necesita 4 dígitos)
+          for (const texto of ["123", "zzzz", "a"]) {
+            const r = await buscar(texto);
+            expect({ texto, n: r.retiros.length }).toEqual({ texto, n: 0 });
+            expect(r.paginacion.total).toBe(0);
+          }
+
+          // Un "%" no actúa como comodín
+          expect((await buscar("%")).retiros).toEqual([]);
+        });
       });
     });
 
