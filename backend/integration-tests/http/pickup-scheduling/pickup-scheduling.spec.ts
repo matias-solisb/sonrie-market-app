@@ -588,6 +588,23 @@ medusaIntegrationTestRunner({
           expect(admin.fulfillments).toHaveLength(1);
         });
 
+        it("dos clics a la vez: se entrega una sola vez, sin errores", async () => {
+          const { order } = await pedidoAgendado();
+
+          const [a, b] = await Promise.all([
+            entregar(order.id).catch((e: any) => e.response),
+            entregar(order.id).catch((e: any) => e.response),
+          ]);
+
+          expect([a.status, b.status]).toEqual([200, 200]);
+          expect([a.data.entregado_ahora, b.data.entregado_ahora].sort()).toEqual([false, true]);
+          const { order: admin } = (
+            await api.get(`/admin/orders/${order.id}?fields=fulfillment_status,*fulfillments`, adminHeaders)
+          ).data;
+          expect(admin.fulfillment_status).toBe("delivered");
+          expect(admin.fulfillments).toHaveLength(1);
+        });
+
         it("no entrega un pedido anulado", async () => {
           const { order, booking: b } = await pedidoAgendado();
           await anular(order.id);
