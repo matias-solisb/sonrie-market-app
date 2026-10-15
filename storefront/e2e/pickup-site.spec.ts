@@ -13,6 +13,12 @@ Cómo funciona hoy (modules/cart/templates/index.tsx y summary.tsx):
 
 Los tests que cambian de site necesitan al menos 2 Stock Locations con
 dirección en dev; si hay uno solo, se saltan.
+
+Los que pasan al checkout necesitan saldo de beneficio para el producto más
+barato. Si el carrito dice "Saldo insuficiente" (las pruebas de compra
+consumen el beneficio del usuario de prueba), se saltan con ese aviso en vez
+de esperar al botón hasta el límite de tiempo. Para volver a correrlos: subir
+el tope de la campaña en Admin → Beneficio, o anular pedidos de prueba.
 */
 
 test.use({ storageState: AUTH_FILE })
@@ -23,11 +29,15 @@ test.beforeEach(async ({ page }) => {
     await page.context().clearCookies({ name: "_medusa_cart_id" })
 })
 
-/** Agrega el primer producto del catálogo y abre el carrito. */
+/**
+ * Agrega el producto más barato del catálogo y abre el carrito. No el
+ * primero: si cuesta más que el saldo del mes, el carrito se bloquea por
+ * "Saldo insuficiente" (igual que en purchase-flow.spec.ts).
+ */
 async function cartWithOneItem(page: Page) {
     const store = new StorePage(page)
     await store.goto()
-    await store.addFirstProduct()
+    await store.addCheapestProduct()
     const cart = new CartPage(page)
     await cart.goto()
     await expect(cart.quantityControl).toHaveCount(1)
@@ -53,6 +63,23 @@ async function chooseSite(page: Page, index: number) {
     await options.nth(index).click()
     await expect(siteSelect(page)).toHaveText(label)
     return label
+}
+
+/**
+ * Espera a que el botón "Confirmar pedido" del carrito se resuelva: o queda
+ * habilitado, o dice "Saldo insuficiente" y el test se salta con ese motivo.
+ */
+async function skipIfNoBalance(cart: CartPage) {
+    let sinSaldo = false
+    await expect(async () => {
+        const texto = (await cart.checkoutButton.textContent()) ?? ""
+        sinSaldo = /saldo insuficiente/i.test(texto)
+        expect(sinSaldo || (await cart.checkoutButton.isEnabled())).toBe(true)
+    }).toPass({ timeout: 30_000 })
+    test.skip(
+        sinSaldo,
+        "El usuario de prueba no tiene saldo de beneficio (Saldo insuficiente): sube el tope en Admin → Beneficio o anula pedidos de prueba"
+    )
 }
 
 /** Primera parte del texto del selector: la calle (address_1). */
@@ -91,6 +118,7 @@ test("el checkout usa la dirección del site elegido, no la del primero", async 
     test.skip(total < 2, "Se necesitan al menos 2 sites (Stock Locations) en dev")
 
     const chosen = await chooseSite(page, 1)
+    await skipIfNoBalance(cart)
     await cart.checkoutButton.click()
     await expect(page).toHaveURL(/\/cl\/checkout/, { timeout: 30_000 })
 
@@ -114,6 +142,7 @@ test("al volver al carrito, el selector conserva el site elegido", async ({ page
     test.skip(total < 2, "Se necesitan al menos 2 sites (Stock Locations) en dev")
 
     const chosen = await chooseSite(page, 1)
+    await skipIfNoBalance(cart)
     await cart.checkoutButton.click()
     await expect(page).toHaveURL(/\/cl\/checkout/, { timeout: 30_000 })
 
