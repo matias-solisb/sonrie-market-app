@@ -117,6 +117,20 @@ export type UpsertSiteScheduleInput = {
   capacidad?: number | null;
 };
 
+/**
+ * Panel "Agenda de {site}" del Admin, guardado de una vez: configuración
+ * propia y horario semanal. `horario[].value = null` quita el horario propio
+ * de ese día (vuelve al general). Lo que no viene no se toca.
+ */
+export type SaveSiteAgendaInput = {
+  stock_location_id: string;
+  config?: Omit<UpsertSiteSlotConfigInput, "stock_location_id">;
+  horario?: {
+    dia_semana: number;
+    value: { abierto: boolean; capacidad?: number | null } | null;
+  }[];
+};
+
 export type CreateExceptionInput = {
   fecha: string;
   stock_location_id?: string | null;
@@ -157,4 +171,9 @@ export type MarkRetiradoResult = {
   booking_id: string;
   /** false si ya estaba retirado (reintento o doble clic). */
   retirado: boolean;
+  /**
+   * true si quedó registrado quién entregó: al retirarlo, o después, si
+   * se había marcado sin usuario (entrega con los botones nativos).
+   */
+  actor_registrado?: boolean;
 };

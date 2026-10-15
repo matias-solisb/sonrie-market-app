@@ -33,6 +33,24 @@ export const AdminUpsertPickupSchedule = z
   })
   .strict();
 
+export type AdminSavePickupSiteAgendaType = z.infer<typeof AdminSavePickupSiteAgenda>;
+export const AdminSavePickupSiteAgenda = z
+  .object({
+    config: AdminUpdatePickupSite.optional(),
+    horario: z
+      .array(
+        z
+          .object({
+            dia_semana: DiaSemana,
+            value: AdminUpsertPickupSchedule.nullable(),
+          })
+          .strict()
+      )
+      .max(7)
+      .optional(),
+  })
+  .strict();
+
 const TipoExcepcion = z.enum(["feriado", "cerrado", "abierto"]);
 
 export type AdminCreatePickupExceptionType = z.infer<typeof AdminCreatePickupException>;

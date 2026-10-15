@@ -247,13 +247,25 @@ export const useRetiros = (params: {
 };
 
 /** Retiro de un pedido (widget "Retiro" del detalle del pedido). */
-export const usePickupOrderRetiro = (orderId: string) =>
+/**
+ * Retiro de un pedido (widget del detalle). `orderStatus` va en la clave:
+ * cuando Medusa cambia el pedido (p. ej. "Cancel"), el widget vuelve a
+ * leer el retiro. Mientras el pedido figura anulado pero el cupo todavía no
+ * (lo libera un subscriber, después), consulta cada 2 s hasta verlo anulado.
+ */
+export const usePickupOrderRetiro = (orderId: string, orderStatus?: string) =>
   useQuery({
-    queryKey: retirosQueryKey.detail(orderId),
+    queryKey: [...retirosQueryKey.detail(orderId), orderStatus ?? null],
     queryFn: () =>
       sdk.client.fetch<RetirosResponse>(`${BASE}/retiros?order_id=${orderId}`, {
         method: "GET",
       }),
+    refetchInterval: (query) => {
+      const estado = query.state.data?.retiros[0]?.estado;
+      return orderStatus === "canceled" && (estado === "pendiente" || estado === "agendado")
+        ? 2000
+        : false;
+    },
   });
 
 /**
@@ -351,6 +363,26 @@ export const useSetPickupScheduleDay = (stockLocationId: string) =>
         method: value ? "POST" : "DELETE",
         ...(value && { headers: json, body: value }),
       })
+  );
+
+/**
+ * Guarda el panel de un site (configuración + horario semanal) en una sola
+ * llamada y una sola transacción: si algo falla, no queda nada a medias.
+ */
+export type PickupSiteAgendaInput = {
+  config?: Partial<PickupSiteConfig>;
+  horario?: {
+    dia_semana: number;
+    value: { abierto: boolean; capacidad: number | null } | null;
+  }[];
+};
+
+export const useSavePickupSiteAgenda = (stockLocationId: string) =>
+  usePickupMutation((body: PickupSiteAgendaInput) =>
+    sdk.client.fetch<{ config: PickupSiteConfig | null; horario: PickupScheduleDay[] }>(
+      `${BASE}/sites/${stockLocationId}/agenda`,
+      { method: "POST", headers: json, body }
+    )
   );
 
 export const useCreatePickupException = () =>

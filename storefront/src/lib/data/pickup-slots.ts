@@ -7,6 +7,12 @@ export type PickupSlot = {
   /** "YYYY-MM-DD" */
   fecha: string
   disponible: boolean
+  /**
+   * El site no atiende ese día (horario, feriado o excepción). Si es false
+   * y no está disponible, es que se llenó. Opcional: un backend anterior
+   * no lo envía.
+   */
+  cerrado?: boolean
   /** Cupos libres en este momento (0 si está cerrado o lleno). */
   cupos: number
   /** Por qué está cerrado (feriado, inventario…), si se indicó. */

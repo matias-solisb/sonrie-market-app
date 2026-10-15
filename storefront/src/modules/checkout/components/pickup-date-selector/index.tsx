@@ -22,7 +22,8 @@ sala" del checkout.
 
 - Muestra las fechas que devuelve GET /store/pickup-slots: de mañana a 14
   días (configurable por site). Los días cerrados o llenos aparecen
-  deshabilitados, con el motivo si lo hay.
+  deshabilitados: «Cerrado» si el site no atiende ese día y «Sin cupos» si
+  se llenó; si el Admin indicó un motivo, se muestra el motivo.
 - Al elegir un día lo guarda de inmediato (setCartPickupDate →
   metadata.pickup_date) y refresca la página. No reserva el cupo: eso
   ocurre al confirmar el pedido; si alguien toma el último cupo entre
@@ -181,7 +182,7 @@ const PickupDateSelector = ({ slots, selected, siteName }: Props) => {
           const disabled = !slot.disponible || isPending
           const fewSlots = slot.disponible && slot.cupos <= FEW_SLOTS
           const note = !slot.disponible
-            ? slot.motivo ?? (slot.cupos === 0 ? "Sin cupos" : "Cerrado")
+            ? slot.motivo ?? (slot.cerrado ? "Cerrado" : "Sin cupos")
             : fewSlots
               ? "Últimos cupos"
               : null

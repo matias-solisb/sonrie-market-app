@@ -37,6 +37,7 @@ import {
   ReserveBookingInput,
   ReserveBookingResult,
   ResolvedDay,
+  SaveSiteAgendaInput,
   UpdatePickupSettingInput,
   UpsertSiteScheduleInput,
   UpsertSiteSlotConfigInput,
@@ -585,6 +586,78 @@ class PickupSchedulingModuleService extends MedusaService({
       },
       sharedContext
     );
+  }
+
+  /**
+   * Guarda el panel de un site (configuración propia + horario semanal) en
+   * UNA transacción: si cualquier parte falla, no queda nada guardado ni
+   * auditado. Antes el Admin llamaba un endpoint por parte y un error a la
+   * mitad dejaba la agenda a medio guardar (P-04).
+   *
+   * Primero los días y al final la configuración: así las validaciones que
+   * dependen de la configuración general (horizonte ≥ lead-time) también
+   * deshacen los días ya escritos si fallan.
+   */
+  @InjectManager()
+  async saveSiteAgenda(
+    input: SaveSiteAgendaInput,
+    actorId: AuditActor = null,
+    @MedusaContext() sharedContext: Context = {}
+  ) {
+    return this.withAuditLog_(sharedContext, (ctx) =>
+      this.saveSiteAgenda_(input, actorId, ctx)
+    );
+  }
+
+  @InjectTransactionManager()
+  protected async saveSiteAgenda_(
+    input: SaveSiteAgendaInput,
+    actorId: AuditActor = null,
+    @MedusaContext() sharedContext: Context = {}
+  ) {
+    const { stock_location_id, config, horario = [] } = input;
+
+    if (!stock_location_id) {
+      throw invalid("Falta el site (stock_location_id).");
+    }
+
+    const dias = horario.map((h) => h.dia_semana);
+    if (new Set(dias).size !== dias.length) {
+      throw invalid("Cada día de la semana puede venir una sola vez.");
+    }
+
+    for (const { dia_semana, value } of horario) {
+      if (value) {
+        await this.upsertSiteSchedule_(
+          { stock_location_id, dia_semana, ...value },
+          actorId,
+          sharedContext
+        );
+      } else {
+        await this.deleteSiteSchedule_(stock_location_id, dia_semana, actorId, sharedContext);
+      }
+    }
+
+    if (config && Object.keys(config).length) {
+      await this.upsertSiteSlotConfig_(
+        { stock_location_id, ...config },
+        actorId,
+        sharedContext
+      );
+    }
+
+    const [savedConfig] = await this.listSiteSlotConfigs(
+      { stock_location_id },
+      { take: 1 },
+      sharedContext
+    );
+    const savedHorario = await this.listSiteSchedules(
+      { stock_location_id },
+      { order: { dia_semana: "ASC" } },
+      sharedContext
+    );
+
+    return { config: savedConfig ?? null, horario: savedHorario };
   }
 
   /**
@@ -1395,8 +1468,32 @@ class PickupSchedulingModuleService extends MedusaService({
       throw notAllowed("Este pedido no tiene fecha de retiro agendada.");
     }
 
+    const em = sharedContext.transactionManager as EntityManager;
+    const actor = input.actor ?? null;
+
     if (booking.estado === "retirado") {
-      return { booking_id: booking.id, retirado: false };
+      // Entregado con los botones nativos de Medusa: el subscriber lo marcó
+      // sin usuario y ahora llega quién fue. Solo si estaba vacío: nunca
+      // reemplaza a quien entregó.
+      if (!actor?.id) {
+        return { booking_id: booking.id, retirado: false, actor_registrado: false };
+      }
+
+      const completado = await em.execute(
+        `UPDATE pickup_booking
+            SET retirado_por = ?, retirado_por_email = ?, updated_at = now()
+          WHERE id = ? AND estado = 'retirado' AND retirado_por IS NULL
+            AND deleted_at IS NULL
+        RETURNING id`,
+        [actor.id, actor.email ?? null, booking.id],
+        "all"
+      );
+
+      return {
+        booking_id: booking.id,
+        retirado: false,
+        actor_registrado: completado.length > 0,
+      };
     }
 
     if (booking.estado !== "agendado") {
@@ -1406,9 +1503,6 @@ class PickupSchedulingModuleService extends MedusaService({
           : "Este pedido todavía se está creando. Intenta en unos segundos."
       );
     }
-
-    const em = sharedContext.transactionManager as EntityManager;
-    const actor = input.actor ?? null;
 
     const updated = await em.execute(
       `UPDATE pickup_booking
@@ -1429,7 +1523,11 @@ class PickupSchedulingModuleService extends MedusaService({
     );
 
     // Otro proceso lo entregó entre la lectura y el UPDATE.
-    return { booking_id: booking.id, retirado: updated.length > 0 };
+    return {
+      booking_id: booking.id,
+      retirado: updated.length > 0,
+      actor_registrado: updated.length > 0 && !!actor?.id,
+    };
   }
 
   /**

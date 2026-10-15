@@ -141,3 +141,35 @@ test("el día se llena mientras estoy en el checkout: al confirmar veo el error 
     await page.reload()
     await expectCanFixDate(page, checkout, fecha, /ya no está disponible/)
 })
+
+// D2: un día cerrado sin motivo se rotula «Cerrado»; uno lleno, «Sin cupos».
+test("distingue un día cerrado de uno lleno, aunque el Admin no indique motivo", async ({ page, request }) => {
+    const admin = await AdminApi.login(request)
+    const { checkout, siteName } = await checkoutWithDate(page)
+    const siteId = await admin.siteIdByName(siteName)
+
+    const libres = await checkout.availableDates.evaluateAll((els) =>
+        els.map((e) => e.getAttribute("data-fecha")!)
+    )
+    test.skip(libres.length < 3, "Se necesitan al menos 3 fechas con cupo")
+    const [, cerrada, llena] = libres
+
+    const cierre = await admin.createException({ fecha: cerrada, stock_location_id: siteId, tipo: "cerrado" })
+    cleanup.add((a) => a.deleteException(cierre))
+    const sinCupos = await admin.createException({
+        fecha: llena,
+        stock_location_id: siteId,
+        tipo: "abierto",
+        capacidad: 0,
+    })
+    cleanup.add((a) => a.deleteException(sinCupos))
+
+    await page.reload()
+    const opcion = (fecha: string) =>
+        page.locator(`[data-testid="pickup-date-option"][data-fecha="${fecha}"]`)
+
+    await expect(opcion(cerrada)).toHaveAttribute("data-disponible", "false", { timeout: 30_000 })
+    await expect(opcion(cerrada)).toHaveAttribute("title", "Cerrado")
+    await expect(opcion(llena)).toHaveAttribute("data-disponible", "false")
+    await expect(opcion(llena)).toHaveAttribute("title", "Sin cupos")
+})

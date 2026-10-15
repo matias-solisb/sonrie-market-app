@@ -757,7 +757,7 @@ moduleIntegrationTestRunner<PickupSchedulingModuleService>({
             now: ENTREGA,
           });
 
-          expect(result).toEqual({ booking_id, retirado: true });
+          expect(result).toEqual({ booking_id, retirado: true, actor_registrado: true });
           const booking = await service.retrievePickupBooking(booking_id);
           expect(booking).toMatchObject({
             estado: "retirado",
@@ -784,10 +784,36 @@ moduleIntegrationTestRunner<PickupSchedulingModuleService>({
             actor: { id: "user_b", email: "b@soprole.cl" },
           });
 
-          expect(second).toEqual({ booking_id, retirado: false });
+          expect(second).toEqual({ booking_id, retirado: false, actor_registrado: false });
           expect(await service.retrievePickupBooking(booking_id)).toMatchObject({
             retirado_por: "user_a",
           });
+        });
+
+        it("si se retiró sin usuario (entrega nativa), completa quién entregó una sola vez", async () => {
+          const { booking_id } = await reservar("cart_1");
+          await service.confirmBooking("cart_1", "order_1");
+
+          await service.markRetirado({ order_id: "order_1", actor: null, now: ENTREGA });
+          const completa = await service.markRetirado({
+            order_id: "order_1",
+            actor: { id: "user_a", email: "a@soprole.cl" },
+          });
+          const otra = await service.markRetirado({
+            order_id: "order_1",
+            actor: { id: "user_b", email: "b@soprole.cl" },
+          });
+
+          expect(completa).toEqual({ booking_id, retirado: false, actor_registrado: true });
+          expect(otra).toEqual({ booking_id, retirado: false, actor_registrado: false });
+          const booking = await service.retrievePickupBooking(booking_id);
+          expect(booking).toMatchObject({
+            estado: "retirado",
+            retirado_por: "user_a",
+            retirado_por_email: "a@soprole.cl",
+          });
+          // La hora de la entrega no cambia al completar el usuario.
+          expect(new Date(booking.retirado_at as any).toISOString()).toBe(ENTREGA.toISOString());
         });
 
         it("rechaza un pedido anulado, uno sin cupo y uno que aún se está creando", async () => {
@@ -915,6 +941,72 @@ moduleIntegrationTestRunner<PickupSchedulingModuleService>({
           stock_location_id: SITE,
           cambios: { capacidad_diaria: { anterior: null, nuevo: 5 } },
         });
+      });
+
+      // P-04: panel del site guardado en una sola transacción.
+      it("saveSiteAgenda guarda configuración y horario juntos", async () => {
+        await service.upsertSiteSchedule({ stock_location_id: SITE, dia_semana: 7, abierto: true });
+
+        const saved = await service.saveSiteAgenda(
+          {
+            stock_location_id: SITE,
+            config: { capacidad_diaria: 4 },
+            horario: [
+              { dia_semana: 6, value: { abierto: true, capacidad: 2 } },
+              { dia_semana: 7, value: null },
+            ],
+          },
+          ADMIN
+        );
+
+        expect(saved.config).toMatchObject({ capacidad_diaria: 4 });
+        expect(saved.horario).toEqual([
+          expect.objectContaining({ dia_semana: 6, abierto: true, capacidad: 2 }),
+        ]);
+        expect(await dia(SITE, SAB)).toMatchObject({ abierto: true, capacidad: 2 });
+      });
+
+      it("saveSiteAgenda no deja nada a medias si una parte falla", async () => {
+        const antes = (await cambios()).length;
+
+        await expect(
+          service.saveSiteAgenda(
+            {
+              stock_location_id: SITE,
+              horario: [{ dia_semana: 6, value: { abierto: true, capacidad: 2 } }],
+              config: { lead_time_dias: 10, horizonte_dias: 5 },
+            },
+            ADMIN
+          )
+        ).rejects.toThrow(/horizonte no puede ser menor/);
+
+        expect(await service.listSiteSchedules({ stock_location_id: SITE })).toHaveLength(0);
+        expect(await service.listSiteSlotConfigs({ stock_location_id: SITE })).toHaveLength(0);
+        expect(await cambios()).toHaveLength(antes);
+      });
+
+      it("saveSiteAgenda rechaza un día repetido o fuera de 1..7 sin guardar nada", async () => {
+        await expect(
+          service.saveSiteAgenda({
+            stock_location_id: SITE,
+            horario: [
+              { dia_semana: 6, value: { abierto: true } },
+              { dia_semana: 6, value: null },
+            ],
+          })
+        ).rejects.toThrow(/una sola vez/);
+
+        await expect(
+          service.saveSiteAgenda({
+            stock_location_id: SITE,
+            horario: [
+              { dia_semana: 5, value: { abierto: false } },
+              { dia_semana: 9, value: { abierto: true } },
+            ],
+          })
+        ).rejects.toThrow(/Día de la semana inválido/);
+
+        expect(await service.listSiteSchedules({ stock_location_id: SITE })).toHaveLength(0);
       });
 
       it("edita una excepción con las mismas reglas que al crearla", async () => {

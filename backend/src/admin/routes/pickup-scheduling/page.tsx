@@ -26,6 +26,7 @@ import {
   PickupOccupancyDay,
   PickupScheduleDay,
   PickupSettings,
+  PickupSiteAgendaInput,
   PickupSiteRow,
   useCreatePickupException,
   useDeletePickupException,
@@ -36,10 +37,9 @@ import {
   usePickupHolidayYears,
   usePickupOccupancy,
   usePickupSites,
-  useSetPickupScheduleDay,
+  useSavePickupSiteAgenda,
   useUpdatePickupException,
   useUpdatePickupSettings,
-  useUpdatePickupSite,
 } from "../../hooks/api/pickup-scheduling";
 
 /*
@@ -369,8 +369,7 @@ const SiteDrawer = ({
   const [horizonte, setHorizonte] = useState("");
   const [dias, setDias] = useState<Record<number, { mode: DayMode; capacidad: string }>>({});
   const [saving, setSaving] = useState(false);
-  const updateSite = useUpdatePickupSite(site.id);
-  const setDay = useSetPickupScheduleDay(site.id);
+  const saveAgenda = useSavePickupSiteAgenda(site.id);
 
   const reset = () => {
     setCapacidad(site.config?.capacidad_diaria?.toString() ?? "");
@@ -409,6 +408,7 @@ const SiteDrawer = ({
     setSaving(true);
 
     try {
+      const body: PickupSiteAgendaInput = {};
       const config = { capacidad_diaria: cap, lead_time_dias: leadN, horizonte_dias: horN };
       const actual = site.config ?? {
         capacidad_diaria: null,
@@ -421,15 +421,18 @@ const SiteDrawer = ({
         config.lead_time_dias !== actual.lead_time_dias ||
         config.horizonte_dias !== actual.horizonte_dias
       ) {
-        await updateSite.mutateAsync(config);
+        body.config = config;
       }
+
+      // Solo los días que cambiaron (null = volver al horario general).
+      const horario: NonNullable<PickupSiteAgendaInput["horario"]> = [];
 
       for (const d of DIAS) {
         const nuevo = dias[d.n];
         const previo = site.horario.find((h) => h.dia_semana === d.n);
 
         if (nuevo.mode === "general") {
-          if (previo) await setDay.mutateAsync({ dia_semana: d.n, value: null });
+          if (previo) horario.push({ dia_semana: d.n, value: null });
           continue;
         }
 
@@ -443,14 +446,26 @@ const SiteDrawer = ({
           previo.abierto !== value.abierto ||
           previo.capacidad !== value.capacidad
         ) {
-          await setDay.mutateAsync({ dia_semana: d.n, value });
+          horario.push({ dia_semana: d.n, value });
         }
+      }
+
+      if (horario.length) {
+        body.horario = horario;
+      }
+
+      // Una sola llamada y una sola transacción: si algo falla, no se
+      // guarda nada y el panel queda abierto con lo que se escribió.
+      if (body.config || body.horario) {
+        await saveAgenda.mutateAsync(body);
       }
 
       toast.success(`Agenda de ${site.name} guardada.`);
       setOpen(false);
     } catch (e) {
-      toast.error(errorMessage(e, "No se pudo guardar el site."));
+      toast.error(
+        `${errorMessage(e, "No se pudo guardar el site.")} No se guardó ningún cambio.`
+      );
     } finally {
       setSaving(false);
     }
@@ -1171,7 +1186,16 @@ const CAMPOS: Record<string, string> = {
   feriados: "Feriados cargados",
 };
 
-const valor = (campo: string, v: unknown): string => {
+const valor = (
+  campo: string,
+  v: unknown,
+  siteName: (id: string) => string = (id) => id
+): string => {
+  // El site de una excepción se guarda como id (sloc_…): se muestra su
+  // nombre, y "sin site" es una excepción para todos los sites (D1).
+  if (campo === "stock_location_id") {
+    return v ? siteName(String(v)) : "Todos los sites";
+  }
   if (v === null || v === undefined || v === "") return "—";
   if (typeof v === "boolean") return v ? "sí" : "no";
   if (campo === "dias_abiertos_por_defecto" && Array.isArray(v)) {
@@ -1198,9 +1222,10 @@ const detalleDe = (c: PickupChange) =>
     .filter(Boolean)
     .join(" · ");
 
-const HistorialTab = () => {
+const HistorialTab = ({ sites }: { sites: PickupSiteRow[] }) => {
   const { data, isPending } = usePickupChanges();
   const cambios = data?.cambios ?? [];
+  const siteName = (id: string) => sites.find((s) => s.id === id)?.name ?? id;
 
   return isPending ? (
     <Text size="small" className="p-6">
@@ -1243,10 +1268,10 @@ const HistorialTab = () => {
                   <span key={campo}>
                     {CAMPOS[campo] ?? campo}:{" "}
                     {c.accion === "crear"
-                      ? valor(campo, v.nuevo)
+                      ? valor(campo, v.nuevo, siteName)
                       : c.accion === "eliminar"
-                        ? valor(campo, v.anterior)
-                        : `${valor(campo, v.anterior)} → ${valor(campo, v.nuevo)}`}
+                        ? valor(campo, v.anterior, siteName)
+                        : `${valor(campo, v.anterior, siteName)} → ${valor(campo, v.nuevo, siteName)}`}
                   </span>
                 ))}
               </div>
@@ -1380,7 +1405,7 @@ const PickupSchedulingPage = () => {
               <OcupacionTab sites={sites} />
             </Tabs.Content>
             <Tabs.Content value="historial">
-              <HistorialTab />
+              <HistorialTab sites={sites} />
             </Tabs.Content>
           </Tabs>
         )}

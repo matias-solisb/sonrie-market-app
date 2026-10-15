@@ -21,9 +21,11 @@ muestre deshabilitados.
 
   {
     stock_location_id, desde, hasta,
-    fechas: [{ fecha, disponible, cupos, motivo }]
+    fechas: [{ fecha, disponible, cerrado, cupos, motivo }]
   }
 
+- `cerrado`: el site no atiende ese día (horario, feriado o excepción).
+  Distingue un día cerrado de uno abierto pero lleno (D2).
 - `cupos`: cupos libres en este momento (0 si está cerrado o lleno).
 - `motivo`: por qué está cerrado (feriado, inventario…), si se indicó.
 
@@ -68,6 +70,7 @@ export const GET = async (
     fechas: fechas.map((f) => ({
       fecha: f.fecha,
       disponible: f.disponibles > 0,
+      cerrado: !f.abierto,
       cupos: f.disponibles,
       motivo: f.abierto ? null : f.motivo,
     })),

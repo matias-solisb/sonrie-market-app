@@ -114,6 +114,45 @@ export class AdminApi {
     async updateSite(id: string, body: Record<string, number | null>) {
         await this.post(`${PICKUP}/sites/${id}`, body)
     }
+
+    /** Horario propio de un día del site (null = usa el general). */
+    async siteDay(id: string, dia: number): Promise<{ abierto: boolean; capacidad: number | null } | null> {
+        const site = (await this.pickupSites()).find((s: any) => s.id === id) as any
+        const h = site?.horario.find((x: any) => x.dia_semana === dia)
+        return h ? { abierto: h.abierto, capacidad: h.capacidad } : null
+    }
+
+    /** Define (o quita, con null) el horario propio de un día del site. */
+    async setSiteDay(id: string, dia: number, value: { abierto: boolean; capacidad: number | null } | null) {
+        if (value) {
+            await this.post(`${PICKUP}/sites/${id}/horario/${dia}`, value)
+        } else {
+            await this.delete(`${PICKUP}/sites/${id}/horario/${dia}`)
+        }
+    }
+
+    /** Excepciones (globales y de sites) entre dos fechas. */
+    async exceptionsBetween(desde: string, hasta: string): Promise<any[]> {
+        return (await this.get(`${PICKUP}/exceptions?desde=${desde}&hasta=${hasta}`)).exceptions
+    }
+
+    /** Años con lista de feriados de Chile disponible. */
+    async holidayYears(): Promise<number[]> {
+        return (await this.get(`${PICKUP}/feriados`)).anios
+    }
+
+    /** Cupo de retiro de un pedido (cualquier estado), o undefined. */
+    async bookingOf(orderId: string): Promise<any> {
+        return (await this.get(`${PICKUP}/bookings?order_id=${orderId}`)).bookings[0]
+    }
+
+    /** Cupos tomados de un site en una fecha. */
+    async ocupados(siteId: string, fecha: string): Promise<number> {
+        const { dias } = await this.get(
+            `${PICKUP}/occupancy?stock_location_id=${siteId}&desde=${fecha}&hasta=${fecha}`
+        )
+        return dias[0]?.ocupados ?? 0
+    }
 }
 
 /**

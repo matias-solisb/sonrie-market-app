@@ -181,6 +181,103 @@ medusaIntegrationTestRunner({
       });
     });
 
+    // P-04: el panel "Agenda de {site}" se guarda en una sola transacción.
+    describe("panel del site (guardado de una vez)", () => {
+      it("guarda configuración y horario juntos, con auditoría de cada parte", async () => {
+        const site = shop.site.id;
+        await post(`/sites/${site}/horario/7`, { abierto: true, capacidad: 2 });
+
+        const res = await post(`/sites/${site}/agenda`, {
+          config: { capacidad_diaria: 8 },
+          horario: [
+            { dia_semana: 6, value: { abierto: true, capacidad: 3 } },
+            { dia_semana: 7, value: null },
+          ],
+        });
+
+        expect(res.status).toBe(200);
+        expect(res.data).toEqual({
+          config: { capacidad_diaria: 8, lead_time_dias: null, horizonte_dias: null },
+          horario: [{ dia_semana: 6, abierto: true, capacidad: 3 }],
+        });
+        expect((await get("/sites")).data.sites[0]).toMatchObject({
+          config: { capacidad_diaria: 8 },
+          horario: [{ dia_semana: 6, abierto: true, capacidad: 3 }],
+        });
+
+        // Mismo instante (una transacción): se compara sin orden.
+        const ultimos = (await changes()).slice(0, 3);
+        expect(ultimos).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({
+              entidad: "site",
+              accion: "crear",
+              actor: expect.objectContaining({ email: "admin@medusa.js" }),
+            }),
+            expect.objectContaining({ entidad: "horario", accion: "crear", referencia: "6" }),
+            expect.objectContaining({ entidad: "horario", accion: "eliminar", referencia: "7" }),
+          ])
+        );
+      });
+
+      it("si una parte falla no guarda nada: ni días, ni configuración, ni auditoría, ni log", async () => {
+        const site = shop.site.id;
+        const antes = (await pickup.listPickupScheduleChanges({})).length;
+        const logger = shop.container.resolve("logger");
+        const spy = jest.spyOn(logger, "info");
+
+        // Los días son válidos y se escriben primero; la configuración falla
+        // después (horizonte < anticipación) y tiene que deshacerlos.
+        const res = await post(`/sites/${site}/agenda`, {
+          horario: [
+            { dia_semana: 6, value: { abierto: true, capacidad: 3 } },
+            { dia_semana: 7, value: { abierto: false } },
+          ],
+          config: { capacidad_diaria: 8, lead_time_dias: 10, horizonte_dias: 5 },
+        });
+
+        const logs = spy.mock.calls.filter(([msg]) =>
+          String(msg).includes("pickup_scheduling.cambio")
+        );
+        spy.mockRestore();
+
+        expect(res.status).toBe(400);
+        expect(res.data.message).toMatch(/horizonte no puede ser menor/);
+        expect((await get("/sites")).data.sites[0]).toMatchObject({ config: null, horario: [] });
+        expect(await pickup.listPickupScheduleChanges({})).toHaveLength(antes);
+        expect(logs).toHaveLength(0);
+      });
+
+      it("valida el cuerpo y el site", async () => {
+        const site = shop.site.id;
+        const dia = (d: any) => post(`/sites/${site}/agenda`, { horario: [d] });
+
+        expect((await dia({ dia_semana: 8, value: null })).status).toBe(400);
+        expect((await dia({ dia_semana: 6, value: { capacidad: 3 } })).status).toBe(400);
+        expect((await dia({ dia_semana: 6, value: { abierto: true, capacidad: -1 } })).status).toBe(400);
+        expect(
+          (await post(`/sites/${site}/agenda`, {
+            horario: [
+              { dia_semana: 6, value: null },
+              { dia_semana: 6, value: { abierto: true } },
+            ],
+          })).status
+        ).toBe(400);
+        expect((await post(`/sites/${site}/agenda`, { otra: 1 })).status).toBe(400);
+        expect((await post("/sites/sloc_no_existe/agenda", { horario: [] })).status).toBe(404);
+
+        expect((await get("/sites")).data.sites[0]).toMatchObject({ config: null, horario: [] });
+      });
+
+      it("sin cambios responde lo guardado y no audita nada", async () => {
+        const antes = (await pickup.listPickupScheduleChanges({})).length;
+        const res = await post(`/sites/${shop.site.id}/agenda`, {});
+        expect(res.status).toBe(200);
+        expect(res.data).toEqual({ config: null, horario: [] });
+        expect(await pickup.listPickupScheduleChanges({})).toHaveLength(antes);
+      });
+    });
+
     describe("excepciones y feriados", () => {
       it("crea, lista, edita y elimina excepciones", async () => {
         const fecha = await firstSlot();
@@ -242,6 +339,36 @@ medusaIntegrationTestRunner({
         expect(duplicada.data.message).toContain("Ya existe una excepción global");
       });
 
+      // D2: el storefront distingue "Cerrado" de "Sin cupos".
+      it("el storefront distingue un día cerrado sin motivo de uno abierto pero lleno", async () => {
+        const [primero, segundo] = (await getPickupSlots(api, shop.site.id, shop.storeHeaders)).data
+          .fechas;
+        await post("/exceptions", { fecha: primero.fecha, stock_location_id: shop.site.id, tipo: "cerrado" });
+        await post("/exceptions", {
+          fecha: segundo.fecha,
+          stock_location_id: shop.site.id,
+          tipo: "abierto",
+          capacidad: 0,
+        });
+
+        const fechas = (await getPickupSlots(api, shop.site.id, shop.storeHeaders)).data.fechas;
+        expect(fechas.find((f: any) => f.fecha === primero.fecha)).toEqual({
+          fecha: primero.fecha,
+          disponible: false,
+          cerrado: true,
+          cupos: 0,
+          motivo: null,
+        });
+        expect(fechas.find((f: any) => f.fecha === segundo.fecha)).toEqual({
+          fecha: segundo.fecha,
+          disponible: false,
+          cerrado: false,
+          cupos: 0,
+          motivo: null,
+        });
+        expect(fechas.filter((f: any) => f.disponible).every((f: any) => f.cerrado === false)).toBe(true);
+      });
+
       it("un día cerrado desde el Admin deja de ofrecerse en el storefront", async () => {
         const fecha = await firstSlot();
         await post("/exceptions", {
@@ -254,7 +381,7 @@ medusaIntegrationTestRunner({
         const dia = (await getPickupSlots(api, shop.site.id, shop.storeHeaders)).data.fechas.find(
           (f: any) => f.fecha === fecha
         );
-        expect(dia).toEqual({ fecha, disponible: false, cupos: 0, motivo: "Inventario" });
+        expect(dia).toEqual({ fecha, disponible: false, cerrado: true, cupos: 0, motivo: "Inventario" });
 
         const cart = await readyCart(api, shop, [{ variant_id: shop.litro, quantity: 1 }], {
           pickupDate: false,

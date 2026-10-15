@@ -35,9 +35,12 @@ Datos: GET /admin/pickup-scheduling/retiros?order_id=
 
 */
 const OrderPickupDateWidget = ({ data: order }: DetailWidgetProps<AdminOrder>) => {
-  const { data, isPending, isError } = usePickupOrderRetiro(order.id);
+  const { data, isPending, isError } = usePickupOrderRetiro(order.id, order.status);
   const [confirmando, setConfirmando] = useState(false);
   const retiro = data?.retiros[0];
+  // Recién anulado en Medusa: el cupo se libera un instante después.
+  // Mientras tanto no se ofrece entregar.
+  const anulado = order.status === "canceled";
 
   return (
     <Container className="divide-y p-0" data-testid="order-pickup-date">
@@ -77,7 +80,7 @@ const OrderPickupDateWidget = ({ data: order }: DetailWidgetProps<AdminOrder>) =
               </dd>
             </dl>
 
-            {sePuedeEntregar(retiro.estado_retiro) && (
+            {!anulado && sePuedeEntregar(retiro.estado_retiro) && (
               <>
                 <Button
                   size="large"

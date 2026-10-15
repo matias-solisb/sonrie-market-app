@@ -112,6 +112,7 @@ medusaIntegrationTestRunner({
         expect(data.fechas[0]).toEqual({
           fecha: data.desde,
           disponible: true,
+          cerrado: false,
           cupos: 1000,
           motivo: null,
         });
@@ -131,6 +132,7 @@ medusaIntegrationTestRunner({
         expect(dia).toEqual({
           fecha: segunda,
           disponible: false,
+          cerrado: true,
           cupos: 0,
           motivo: "Inventario",
         });
@@ -636,8 +638,41 @@ medusaIntegrationTestRunner({
             adminHeaders
           );
 
-          await waitFor(async () => (await booking(b.id)).estado === "retirado");
-          expect(await booking(b.id)).toMatchObject({ retirado_por: null });
+          // Queda retirado y, aunque el evento no lo trae, con quién entregó.
+          await waitFor(async () => (await booking(b.id)).retirado_por !== null);
+          expect(await booking(b.id)).toMatchObject({
+            estado: "retirado",
+            retirado_por: expect.stringMatching(/^user_/),
+            retirado_por_email: "admin@medusa.js",
+          });
+        });
+
+        it("entrega nativa en dos partes: queda retirado recién con la última, con quién la entregó", async () => {
+          const { order, booking: b } = await pedidoAgendado(2);
+          const cumplir = async (quantity: number) => {
+            await api.post(
+              `/admin/orders/${order.id}/fulfillments`,
+              { items: [{ id: order.items[0].id, quantity }], location_id: shop.site.id },
+              adminHeaders
+            );
+            const { order: o } = (
+              await api.get(`/admin/orders/${order.id}?fields=*fulfillments`, adminHeaders)
+            ).data;
+            return o.fulfillments.find((f: any) => !f.delivered_at).id as string;
+          };
+          const recoger = (fid: string) =>
+            api.post(`/admin/orders/${order.id}/fulfillments/${fid}/mark-as-delivered`, {}, adminHeaders);
+
+          await recoger(await cumplir(1));
+          await new Promise((r) => setTimeout(r, 1500));
+          expect(await booking(b.id)).toMatchObject({ estado: "agendado", retirado_por: null });
+
+          await recoger(await cumplir(1));
+          await waitFor(async () => (await booking(b.id)).retirado_por !== null);
+          expect(await booking(b.id)).toMatchObject({
+            estado: "retirado",
+            retirado_por_email: "admin@medusa.js",
+          });
         });
 
         it("Retiros del día: lista por site y fecha, cuenta por estado y busca por n.º de pedido", async () => {
