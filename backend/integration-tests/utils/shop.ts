@@ -4,7 +4,12 @@ import { createInventoryLevelsWorkflow } from "@medusajs/medusa/core-flows";
 import { BENEFIT_BUDGET_MODULE } from "../../src/modules/benefit-budget";
 import BenefitBudgetModuleService from "../../src/modules/benefit-budget/service";
 import { PickupSite } from "../../src/utils/pickup-sites";
-import { adminHeaders, createAdminUser, createStoreUser } from "./admin";
+import {
+  adminHeaders,
+  createAdminUser,
+  createColaboradorSession,
+  createStoreUser,
+} from "./admin";
 import {
   createPickupSite,
   enablePickupScheduling,
@@ -64,7 +69,7 @@ export const setupShop = async ({
   const publishableKey = await generatePublishableKey(container);
   const storeHeaders = generateStoreHeaders({ publishableKey }) as any;
 
-  const user = await createStoreUser({ api, storeHeaders });
+  const user = await createStoreUser({ api, storeHeaders, container });
   storeHeaders.headers["Authorization"] = `Bearer ${user.token}`;
 
   const region = (
@@ -237,25 +242,15 @@ export const createOtherCustomer = async (
   const base = { ...shop.storeHeaders.headers };
   delete base["Authorization"];
 
-  const register = await api.post("/auth/customer/emailpass/register", {
+  const { customer, token } = await createColaboradorSession({
+    api,
+    container: shop.container,
     email,
-    password: "password",
-  });
-  const customer = (
-    await api.post(
-      "/store/customers",
-      { email },
-      { headers: { ...base, Authorization: `Bearer ${register.data.token}` } }
-    )
-  ).data.customer;
-  const login = await api.post("/auth/customer/emailpass", {
-    email,
-    password: "password",
   });
 
   return {
     customer,
-    headers: { headers: { ...base, Authorization: `Bearer ${login.data.token}` } },
+    headers: { headers: { ...base, Authorization: `Bearer ${token}` } },
   };
 };
 

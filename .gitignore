@@ -60,3 +60,5 @@ Thumbs.db
 
 # Credenciales del Postgres local para los tests de integración
 .env.test
+
+/docs/*

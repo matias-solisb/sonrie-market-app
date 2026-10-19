@@ -4,6 +4,7 @@ import {
   validateAndTransformQuery,
 } from "@medusajs/framework";
 import { authenticate } from "@medusajs/medusa";
+import { deny } from "../../middlewares/deny";
 import { ensureRole } from "../../middlewares/ensure-role";
 import {
   storeCompanyQueryConfig,
@@ -39,6 +40,9 @@ export const storeCompaniesMiddlewares: MiddlewareRoute[] = [
     method: ["POST"],
     matcher: "/store/companies",
     middlewares: [
+      // Sonríe Market tiene una sola company (src/utils/sonrie-company.ts);
+      // nadie la crea desde la tienda.
+      deny("No se pueden crear empresas."),
       validateAndTransformBody(StoreCreateCompany),
       validateAndTransformQuery(
         StoreGetCompanyParams,
@@ -60,6 +64,9 @@ export const storeCompaniesMiddlewares: MiddlewareRoute[] = [
     method: ["POST"],
     matcher: "/store/companies/:id",
     middlewares: [
+      // El starter no lo protegía: cualquier customer logueado podía editar
+      // la company. Igual que employees y approval-settings: solo company_admin.
+      ensureRole("company_admin"),
       validateAndTransformQuery(
         StoreGetCompanyParams,
         storeCompanyQueryConfig.retrieve
@@ -67,6 +74,12 @@ export const storeCompaniesMiddlewares: MiddlewareRoute[] = [
     ],
   },
 
+  {
+    // El starter tampoco lo protegía: cualquier customer podía borrar la company.
+    method: ["DELETE"],
+    matcher: "/store/companies/:id",
+    middlewares: [deny("No se pueden eliminar empresas.")],
+  },
   /* Employee middlewares */
   {
     method: ["GET"],

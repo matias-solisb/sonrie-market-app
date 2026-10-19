@@ -2,7 +2,10 @@ import {
   IAuthModuleService,
   IUserModuleService,
 } from "@medusajs/framework/types";
+import { MedusaContainer } from "@medusajs/framework/types";
 import { Modules } from "@medusajs/framework/utils";
+import { ensureSonrieCompany } from "../../src/utils/sonrie-company";
+import { createColaboradorWorkflow } from "../../src/workflows/colaborador/workflows";
 import jwt from "jsonwebtoken";
 import Scrypt from "scrypt-kdf";
 
@@ -54,35 +57,54 @@ export const createAdminUser = async (adminHeaders, appContainer) => {
   return { user, authIdentity };
 };
 
-export const createStoreUser = async ({ api, storeHeaders }) => {
-  const registerToken = (
-    await api.post("/auth/customer/emailpass/register", {
-      email: "test@email.com",
-      password: "password",
-    })
-  ).data.token;
+/*
 
-  const customer = (
-    await api.post(
-      "/store/customers",
-      {
-        email: "test@email.com",
-      },
-      {
-        headers: {
-          Authorization: `Bearer ${registerToken}`,
-          ...storeHeaders.headers,
-        },
-      }
-    )
-  ).data.customer;
+Colaboradores de prueba. El autorregistro por API está cerrado
+(src/api/middlewares/self-signup-disabled.ts), así que se crean igual que en
+producción: con el workflow `create-colaborador`, como employees de la
+company única. Después se loguean por la ruta normal.
+
+*/
+export const createColaboradorSession = async ({
+  api,
+  container,
+  email,
+  password = "password",
+  first_name = "Test",
+  last_name = "User",
+}: {
+  api: any;
+  container: MedusaContainer;
+  email: string;
+  password?: string;
+  first_name?: string;
+  last_name?: string;
+}) => {
+  const { company } = await ensureSonrieCompany(container);
+  const { result } = await createColaboradorWorkflow(container).run({
+    input: { company_id: company.id, email, password, first_name, last_name },
+  });
 
   const token = (
-    await api.post("/auth/customer/emailpass", {
-      email: "test@email.com",
-      password: "password",
-    })
+    await api.post("/auth/customer/emailpass", { email, password })
   ).data.token;
+
+  return { customer: result.customer, employee: result.employee, token };
+};
+
+export const createStoreUser = async ({
+  api,
+  container,
+}: {
+  api: any;
+  storeHeaders?: any;
+  container: MedusaContainer;
+}) => {
+  const { customer, token } = await createColaboradorSession({
+    api,
+    container,
+    email: "test@email.com",
+  });
 
   return { customer, token };
 };

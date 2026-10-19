@@ -6,6 +6,7 @@ import { ensurePickupSite, PickupSite } from "../../../src/utils/pickup-sites";
 import {
   adminHeaders,
   createAdminUser,
+  createColaboradorSession,
   createStoreUser,
 } from "../../utils/admin";
 import {
@@ -49,7 +50,7 @@ medusaIntegrationTestRunner({
       const publishableKey = await generatePublishableKey(container);
       storeHeaders = generateStoreHeaders({ publishableKey });
 
-      const user = await createStoreUser({ api, storeHeaders });
+      const user = await createStoreUser({ api, storeHeaders, container });
       storeHeaders.headers["Authorization"] = `Bearer ${user.token}`;
 
       region = (
@@ -285,27 +286,14 @@ medusaIntegrationTestRunner({
     it("otro colaborador no puede cambiar el site de mi carrito", async () => {
       const cart = await newCart(1);
 
-      const register = await api.post("/auth/customer/emailpass/register", {
+      const { token } = await createColaboradorSession({
+        api,
+        container: getContainer(),
         email: "otro@email.com",
-        password: "password",
-      });
-      await api.post(
-        "/store/customers",
-        { email: "otro@email.com" },
-        {
-          headers: {
-            ...storeHeaders.headers,
-            Authorization: `Bearer ${register.data.token}`,
-          },
-        }
-      );
-      const login = await api.post("/auth/customer/emailpass", {
-        email: "otro@email.com",
-        password: "password",
       });
 
       const res = await setSite(cart.id, santiago.id, {
-        headers: { ...storeHeaders.headers, Authorization: `Bearer ${login.data.token}` },
+        headers: { ...storeHeaders.headers, Authorization: `Bearer ${token}` },
       });
       expect(res.status).toBe(404);
     });

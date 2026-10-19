@@ -38,7 +38,7 @@ runner({
       await createAdminUser(adminHeaders, container);
       const publishableKey = await generatePublishableKey(container);
       storeHeaders = generateStoreHeaders({ publishableKey });
-      const res = await createStoreUser({ api, storeHeaders });
+      const res = await createStoreUser({ api, storeHeaders, container });
       customerToken = res.token;
       storeHeaders.headers["Authorization"] = `Bearer ${customerToken}`;
       region = await regionSeeder({ api, adminHeaders, data: {} });

@@ -106,7 +106,7 @@ medusaIntegrationTestRunner({
       const publishableKey = await generatePublishableKey(container);
       storeHeaders = generateStoreHeaders({ publishableKey });
 
-      const user = await createStoreUser({ api, storeHeaders });
+      const user = await createStoreUser({ api, storeHeaders, container });
       customerId = user.customer.id;
       storeHeaders.headers["Authorization"] = `Bearer ${user.token}`;
 

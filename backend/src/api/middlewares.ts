@@ -6,12 +6,18 @@ import {
 import { defineMiddlewares } from "@medusajs/medusa";
 import { adminMiddlewares } from "./admin/middlewares";
 import { quotesDisabledMiddlewares } from "./middlewares/quotes-disabled";
+import { selfSignupDisabledMiddlewares } from "./middlewares/self-signup-disabled";
+import { adminInviteEmailMiddlewares } from "./middlewares/admin-invite-email";
 import { storeMiddlewares } from "./store/middlewares";
 
 export default defineMiddlewares({
   routes: [
     // Primero: apaga /store/quotes y /admin/quotes (ver quotes-disabled.ts)
     ...quotesDisabledMiddlewares,
+    // Sin autorregistro de clientes (ver self-signup-disabled.ts)
+    ...selfSignupDisabledMiddlewares,
+    // Correo válido en las invitaciones del Admin (ver admin-invite-email.ts)
+    ...adminInviteEmailMiddlewares,
     ...adminMiddlewares,
     ...storeMiddlewares,
     {

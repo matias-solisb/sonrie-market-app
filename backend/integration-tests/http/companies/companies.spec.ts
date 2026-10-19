@@ -1,277 +1,154 @@
 import { medusaIntegrationTestRunner } from "@medusajs/test-utils";
+import { MedusaContainer } from "@medusajs/framework/types";
+import { ContainerRegistrationKeys } from "@medusajs/framework/utils";
 import {
   adminHeaders,
   createAdminUser,
-  createStoreUser,
+  createColaboradorSession,
 } from "../../utils/admin";
-import {
-  cartSeeder,
-  productSeeder,
-  regionSeeder,
-  salesChannelSeeder,
-} from "../../utils/seeder";
-import {
-  generatePublishableKey,
-  generateStoreHeaders,
-} from "../../utils/store";
+import { generatePublishableKey, generateStoreHeaders } from "../../utils/store";
 
 jest.setTimeout(60 * 1000);
 
+/*
+
+La company desde la Store API (npm run test:integration:http).
+
+Reemplaza los tests originales del B2B Starter, que creaban, editaban y
+borraban companies desde la tienda con cualquier customer logueado. En
+Sonríe Market hay una sola company (src/utils/sonrie-company.ts) y un
+colaborador común (employee con is_admin: false) solo puede leerla:
+
+- GET  /store/companies/:id                 → 200
+- POST /store/companies                     → 403 (nadie crea companies)
+- POST /store/companies/:id                 → 403 (solo company_admin)
+- DELETE /store/companies/:id               → 403 (nadie borra companies)
+- POST /store/companies/:id/employees       → 403 (solo company_admin)
+- POST /store/companies/:id/employees/:id   → 403 (no puede hacerse admin)
+
+*/
+
+const status = (p: Promise<any>) =>
+  p.then((r) => r.status).catch((e) => e.response?.status);
+
 medusaIntegrationTestRunner({
   inApp: true,
-  env: {
-    JWT_SECRET: "supersecret",
-  },
+  env: { JWT_SECRET: "supersecret" },
   testSuite: ({ api, getContainer }) => {
-    let storeHeaders, cart, product, salesChannel, region, customerToken;
+    let storeHeaders: any;
+    let company: { id: string; name: string };
+    let employeeId: string;
+
+    const companyInDb = async (container: MedusaContainer) => {
+      const query = container.resolve(ContainerRegistrationKeys.QUERY);
+      const { data } = await query.graph({
+        entity: "company",
+        fields: ["id", "name", "email"],
+      });
+      return data;
+    };
 
     beforeEach(async () => {
       const container = getContainer();
       await createAdminUser(adminHeaders, container);
       const publishableKey = await generatePublishableKey(container);
       storeHeaders = generateStoreHeaders({ publishableKey });
-      const res = await createStoreUser({ api, storeHeaders });
-      customerToken = res.token;
-      console.log("vic logs customerToken", customerToken);
-      storeHeaders.headers["Authorization"] = `Bearer ${customerToken}`;
-      console.log("vic logs storeHeaders", storeHeaders);
-      region = await regionSeeder({ api, adminHeaders, data: {} });
 
-      salesChannel = await salesChannelSeeder({
+      const session = await createColaboradorSession({
         api,
-        adminHeaders,
-        data: {},
+        container,
+        email: "juana.perez@sonriemarket.cl",
       });
+      storeHeaders.headers["Authorization"] = `Bearer ${session.token}`;
+      company = session.employee.company;
+      employeeId = session.employee.id;
+    });
 
-      product = await productSeeder({
-        api,
-        adminHeaders,
-        data: {
-          sales_channels: [{ id: salesChannel.id }],
-        },
-      });
+    it("GET /store/companies/:id devuelve la company", async () => {
+      const res = await api.get(`/store/companies/${company.id}`, storeHeaders);
 
-      await api.post(
-        `/admin/api-keys/${publishableKey.id}/sales-channels`,
-        { add: [salesChannel.id] },
-        adminHeaders
+      expect(res.status).toBe(200);
+      expect(res.data.company.id).toBe(company.id);
+    });
+
+    it("GET de una company inexistente responde not_found", async () => {
+      const { response } = await api
+        .get(`/store/companies/does-not-exist`, storeHeaders)
+        .catch((e) => e);
+
+      expect(response.data).toMatchObject({ type: "not_found" });
+    });
+
+    it("POST /store/companies: un colaborador no puede crear companies", async () => {
+      const code = await status(
+        api.post(
+          "/store/companies",
+          {
+            name: "Mi Empresa",
+            email: "yo@empresa.cl",
+            currency_code: "clp",
+            spending_limit_reset_frequency: "monthly",
+          },
+          storeHeaders
+        )
       );
 
-      cart = await cartSeeder({
-        api,
-        storeHeaders,
-        data: {
-          region_id: region.id,
-          sales_channel_id: salesChannel.id,
-          items: [{ quantity: 1, variant_id: product.variants[0].id }],
-        },
-      });
+      expect(code).toBe(403);
+      expect(await companyInDb(getContainer())).toHaveLength(1);
     });
 
-    describe("POST /store/companies", () => {
-      it("successfully creates a company", async () => {
-        const response = await api.post(
-          "/store/companies",
-          {
-            name: "Test Company",
-            email: "test@company.com",
-            phone: "1234567890",
-            address: "123 Test St",
-            city: "Test City",
-            state: "Test State",
-            zip: "12345",
-            country: "Test Country",
-            logo_url: "http://test.com/logo.png",
-            currency_code: "USD",
-            spending_limit_reset_frequency: "monthly",
-          },
+    it("POST /store/companies/:id: un colaborador no puede editar la company", async () => {
+      const code = await status(
+        api.post(
+          `/store/companies/${company.id}`,
+          { name: "Hackeada" },
           storeHeaders
-        );
+        )
+      );
 
-        expect(response.status).toEqual(200);
-        expect(response.data.companies[0]).toMatchObject({
-          id: expect.any(String),
-          name: "Test Company",
-          email: "test@company.com",
-          phone: "1234567890",
-          address: "123 Test St",
-          city: "Test City",
-          state: "Test State",
-          zip: "12345",
-          country: "Test Country",
-          logo_url: "http://test.com/logo.png",
-          currency_code: "USD",
-        });
-      });
+      expect(code).toBe(403);
+      expect((await companyInDb(getContainer()))[0].name).toBe(company.name);
     });
 
-    describe("GET /store/companies/:id", () => {
-      it("successfully retrieves a company", async () => {
-        const response1 = await api.post(
-          "/store/companies",
-          {
-            name: "Test Company",
-            email: "test@company.com",
-            phone: "1234567890",
-            address: "123 Test St",
-            city: "Test City",
-            state: "Test State",
-            zip: "12345",
-            country: "Test Country",
-            logo_url: "http://test.com/logo.png",
-            currency_code: "USD",
-            spending_limit_reset_frequency: "monthly",
-          },
-          storeHeaders
-        );
+    it("DELETE /store/companies/:id: un colaborador no puede borrar la company", async () => {
+      const code = await status(
+        api.delete(`/store/companies/${company.id}`, storeHeaders)
+      );
 
-        const response2 = await api.get(
-          `/store/companies/${response1.data.companies[0].id}`,
-          storeHeaders
-        );
-
-        expect(response2.data.company).toMatchObject({
-          id: expect.any(String),
-          name: "Test Company",
-          email: "test@company.com",
-          phone: "1234567890",
-          address: "123 Test St",
-          city: "Test City",
-          state: "Test State",
-          zip: "12345",
-          country: "Test Country",
-          logo_url: "http://test.com/logo.png",
-          currency_code: "USD",
-        });
-      });
-
-      it("should throw error when company does not exist", async () => {
-        const { response } = await api
-          .get(`/store/companies/does-not-exist`, storeHeaders)
-          .catch((e) => e);
-
-        expect(response.data).toMatchObject({
-          type: "not_found",
-        });
-      });
+      expect(code).toBe(403);
+      expect(await companyInDb(getContainer())).toHaveLength(1);
     });
 
-    describe("POST /store/companies/:id", () => {
-      let company1;
-
-      beforeEach(async () => {
-        const response = await api.post(
-          "/store/companies",
-          {
-            name: "Test Company",
-            email: "test@company.com",
-            phone: "1234567890",
-            address: "123 Test St",
-            city: "Test City",
-            state: "Test State",
-            zip: "12345",
-            country: "Test Country",
-            logo_url: "http://test.com/logo.png",
-            currency_code: "USD",
-            spending_limit_reset_frequency: "monthly",
-          },
+    it("un colaborador no puede agregar employees a la company", async () => {
+      const code = await status(
+        api.post(
+          `/store/companies/${company.id}/employees`,
+          { spending_limit: 0, is_admin: true },
           storeHeaders
-        );
+        )
+      );
 
-        company1 = response.data.companies[0];
-      });
-
-      it("successfully updates a company", async () => {
-        const response = await api.post(
-          `/store/companies/${company1.id}`,
-          {
-            name: "Updated Company",
-            email: "updated@company.com",
-            phone: "0987654321",
-            address: "456 Updated Ave",
-            city: "Updated City",
-            state: "Updated State",
-            zip: "54321",
-            country: "Updated Country",
-            logo_url: "http://updated.com/logo.png",
-            currency_code: "EUR",
-            spending_limit_reset_frequency: "yearly",
-          },
-          storeHeaders
-        );
-
-        expect(response.data.company).toMatchObject({
-          id: company1.id,
-          name: "Updated Company",
-          email: "updated@company.com",
-          phone: "0987654321",
-          address: "456 Updated Ave",
-          city: "Updated City",
-          state: "Updated State",
-          zip: "54321",
-          country: "Updated Country",
-          logo_url: "http://updated.com/logo.png",
-          currency_code: "EUR",
-        });
-      });
-
-      it("should throw an error when company does not exist", async () => {
-        const { response } = await api
-          .post(
-            `/store/companies/does-not-exist`,
-            { name: "Nonexistent Company" },
-            storeHeaders
-          )
-          .catch((e) => e);
-
-        expect(response.data).toMatchObject({
-          type: "not_found",
-        });
-      });
+      expect(code).toBe(403);
     });
 
-    describe("DELETE /store/companies/:id", () => {
-      console.log("vic logs storeHeaders", storeHeaders);
-      let company1;
-
-      beforeEach(async () => {
-        const response = await api.post(
-          "/store/companies",
-          {
-            name: "Test Company",
-            email: "test@company.com",
-            phone: "1234567890",
-            address: "123 Test St",
-            city: "Test City",
-            state: "Test State",
-            zip: "12345",
-            country: "Test Country",
-            logo_url: "http://test.com/logo.png",
-            currency_code: "USD",
-            spending_limit_reset_frequency: "monthly",
-          },
+    it("un colaborador no puede hacerse company_admin", async () => {
+      const code = await status(
+        api.post(
+          `/store/companies/${company.id}/employees/${employeeId}`,
+          { is_admin: true },
           storeHeaders
-        );
+        )
+      );
 
-        company1 = response.data.companies[0];
+      expect(code).toBe(403);
+
+      const query = getContainer().resolve(ContainerRegistrationKeys.QUERY);
+      const { data } = await query.graph({
+        entity: "employee",
+        fields: ["is_admin"],
+        filters: { id: employeeId },
       });
-
-      it("successfully deletes a company", async () => {
-        const response = await api.delete(
-          `/store/companies/${company1.id}`,
-          storeHeaders
-        );
-
-        expect(response.status).toEqual(204);
-      });
-
-      it("should throw an error when company does not exist", async () => {
-        const response = await api
-          .delete(`/store/companies/does-not-exist`, storeHeaders)
-          .catch((e) => e);
-
-        expect(response.status).toEqual(204);
-      });
+      expect(data[0].is_admin).toBe(false);
     });
   },
 });
