@@ -12,9 +12,11 @@ contenedor del Auth Module: no puede leer customers ni otros módulos.
 - must_change_password: true desde el alta hasta que el colaborador cambia
                         la clave inicial (paso 6).
 - password_changed_at:  ISO 8601 del último cambio; null = clave inicial.
-- enabled:              espejo de "habilitado". Por ahora un solo indicador;
-                        el doble estado activo_sap / habilitado_admin se
-                        decide con employee-sync o el backoffice (Fase 1/4).
+- enabled:              habilitado para entrar a la tienda (paso 9). Un solo
+                        indicador en el MVP; el doble estado activo_sap /
+                        habilitado_admin se decide con employee-sync (F4).
+- enabled_changed_at:   ISO 8601 del último cambio de `enabled` (o ausente).
+- enabled_changed_by:   id del usuario del Admin que lo cambió (o ausente).
 
 */
 export type RutProviderMetadata = {
@@ -24,4 +26,6 @@ export type RutProviderMetadata = {
   must_change_password: boolean;
   password_changed_at: string | null;
   enabled: boolean;
+  enabled_changed_at?: string | null;
+  enabled_changed_by?: string | null;
 };

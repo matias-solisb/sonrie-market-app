@@ -1,6 +1,6 @@
 import { retrieveCart } from "@/lib/data/cart"
 import {
-  redirectIfPasswordChangeRequired,
+  enforceAccountState,
   retrieveCustomer,
 } from "@/lib/data/customer"
 import { listCartFreeShippingPrices } from "@/lib/data/fulfillment"
@@ -20,11 +20,11 @@ export default async function PageLayout(props: {
   children: React.ReactNode
   params: Promise<{ countryCode: string }>
 }) {
-  // Colaborador con la clave inicial: primero tiene que cambiarla
-  // (rut-auth, paso 6). Va antes de cargar el carrito, que el backend
-  // bloquea mientras el cambio esté pendiente.
+  // Cuenta deshabilitada → se cierra la sesión; clave inicial sin cambiar →
+  // /cambiar-clave (rut-auth, pasos 6 y 9). Va antes de cargar el carrito,
+  // que el backend bloquea en ambos casos.
   const { countryCode } = await props.params
-  await redirectIfPasswordChangeRequired(countryCode)
+  await enforceAccountState(countryCode)
 
   const customer = await retrieveCustomer().catch(() => null)
   const cart = await retrieveCart()

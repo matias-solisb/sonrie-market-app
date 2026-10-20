@@ -46,3 +46,11 @@ export const PASSWORD_POLICY = {
 
 /** Mensaje único para cualquier falla de login (sin enumeración de RUTs). */
 export const INVALID_CREDENTIALS_MESSAGE = "RUT o clave incorrectos";
+
+/**
+ * Cuenta deshabilitada (paso 9). Solo se muestra cuando la clave es
+ * CORRECTA: quien no la conoce recibe INVALID_CREDENTIALS_MESSAGE y no puede
+ * distinguir una cuenta deshabilitada de un RUT inexistente.
+ */
+export const ACCOUNT_DISABLED_MESSAGE =
+  "Tu cuenta está deshabilitada. Contacta a tu administrador.";

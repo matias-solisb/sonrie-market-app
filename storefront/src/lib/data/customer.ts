@@ -10,6 +10,7 @@ import { revalidateTag } from "next/cache"
 import { redirect } from "next/navigation"
 import { retrieveCart, updateCart } from "./cart"
 import { checkNewPassword } from "@/lib/util/password-policy"
+import { sessionClosedUrl } from "@/lib/util/session"
 import {
   getAuthHeaders,
   getCacheOptions,
@@ -105,20 +106,26 @@ function getSafeRedirect(value: FormDataEntryValue | null): string | null {
 
 /*
 
-Estado del cambio de clave obligatorio (rut-auth, paso 6). El backend es la
-única fuente de verdad: `GET /store/customers/me/password` lee la identidad
-`rut` del colaborador. Sin caché, porque cambia apenas el colaborador
-cambia la clave.
+Estado de la cuenta del colaborador logueado (rut-auth, pasos 6 y 9). El
+backend es la única fuente de verdad: `GET /store/customers/me/password` lee
+la identidad `rut`. Sin caché, porque cambia apenas el colaborador cambia la
+clave o un admin lo deshabilita.
 
-- true:  debe cambiar la clave antes de usar la tienda.
-- false: puede usar la tienda.
-- null:  sin sesión o no se pudo consultar (se trata como "no sé": quien
-         llama decide; los layouts no redirigen en ese caso).
+- "ok":                    puede usar la tienda.
+- "must_change_password":  debe cambiar la clave inicial (/cambiar-clave).
+- "disabled":              un admin deshabilitó la cuenta: hay que cerrar la
+                           sesión (el backend ya responde 401 a todo).
+- null:                    sin sesión o no se pudo consultar (quien llama
+                           decide; los layouts no redirigen en ese caso).
 
 */
-export const retrievePasswordChangeRequired = async (): Promise<
-  boolean | null
-> => {
+export type AccountState = "ok" | "must_change_password" | "disabled"
+
+// Mensaje del 401 de backend/src/api/middlewares/account-state.ts. El SDK no
+// expone el `code` del body, así que se reconoce por el mensaje.
+const ACCOUNT_DISABLED_API_MESSAGE = "Tu cuenta está deshabilitada."
+
+export const retrieveAccountState = async (): Promise<AccountState | null> => {
   const authHeaders = await getAuthHeaders()
 
   if (!("authorization" in authHeaders)) return null
@@ -129,23 +136,47 @@ export const retrievePasswordChangeRequired = async (): Promise<
       headers: { ...authHeaders },
       cache: "no-store",
     })
-    .then(({ must_change_password }) => must_change_password === true)
-    .catch(() => null)
+    .then(({ must_change_password }): AccountState =>
+      must_change_password === true ? "must_change_password" : "ok"
+    )
+    .catch((error: any): AccountState | null =>
+      error?.status === 401 && error?.message === ACCOUNT_DISABLED_API_MESSAGE
+        ? "disabled"
+        : null
+    )
+}
+
+/** true si debe cambiar la clave inicial; null si no se sabe. */
+export const retrievePasswordChangeRequired = async (): Promise<
+  boolean | null
+> => {
+  const state = await retrieveAccountState()
+  return state === null ? null : state === "must_change_password"
 }
 
 /**
- * Para los layouts de la tienda y el checkout: si el colaborador logueado
- * todavía no cambia la clave inicial, lo manda a /cambiar-clave. El backend
- * igual bloquea la Store API (403 password_change_required); esto evita que
- * vea páginas a medio cargar.
+ * Para los layouts de la tienda y el checkout:
+ * - cuenta deshabilitada → cierra la sesión (route handler /api/sesion-cerrada:
+ *   un layout no puede borrar cookies) y vuelve al login con un aviso;
+ * - clave inicial sin cambiar → /cambiar-clave.
+ * El backend igual bloquea la Store API; esto evita que el colaborador vea
+ * páginas a medio cargar.
  */
-export const redirectIfPasswordChangeRequired = async (countryCode: string) => {
-  if ((await retrievePasswordChangeRequired()) === true) {
+export const enforceAccountState = async (countryCode: string) => {
+  const state = await retrieveAccountState()
+
+  if (state === "disabled") {
+    redirect(sessionClosedUrl(countryCode))
+  }
+
+  if (state === "must_change_password") {
     redirect(`/${countryCode}/cambiar-clave`)
   }
 }
 
 const INVALID_CREDENTIALS = "RUT o clave incorrectos"
+const ACCOUNT_DISABLED_LOGIN_MESSAGE =
+  "Tu cuenta está deshabilitada. Contacta a tu administrador."
 
 // El backend no dice si la cuenta está bloqueada (sería revelar que el RUT
 // existe): el aviso va siempre, junto al mensaje de credenciales. Los números
@@ -207,6 +238,12 @@ export async function login(_currentState: unknown, formData: FormData) {
 
     if (rawMessage.includes(INVALID_CREDENTIALS.toLowerCase())) {
       return INVALID_CREDENTIALS_HELP
+    }
+
+    // Cuenta deshabilitada: el backend solo lo dice si la clave es correcta
+    // (sin la clave no se distingue de un RUT inexistente).
+    if (rawMessage.includes("deshabilitada")) {
+      return ACCOUNT_DISABLED_LOGIN_MESSAGE
     }
 
     return "No pudimos iniciar tu sesión. Intenta nuevamente en unos minutos."

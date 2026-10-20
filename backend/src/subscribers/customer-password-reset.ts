@@ -26,6 +26,7 @@ reset-password-rut.ts.
 El evento trae `{ entity_id, actor_type, token }`:
 - entity_id: el RUT normalizado (entity_id de la identidad `rut`), NO un
   correo. El correo se busca: identidad → customer → email.
+- Si la cuenta está deshabilitada (paso 9), no se envía nada.
 - token: JWT de un solo uso (Medusa lo borra al usarlo) que vence en 15
   minutos (fijo en el core; ver email-templates/password-reset.ts).
 
@@ -49,7 +50,10 @@ type PasswordResetEventData = {
   token: string
 }
 
-/** Customer dueño de la identidad `rut` de ese RUT, o null. */
+/**
+ * Customer dueño de la identidad `rut` de ese RUT (con `enabled` de la
+ * identidad), o null.
+ */
 const findCustomerByRut = async (container: MedusaContainer, rut: string) => {
   const authModule = container.resolve<IAuthModuleService>(Modules.AUTH)
   const [providerIdentity] = await authModule.listProviderIdentities({
@@ -73,7 +77,13 @@ const findCustomerByRut = async (container: MedusaContainer, rut: string) => {
   const customerModule = container.resolve<ICustomerModuleService>(
     Modules.CUSTOMER
   )
-  return await customerModule.retrieveCustomer(customerId).catch(() => null)
+  const customer = await customerModule
+    .retrieveCustomer(customerId)
+    .catch(() => null)
+
+  return customer
+    ? { customer, enabled: providerIdentity.provider_metadata?.enabled !== false }
+    : null
 }
 
 export default async function customerPasswordResetHandler({
@@ -87,11 +97,20 @@ export default async function customerPasswordResetHandler({
 
   const logger = container.resolve(ContainerRegistrationKeys.LOGGER)
   const rutMasked = maskRut(data.entity_id)
-  const customer = await findCustomerByRut(container, data.entity_id)
+  const found = await findCustomerByRut(container, data.entity_id)
+  const customer = found?.customer
 
   if (!customer?.email) {
     logger.warn(
       `[password-reset] RUT ${rutMasked}: sin customer o sin correo; no se envía el enlace.`
+    )
+    return
+  }
+
+  // Cuenta deshabilitada (paso 9): aunque cambiara la clave no podría entrar.
+  if (!found?.enabled) {
+    logger.warn(
+      `[password-reset] RUT ${rutMasked}: cuenta deshabilitada; no se envía el enlace.`
     )
     return
   }

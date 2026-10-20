@@ -5,6 +5,7 @@ import { adminApprovalsMiddlewares } from "./approvals/middlewares";
 import { adminBannersMiddlewares } from "./banners/middlewares";
 import { adminBenefitBudgetMiddlewares } from "./benefit-budget/middlewares";
 import { adminPickupSchedulingMiddlewares } from "./pickup-scheduling/middlewares";
+import { adminColaboradoresMiddlewares } from "./colaboradores/middlewares";
 
 export const adminMiddlewares: MiddlewareRoute[] = [
   ...adminCompaniesMiddlewares,
@@ -13,4 +14,5 @@ export const adminMiddlewares: MiddlewareRoute[] = [
   ...adminBannersMiddlewares,
   ...adminBenefitBudgetMiddlewares,
   ...adminPickupSchedulingMiddlewares,
+  ...adminColaboradoresMiddlewares,
 ];

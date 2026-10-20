@@ -2,7 +2,7 @@ import {
   IAuthModuleService,
   MedusaContainer,
 } from "@medusajs/framework/types";
-import { Modules } from "@medusajs/framework/utils";
+import { ContainerRegistrationKeys, Modules } from "@medusajs/framework/utils";
 import { RUT_AUTH_PROVIDER_ID } from "../modules/rut-auth/config";
 import { RutProviderMetadata } from "../modules/rut-auth/types";
 
@@ -46,4 +46,37 @@ export const getRutIdentity = async (
     {}) as RutProviderMetadata;
 
   return { rut: providerIdentity.entity_id, state };
+};
+
+/**
+ * Identidad `rut` del customer (para el Admin: el widget y la ruta de
+ * habilitación parten del id del customer). El vínculo customer ↔ identidad
+ * vive en `auth_identity.app_metadata.customer_id`, sin module link, así que
+ * se busca con SQL.
+ */
+export const getRutIdentityByCustomer = async (
+  container: MedusaContainer,
+  customerId: string
+): Promise<RutIdentity | null> => {
+  const pg = container.resolve(ContainerRegistrationKeys.PG_CONNECTION);
+  const { rows } = await pg.raw(
+    `select pi.entity_id, pi.provider_metadata
+       from provider_identity pi
+       join auth_identity ai on ai.id = pi.auth_identity_id
+      where pi.provider = ?
+        and pi.deleted_at is null
+        and ai.deleted_at is null
+        and ai.app_metadata->>'customer_id' = ?
+      limit 1`,
+    [RUT_AUTH_PROVIDER_ID, customerId]
+  );
+
+  if (!rows.length) {
+    return null;
+  }
+
+  const { password_hash: _hash, ...state } = (rows[0].provider_metadata ??
+    {}) as RutProviderMetadata;
+
+  return { rut: rows[0].entity_id, state };
 };

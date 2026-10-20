@@ -29,7 +29,7 @@ Seguridad del POST:
   (password-policy.ts), igual que en el reset por correo.
 
 Ambos métodos quedan abiertos aunque el cambio de clave esté pendiente (ver
-middlewares/password-change-required.ts). `/store/customers/me*` ya exige
+middlewares/account-state.ts), salvo con la cuenta deshabilitada. `/store/customers/me*` ya exige
 sesión de customer en el core de Medusa.
 
 */

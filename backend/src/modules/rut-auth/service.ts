@@ -14,6 +14,7 @@ import {
 } from "@medusajs/framework/utils";
 import { initialPasswordFromRut, normalizeRut } from "../../utils/rut";
 import {
+  ACCOUNT_DISABLED_MESSAGE,
   ARGON2_PARAMS,
   INVALID_CREDENTIALS_MESSAGE,
   PASSWORD_POLICY,
@@ -43,8 +44,9 @@ los customers solo con este provider.
                 inexistente o inválido, clave incorrecta, bloqueo) responde
                 el mismo mensaje y hace UNA verificación argon2, contra un
                 hash señuelo cuando no hay hash real: así todas tardan lo
-                mismo y no revelan qué RUTs existen. El corte por `enabled`
-                llega en el paso 9.
+                mismo y no revelan qué RUTs existen. Una cuenta deshabilitada
+                (paso 9) solo se informa como tal si la clave es CORRECTA:
+                sin la clave, no se distingue de un RUT inexistente.
 - update:       cambia la clave (reset por correo o cambio de clave) si
                 cumple la política (password-policy.ts). Deja
                 must_change_password en false y reinicia el lockout (el
@@ -194,7 +196,12 @@ class RutAuthProviderService extends AbstractAuthModuleProvider {
       return fail;
     }
 
+    // La clave es correcta: el intento no cuenta como fallido.
     await resetAttempts(this.pg_, rut);
+
+    if (attempt.metadata.enabled === false) {
+      return { success: false, error: ACCOUNT_DISABLED_MESSAGE };
+    }
 
     try {
       const authIdentity = await authIdentityService.retrieve({ entity_id: rut });

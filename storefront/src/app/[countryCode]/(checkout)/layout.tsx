@@ -1,4 +1,4 @@
-import { redirectIfPasswordChangeRequired } from "@/lib/data/customer"
+import { enforceAccountState } from "@/lib/data/customer"
 import Footer from "@/modules/layout/templates/footer"
 import { NavigationHeader } from "@/modules/layout/templates/nav"
 
@@ -12,10 +12,10 @@ export default async function CheckoutLayout({
   children: React.ReactNode
   params: Promise<{ countryCode: string }>
 }) {
-  // Igual que en (main)/layout.tsx: sin cambiar la clave inicial no se
-  // llega al checkout (rut-auth, paso 6).
+  // Igual que en (main)/layout.tsx: con la cuenta deshabilitada o sin
+  // cambiar la clave inicial no se llega al checkout (rut-auth, pasos 6 y 9).
   const { countryCode } = await params
-  await redirectIfPasswordChangeRequired(countryCode)
+  await enforceAccountState(countryCode)
 
   return (
     <div className="w-full bg-white relative small:min-h-screen">

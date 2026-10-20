@@ -11,11 +11,18 @@ type Props = {
   // Cuando el middleware redirige acá por falta de sesión (home o catálogo
   // protegidos), viene con ?redirect_to=<ruta original> para volver ahí
   // después de loguearse.
-  searchParams: Promise<{ redirect_to?: string }>
+  searchParams: Promise<{ redirect_to?: string; sesion?: string }>
 }
 
 export default async function Login({ searchParams }: Props) {
-  const { redirect_to } = await searchParams
+  const { redirect_to, sesion } = await searchParams
 
-  return <LoginTemplate redirectTo={redirect_to} />
+  // ?sesion=cerrada: viene de /api/sesion-cerrada (cuenta deshabilitada
+  // con la sesión abierta, rut-auth paso 9).
+  return (
+    <LoginTemplate
+      redirectTo={redirect_to}
+      sessionClosed={sesion === "cerrada"}
+    />
+  )
 }

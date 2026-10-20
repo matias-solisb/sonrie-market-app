@@ -269,11 +269,8 @@ test.describe("login exitoso", () => {
 })
 
 // ─────────────────────────────────────────────────────────────
-// 6.6 Pendientes de rut-auth (el primer ingreso está en first-login.spec.ts)
+// 6.6 Otros flujos de rut-auth: first-login.spec.ts y account-disabled.spec.ts
 // ─────────────────────────────────────────────────────────────
-test.describe("rut-auth (pendiente)", () => {
-    test.fixme("usuario deshabilitado no puede entrar (paso 9)", async () => { })
-})
 
 // ─────────────────────────────────────────────────────────────
 // 6.7 Lockout (rut-auth, paso 7)
