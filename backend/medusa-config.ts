@@ -5,8 +5,39 @@ import { COMPANY_MODULE } from "./src/modules/company";
 import { BENEFIT_BUDGET_MODULE } from "./src/modules/benefit-budget";
 import { PICKUP_SCHEDULING_MODULE } from "./src/modules/pickup-scheduling";
 import { loadEnv, defineConfig, Modules } from "@medusajs/framework/utils";
+import { emailProviderId } from "./src/utils/email-delivery";
 
 loadEnv(process.env.NODE_ENV!, process.cwd());
+
+/**
+ * Provider de correo del Notification Module según NOTIFICATION_PROVIDER
+ * (ver el comentario de Modules.NOTIFICATION más abajo).
+ */
+const emailNotificationProvider = () => {
+  const id = emailProviderId();
+
+  if (id === "local") {
+    return {
+      resolve: "@medusajs/notification-local",
+      id: "local",
+      options: { name: "Local Notification Provider", channels: ["email"] },
+    };
+  }
+
+  // "acs": reemplazar este error por la entrada del provider cuando exista:
+  //   {
+  //     resolve: "./src/modules/notification-acs",
+  //     id: "acs",
+  //     options: {
+  //       channels: ["email"],
+  //       connectionString: process.env.ACS_EMAIL_CONNECTION_STRING,
+  //       sender: process.env.ACS_EMAIL_SENDER,
+  //     },
+  //   }
+  throw new Error(
+    `NOTIFICATION_PROVIDER="${id}" no está implementado todavía (por ahora solo "local").`
+  );
+};
 
 module.exports = defineConfig({
   projectConfig: {
@@ -107,34 +138,24 @@ module.exports = defineConfig({
       resolve: "@medusajs/medusa/workflow-engine-inmemory",
     },
 
-    // Necesario para "Olvidé mi contraseña" del storefront: cuando se pide
-    // un reset (POST /auth/customer/emailpass/reset-password), el core de
-    // Medusa emite el evento `auth.password_reset` — sin este módulo
-    // registrado, el subscriber que lo escucha
-    // (src/subscribers/customer-password-reset.ts) no tiene a quién
-    // resolverle `Modules.NOTIFICATION` y el envío fallaría.
+    // Correo transaccional (recuperación de contraseña y, más adelante, el
+    // resto de las notificaciones). El provider se elige con
+    // NOTIFICATION_PROVIDER (ver src/utils/email-delivery.ts):
     //
-    // Provider "local": no manda correos de verdad, solo hace
-    // `logger.info(...)` con el destinatario y los datos de la
-    // notificación (acá, el link de reset) en la terminal del backend —
-    // sirve para probar el flujo completo en desarrollo sin necesitar
-    // credenciales de ningún servicio de correo todavía. Para producción
-    // hay que reemplazar este provider por uno real (SendGrid, Resend,
-    // SMTP, etc.) con sus credenciales en `.env` — ver el comentario del
-    // subscriber para el resto de lo que falta.
+    // - "local" (por defecto): no manda correos; el Notification Module
+    //   escribe el contenido en el log y, en desarrollo, el subscriber
+    //   destaca el enlace en la consola. En producción el subscriber NO
+    //   genera la notificación (el enlace lleva un token y no puede quedar
+    //   en Log Analytics).
+    // - "acs" (tarea 5.3 de infra): Azure Communication Services Email.
+    //   Pasos: crear src/modules/notification-acs (provider), agregar su
+    //   entrada abajo con sus opciones desde variables de entorno (Key
+    //   Vault) y definir NOTIFICATION_PROVIDER=acs. El subscriber y la
+    //   plantilla del correo no cambian.
     [Modules.NOTIFICATION]: {
       resolve: "@medusajs/notification",
       options: {
-        providers: [
-          {
-            resolve: "@medusajs/notification-local",
-            id: "local",
-            options: {
-              name: "Local Notification Provider",
-              channels: ["email"],
-            },
-          },
-        ],
+        providers: [emailNotificationProvider()],
       },
     },
   },

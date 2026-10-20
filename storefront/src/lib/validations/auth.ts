@@ -2,7 +2,6 @@ import { z } from "zod"
 
 import {
   newPassword,
-  requiredEmail,
   requiredPassword,
   requiredRut,
 } from "@/lib/validations/common"
@@ -14,7 +13,7 @@ export const loginSchema = z.object({
 export type LoginFormValues = z.infer<typeof loginSchema>
 
 export const recoverPasswordSchema = z.object({
-  email: requiredEmail(),
+  rut: requiredRut(),
 })
 export type RecoverPasswordFormValues = z.infer<typeof recoverPasswordSchema>
 

@@ -9,6 +9,7 @@ import { track } from "@vercel/analytics/server"
 import { revalidateTag } from "next/cache"
 import { redirect } from "next/navigation"
 import { retrieveCart, updateCart } from "./cart"
+import { checkNewPassword } from "@/lib/util/password-policy"
 import {
   getAuthHeaders,
   getCacheOptions,
@@ -243,49 +244,61 @@ export type PasswordResetActionState = {
   success?: boolean
 }
 
-// ⚠️ "Olvidé mi contraseña" (requestPasswordReset / resetPassword) sigue
-// con emailpass: se migra a RUT en el paso 8 de rut-auth (recuperación por
-// correo). Mientras tanto no le sirve a ningún colaborador, porque ya no
-// tienen identidad emailpass.
-//
-// Paso 1 del flujo "Olvidé mi contraseña": pide el reset a Medusa
-// (`POST /auth/customer/emailpass/reset-password`, vía el SDK). Ese
-// endpoint SIEMPRE responde 201 aunque el email no exista en el sistema
-// — es a propósito, para no filtrar qué correos están registrados — así
-// que folosotros tampoco distinguimos ese caso acá: se muestra el mismo
-// mensaje de éxito exista o no la cuenta. Un error acá es de verdad una
-// falla de red/backend, no "el correo no existe".
-//
-// Quien realmente entrega el correo es el subscriber del backend
-// (`backend/src/subscribers/customer-password-reset.ts`), que hoy solo
-// loggea el link en la consola del backend (provider `local`, ver
-// `medusa-config.ts`) — no hay ningún servicio de correo real conectado
-// todavía.
+/*
+
+"Olvidé mi contraseña" (rut-auth, paso 8).
+
+Paso 1 — `requestPasswordReset`: pide el reset con el RUT
+(`POST /auth/customer/rut/reset-password`, vía el SDK). El backend
+normaliza el RUT, busca el correo del colaborador y le manda el enlace
+(backend/src/subscribers/customer-password-reset.ts; en desarrollo, el
+enlace sale destacado en la consola del backend). El endpoint SIEMPRE
+responde 201, exista o no la cuenta, así que acá tampoco se distingue: se
+muestra el mismo mensaje. Un error acá es una falla de red o del backend.
+
+Paso 2 — `resetPassword`: define la clave nueva con el token del enlace
+(`POST /auth/customer/rut/update`, token como Bearer). El token vence en 15
+minutos (fijo en el core de Medusa) y es de un solo uso: el core lo
+consume ANTES de revisar la clave. Por eso la política se revisa primero
+acá (lib/util/password-policy.ts, copia de la del backend): si la clave no
+cumple, el colaborador la corrige sin perder el enlace.
+
+*/
 export async function requestPasswordReset(
   _currentState: PasswordResetActionState,
   formData: FormData
 ): Promise<PasswordResetActionState> {
-  const email = formData.get("email") as string
+  const rut = formData.get("rut") as string
 
   try {
-    await sdk.auth.resetPassword("customer", "emailpass", {
-      identifier: email,
+    await sdk.auth.resetPassword("customer", "rut", {
+      identifier: rut,
     })
   } catch (error: any) {
     return {
-      error: "No pudimos procesar tu solicitud. Intenta nuevamente en unos minutos.",
+      error:
+        "No pudimos procesar tu solicitud. Intenta nuevamente en unos minutos.",
     }
   }
 
   return { success: true }
 }
 
-// Paso 2: pone la contraseña nueva usando el token que llegó en la URL
-// del correo (ver `resetUrl` en el subscriber del backend). El endpoint
-// (`POST /auth/customer/emailpass/update`) valida el token como un
-// Authorization Bearer — si venció (dura 15 minutos, fijo en el core de
-// Medusa) o es inválido, tira un error genérico de "Unauthorized" que acá
-// se traduce a un mensaje que le sirve al usuario para reintentar.
+const INVALID_RESET_LINK =
+  'El link expiró o no es válido. Solicita uno nuevo desde "¿Olvidaste la contraseña?".'
+
+/** RUT (entity_id) del token de recuperación, sin verificar la firma. */
+function rutFromResetToken(token: string): string | null {
+  try {
+    const payload = JSON.parse(
+      Buffer.from(token.split(".")[1] ?? "", "base64url").toString("utf8")
+    )
+    return typeof payload?.entity_id === "string" ? payload.entity_id : null
+  } catch {
+    return null
+  }
+}
+
 export async function resetPassword(
   _currentState: PasswordResetActionState,
   formData: FormData
@@ -297,7 +310,7 @@ export async function resetPassword(
   if (!token) {
     return {
       error:
-        "Este link no es válido. Solicita uno nuevo desde \"¿Olvidaste la contraseña?\".",
+        'Este link no es válido. Solicita uno nuevo desde "¿Olvidaste la contraseña?".',
     }
   }
 
@@ -305,18 +318,19 @@ export async function resetPassword(
     return { error: "Las contraseñas no coinciden." }
   }
 
+  // Antes de gastar el enlace: ¿la clave cumple la política? Si el token no
+  // se puede leer, decide el backend (y responderá "link no válido").
+  const rut = rutFromResetToken(token)
+  const policyError = rut ? checkNewPassword(rut, password) : null
+
+  if (policyError) {
+    return { error: policyError }
+  }
+
   try {
-    await sdk.auth.updateProvider(
-      "customer",
-      "emailpass",
-      { password },
-      token
-    )
+    await sdk.auth.updateProvider("customer", "rut", { password }, token)
   } catch (error: any) {
-    return {
-      error:
-        "El link expiró o no es válido. Solicita uno nuevo desde \"¿Olvidaste la contraseña?\".",
-    }
+    return { error: INVALID_RESET_LINK }
   }
 
   return { success: true }

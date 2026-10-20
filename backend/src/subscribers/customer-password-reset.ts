@@ -1,40 +1,45 @@
 import type { SubscriberArgs, SubscriberConfig } from "@medusajs/framework"
-import { Modules } from "@medusajs/framework/utils"
-import type { INotificationModuleService } from "@medusajs/framework/types"
+import { ContainerRegistrationKeys, Modules } from "@medusajs/framework/utils"
+import type {
+  IAuthModuleService,
+  ICustomerModuleService,
+  INotificationModuleService,
+  MedusaContainer,
+} from "@medusajs/framework/types"
+import { RUT_AUTH_PROVIDER_ID } from "../modules/rut-auth/config"
+import { consoleBanner, emailDelivery } from "../utils/email-delivery"
+import {
+  PASSWORD_RESET_TTL_MINUTES,
+  renderPasswordResetEmail,
+} from "../utils/email-templates/password-reset"
+import { maskRut } from "../utils/rut"
 
 /*
 
-Escucha el evento `auth.password_reset`, que el core de Medusa emite
-automáticamente cada vez que se llama
-`POST /auth/{actor_type}/{provider}/reset-password` (ver
-`generateResetPasswordTokenWorkflow` en `@medusajs/core-flows` — no hay
-que llamarlo a mano, ya viene disparado por ese endpoint). El storefront
-llama a ese endpoint desde el server action `requestPasswordReset`
-(`storefront/src/lib/data/customer.ts`), que a su vez usa
-`sdk.auth.resetPassword("customer", "emailpass", { identifier: email })`.
+Recuperación de contraseña por correo (rut-auth, paso 8).
+
+Escucha `auth.password_reset`, que emite el core de Medusa en
+`POST /auth/customer/rut/reset-password` (el storefront lo llama desde
+`requestPasswordReset`). El RUT llega normalizado gracias al middleware
+reset-password-rut.ts.
 
 El evento trae `{ entity_id, actor_type, token }`:
-- `entity_id`: el email de la cuenta (customer o admin user, según
-  `actor_type`) — Medusa reutiliza el mismo evento para ambos actores.
-- `actor_type`: "customer" | "user" — acá solo nos interesa "customer"
-  (el reset de admin, si algún día se usa, tendría su propio subscriber
-  o lógica separada).
-- `token`: JWT firmado, vence en 15 minutos (hardcodeado así en el core,
-  no es configurable desde acá).
+- entity_id: el RUT normalizado (entity_id de la identidad `rut`), NO un
+  correo. El correo se busca: identidad → customer → email.
+- token: JWT de un solo uso (Medusa lo borra al usarlo) que vence en 15
+  minutos (fijo en el core; ver email-templates/password-reset.ts).
 
-Este subscriber arma el link de reset (storefront + token) y lo manda a
-través del módulo de notificaciones (`Modules.NOTIFICATION`, registrado
-en `medusa-config.ts`). Por ahora ese módulo solo tiene el provider
-`local`, que NO manda correos reales — solo hace `logger.info(...)` con
-el link en la terminal del backend. Así se puede probar el flujo
-completo (pedir reset → copiar el link de la consola → poner contraseña
-nueva) sin depender de ningún servicio de correo todavía.
+Entrega según el ambiente (utils/email-delivery.ts):
+- "console" (desarrollo, provider local): se crea la notificación (el
+  provider local la escribe en el log) y además el enlace se muestra en un
+  recuadro destacado en la consola.
+- "send" (provider real, p. ej. Azure Communication Services): se crea la
+  notificación con el correo ya armado (asunto, texto y HTML).
+- "suppressed" (producción sin provider real): no se crea la notificación y
+  el enlace NO aparece en ningún log; solo una advertencia.
 
-Lo que falta para producción (ver medusa-config.ts):
-1. Reemplazar el provider `local` por uno real (SendGrid/Resend/SMTP)
-   con sus credenciales en `.env`.
-2. Una plantilla de correo de verdad — hoy `template: "password-reset"`
-   es solo un identificador, el provider local lo ignora por completo.
+Nunca se registra ni se guarda el token fuera del modo "console". El RUT va
+enmascarado.
 
 */
 
@@ -44,41 +49,106 @@ type PasswordResetEventData = {
   token: string
 }
 
+/** Customer dueño de la identidad `rut` de ese RUT, o null. */
+const findCustomerByRut = async (container: MedusaContainer, rut: string) => {
+  const authModule = container.resolve<IAuthModuleService>(Modules.AUTH)
+  const [providerIdentity] = await authModule.listProviderIdentities({
+    provider: RUT_AUTH_PROVIDER_ID,
+    entity_id: rut,
+  })
+
+  if (!providerIdentity?.auth_identity_id) {
+    return null
+  }
+
+  const authIdentity = await authModule.retrieveAuthIdentity(
+    providerIdentity.auth_identity_id
+  )
+  const customerId = authIdentity.app_metadata?.customer_id as string | undefined
+
+  if (!customerId) {
+    return null
+  }
+
+  const customerModule = container.resolve<ICustomerModuleService>(
+    Modules.CUSTOMER
+  )
+  return await customerModule.retrieveCustomer(customerId).catch(() => null)
+}
+
 export default async function customerPasswordResetHandler({
   event: { data },
   container,
 }: SubscriberArgs<PasswordResetEventData>) {
-  // El reset de admin (actor_type "user") no nos interesa acá — este
-  // storefront solo tiene login de customer.
+  // El reset de admin (actor_type "user") no se maneja acá.
   if (data.actor_type !== "customer") {
     return
   }
 
-  const notificationModuleService: INotificationModuleService =
-    container.resolve(Modules.NOTIFICATION)
+  const logger = container.resolve(ContainerRegistrationKeys.LOGGER)
+  const rutMasked = maskRut(data.entity_id)
+  const customer = await findCustomerByRut(container, data.entity_id)
 
-  // TODO: el país está hardcodeado a "cl" — el sitio hoy solo opera en
-  // Chile (ver STORE_CORS / check-env-variables). Si en algún momento se
-  // agrega otro país, este link necesita saber cuál usar en vez de
-  // asumirlo.
+  if (!customer?.email) {
+    logger.warn(
+      `[password-reset] RUT ${rutMasked}: sin customer o sin correo; no se envía el enlace.`
+    )
+    return
+  }
+
+  const delivery = emailDelivery()
+
+  if (delivery === "suppressed") {
+    logger.warn(
+      `[password-reset] RUT ${rutMasked}: no hay provider de correo configurado (NOTIFICATION_PROVIDER=local en producción). ` +
+        "No se envía el enlace ni se registra en el log."
+    )
+    return
+  }
+
+  // TODO: el país está fijo en "cl" (la tienda solo opera en Chile).
   const storefrontUrl = process.env.STOREFRONT_URL || "http://localhost:8000"
   const resetUrl = `${storefrontUrl}/cl/reset-password?token=${encodeURIComponent(
     data.token
   )}`
 
-  // `createNotifications` recibe un arreglo (se puede mandar más de una
-  // notificación de una), aunque acá siempre mandamos una sola.
-  await notificationModuleService.createNotifications([
+  const email = renderPasswordResetEmail({
+    firstName: customer.first_name,
+    resetUrl,
+  })
+
+  const notificationModule = container.resolve<INotificationModuleService>(
+    Modules.NOTIFICATION
+  )
+
+  await notificationModule.createNotifications([
     {
-      to: data.entity_id,
+      to: customer.email,
       channel: "email",
       template: "password-reset",
-      data: {
-        email: data.entity_id,
-        reset_url: resetUrl,
-      },
+      // `content` llega al provider pero NO se guarda en la base. `data` sí
+      // se guarda en la tabla notification y lo muestra la Admin API
+      // (GET /admin/notifications): con un provider real NO puede llevar el
+      // enlace, o cualquier admin podría usarlo para entrar a la cuenta.
+      // Solo en desarrollo ("console") va el enlace en `data`, para que los
+      // tests lo lean.
+      content: email,
+      data: delivery === "console" ? { reset_url: resetUrl } : {},
     },
   ])
+
+  if (delivery === "console") {
+    // El enlace va FUERA del recuadro, en su propia línea y sin bordes:
+    // es largo (lleva el JWT) y así se copia completo sin arrastrar "║".
+    process.stdout.write(
+      consoleBanner("RECUPERACIÓN DE CONTRASEÑA (correo simulado, solo desarrollo)", [
+        `Para:    ${customer.email}`,
+        `RUT:     ${rutMasked}`,
+        `Vence:   en ${PASSWORD_RESET_TTL_MINUTES} minutos, un solo uso`,
+        "Enlace:  copia la línea de abajo en el navegador",
+      ]) + `${resetUrl}\n\n`
+    )
+  }
 }
 
 export const config: SubscriberConfig = {

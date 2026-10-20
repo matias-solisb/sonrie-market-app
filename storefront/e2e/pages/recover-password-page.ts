@@ -4,7 +4,7 @@ import { expect, type Locator, type Page } from "@playwright/test"
 export class RecoverPasswordPage {
   readonly page: Page
   readonly card: Locator
-  readonly email: Locator
+  readonly rut: Locator
   readonly submit: Locator
   readonly serverError: Locator
   readonly backToLogin: Locator
@@ -12,7 +12,7 @@ export class RecoverPasswordPage {
   constructor(page: Page) {
     this.page = page
     this.card = page.getByTestId("recover-password-page")
-    this.email = page.getByTestId("recover-password-email-input")
+    this.rut = page.getByTestId("recover-password-rut-input")
     this.submit = page.getByTestId("recover-password-submit-button")
     this.serverError = page.getByTestId("recover-password-error-message")
     this.backToLogin = page.getByTestId("back-to-login-link")
@@ -23,14 +23,14 @@ export class RecoverPasswordPage {
     await expect(this.card).toBeVisible()
   }
 
-  async request(email: string) {
-    await this.email.fill(email)
+  async request(rut: string) {
+    await this.rut.fill(rut)
     await this.submit.click()
   }
 
   /** Mensaje de éxito (idéntico exista o no la cuenta). */
   successMessage() {
-    return this.page.getByText("Si el correo que ingresaste está registrado")
+    return this.page.getByText("Si el RUT que ingresaste está registrado")
   }
 
   fieldError(text: string) {

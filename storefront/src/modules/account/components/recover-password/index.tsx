@@ -20,13 +20,14 @@ const initialState: PasswordResetActionState = {}
 
 /*
 
-Paso 1 de "Olvidé mi contraseña": pide el email y llama al server action
+Paso 1 de "Olvidé mi contraseña": pide el RUT (con validación del dígito
+verificador) y llama al server action
 `requestPasswordReset` (src/lib/data/customer.ts), calcando el diseño de
 referencia (sonrie.youorder.me/auth/jwt/recover).
 
 En éxito NO se redirige: se reemplaza el formulario por un mensaje de
 confirmación en la misma card (`state.success`), porque el backend responde
-201 tanto si el email existe como si no (para no filtrar qué cuentas están
+201 tanto si el RUT existe como si no (para no filtrar qué cuentas están
 registradas) — "éxito" solo significa "la solicitud se procesó".
 
 */
@@ -40,7 +41,7 @@ const RecoverPasswordForm = () => {
     schema: recoverPasswordSchema,
     action: requestPasswordReset,
     initialState,
-    defaultValues: { email: "" },
+    defaultValues: { rut: "" },
   })
 
   return (
@@ -49,28 +50,28 @@ const RecoverPasswordForm = () => {
         <>
           <AuthTitle>Recuperar contraseña</AuthTitle>
           <AuthText>
-            Si el correo que ingresaste está registrado, te enviamos
-            instrucciones para recuperar tu contraseña. Revisa tu bandeja de
-            entrada.
+            Si el RUT que ingresaste está registrado, enviamos un enlace al
+            correo asociado a tu cuenta para que definas una contraseña nueva.
+            El enlace vence en 15 minutos.
           </AuthText>
         </>
       ) : (
         <form className="flex w-full flex-col" noValidate onSubmit={onSubmit}>
           <AuthTitle>Recuperar contraseña</AuthTitle>
           <AuthText>
-            Te enviaremos un correo con instrucciones para recuperar tu
-            contraseña.
+            Ingresa tu RUT y te enviaremos un enlace al correo asociado a tu
+            cuenta.
           </AuthText>
 
           <div className="mt-6">
             <FormTextField
               control={control}
-              name="email"
-              label="Correo"
-              type="email"
-              autoComplete="email"
+              name="rut"
+              label="RUT"
+              placeholder="12.345.678-9"
+              autoComplete="username"
               slotProps={{
-                htmlInput: { "data-testid": "recover-password-email-input" },
+                htmlInput: { "data-testid": "recover-password-rut-input" },
               }}
             />
           </div>

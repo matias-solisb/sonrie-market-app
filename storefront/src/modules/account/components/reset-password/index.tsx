@@ -70,7 +70,10 @@ const ResetPasswordForm = ({ token }: Props) => {
       ) : (
         <form className="flex w-full flex-col" noValidate onSubmit={onSubmit}>
           <AuthTitle>Nueva contraseña</AuthTitle>
-          <AuthText>Ingresa tu contraseña nueva.</AuthText>
+          <AuthText>
+            Ingresa tu contraseña nueva: al menos 8 caracteres, sin números de
+            tu RUT. El enlace sirve una sola vez.
+          </AuthText>
 
           <div className="mt-6 flex flex-col gap-y-4">
             <FormPasswordField
