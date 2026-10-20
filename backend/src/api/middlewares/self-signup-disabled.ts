@@ -13,7 +13,7 @@ rutas del core seguían abiertas: con la publishable key cualquiera podía
 crearse una cuenta y comprar con el cupo de beneficio.
 
 - `POST /auth/customer/:provider/register` → 403 para todo provider
-  (emailpass hoy, `rut` mañana). El alta llama al Auth Module directamente,
+  (emailpass y rut). El alta llama al Auth Module directamente,
   sin pasar por esta ruta.
 - `POST /store/customers` → 403. Era el segundo paso del registro (crear el
   customer con el token de registro).

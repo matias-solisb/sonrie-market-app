@@ -18,6 +18,14 @@ module.exports = defineConfig({
       authCors: process.env.AUTH_CORS!,
       jwtSecret: process.env.JWT_SECRET || "supersecret",
       cookieSecret: process.env.COOKIE_SECRET || "supersecret",
+      // Qué provider de auth puede usar cada actor (rut-auth, paso 3):
+      // los colaboradores (customer) solo entran con RUT + clave; el Admin
+      // (user) sigue con correo + clave. Con esto, POST
+      // /auth/customer/emailpass responde error aunque exista la identidad.
+      authMethodsPerActor: {
+        customer: ["rut"],
+        user: ["emailpass"],
+      },
     },
   },
   modules: {
@@ -64,6 +72,26 @@ module.exports = defineConfig({
               upload_dir: "static",
               backend_url: `${process.env.MEDUSA_BACKEND_URL || "http://localhost:9000"}/static`,
             },
+          },
+        ],
+      },
+    },
+    // Auth Module con dos providers. Al declararlo acá se reemplaza la
+    // configuración por defecto de Medusa, así que `emailpass` hay que
+    // listarlo explícitamente o el Admin se queda sin login.
+    // - emailpass: login del Admin (usuarios internos).
+    // - rut:       login de colaboradores (src/modules/rut-auth).
+    [Modules.AUTH]: {
+      resolve: "@medusajs/medusa/auth",
+      options: {
+        providers: [
+          {
+            resolve: "@medusajs/medusa/auth-emailpass",
+            id: "emailpass",
+          },
+          {
+            resolve: "./src/modules/rut-auth",
+            id: "rut",
           },
         ],
       },

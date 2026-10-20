@@ -199,33 +199,26 @@ medusaIntegrationTestRunner({
       });
 
       it("las credenciales de un colaborador no dan acceso al Admin", async () => {
-        // En Medusa v2 la identidad emailpass es una sola por correo: el login
-        // de /auth/user puede devolver un token, pero sin user_id. Lo que
-        // importa es que ese token no abre el Admin.
-        const credenciales = {
-          email: "juana.perez@sonriemarket.cl",
-          password: "ClaveDePrueba1",
-        };
-        await createColaboradorSession({
+        // Los colaboradores entran con RUT + clave (provider `rut`), que no
+        // está habilitado para el actor `user` (authMethodsPerActor), y no
+        // tienen identidad emailpass.
+        const { rut, password } = await createColaboradorSession({
           api,
           container: getContainer(),
-          ...credenciales,
+          email: "juana.perez@sonriemarket.cl",
         });
 
-        const login = await api
-          .post("/auth/user/emailpass", credenciales)
-          .catch((e) => e.response);
+        const porRut = await status(api.post("/auth/user/rut", { rut, password }));
+        expect(porRut).toBeGreaterThanOrEqual(400);
+        expect(porRut).toBeLessThan(500);
 
-        if (login.status === 200) {
-          const code = await status(
-            api.get("/admin/users/me", {
-              headers: { Authorization: `Bearer ${login.data.token}` },
-            })
-          );
-          expect(code).toBe(401);
-        } else {
-          expect(login.status).toBe(401);
-        }
+        const porCorreo = await status(
+          api.post("/auth/user/emailpass", {
+            email: "juana.perez@sonriemarket.cl",
+            password,
+          })
+        );
+        expect(porCorreo).toBe(401);
       });
     });
   },

@@ -1,47 +1,49 @@
 import { MedusaError } from "@medusajs/framework/utils";
 import { createStep, StepResponse } from "@medusajs/framework/workflows-sdk";
 import { isValidEmail, normalizeEmail } from "../../../utils/email";
+import { normalizeRut } from "../../../utils/rut";
 
 /*
 
 Valida y normaliza los datos del alta antes de crear nada.
 
-- Correo: se recorta y se pasa a minúsculas. Así "Juana.Perez@…" y
-  " juana.perez@… " son el mismo colaborador (emailpass compara el correo
-  tal cual y, sin esto, permitía dos cuentas para la misma persona).
-- Clave: mínimo 8 caracteres. Provisorio, mientras el login sea emailpass;
-  la política definitiva se define con rut-auth.
+- RUT: obligatorio y con DV correcto. Se normaliza ("12.345.678-5" →
+  "12345678-5"), así cualquier forma de escribirlo es el mismo colaborador.
+  Es el identificador de login (provider `rut`).
+- Correo: obligatorio; se recorta y se pasa a minúsculas. Es el correo del
+  customer y el destino de la recuperación de clave.
 - Nombre y apellido: obligatorios.
+
+No hay clave: la clave inicial la genera el provider `rut` a partir del RUT
+(nunca la escribe una persona ni viaja en archivos).
 
 Junta todos los errores en un solo mensaje, para corregirlos de una vez.
 
 */
 
 export type ColaboradorInputRaw = {
+  rut: string;
   email: string;
-  password: string;
   first_name: string;
   last_name: string;
   phone?: string | null;
 };
 
-export const PASSWORD_MIN_LENGTH = 8;
-
 export const validateColaboradorInputStep = createStep(
   "validate-colaborador-input",
   async (input: ColaboradorInputRaw) => {
+    const rut = normalizeRut(input.rut);
     const email = normalizeEmail(input.email);
     const first_name = (input.first_name ?? "").trim();
     const last_name = (input.last_name ?? "").trim();
-    const password = input.password ?? "";
 
     const errors: string[] = [];
 
+    if (!rut) {
+      errors.push(`RUT inválido ("${input.rut ?? ""}")`);
+    }
     if (!isValidEmail(email)) {
       errors.push(`correo inválido ("${input.email ?? ""}")`);
-    }
-    if (password.length < PASSWORD_MIN_LENGTH) {
-      errors.push(`la clave debe tener al menos ${PASSWORD_MIN_LENGTH} caracteres`);
     }
     if (!first_name) {
       errors.push("falta el nombre");
@@ -58,8 +60,8 @@ export const validateColaboradorInputStep = createStep(
     }
 
     return new StepResponse({
+      rut: rut as string,
       email,
-      password,
       first_name,
       last_name,
       phone: input.phone?.trim() || null,

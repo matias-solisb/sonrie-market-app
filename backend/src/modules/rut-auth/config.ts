@@ -1,0 +1,46 @@
+/*
+
+Parámetros de seguridad de rut-auth. Todo lo que Ciberseguridad tiene que
+revisar vive en este archivo, para cambiarlo en un solo lugar.
+
+⚠️ PROVISORIOS — pendientes de revisión por Ciberseguridad Soprole
+(compromiso del addendum: "parámetros definidos y revisados").
+
+- argon2id: mínimo recomendado por OWASP (Password Storage Cheat Sheet):
+  m = 19 MiB, t = 2, p = 1. Falta medir el tiempo de hash y la concurrencia
+  en el contenedor real de Azure (pico del día 1 de cada mes); si sobra
+  capacidad, conviene subir la memoria.
+  Cambiarlos NO rompe los hashes existentes: cada hash guarda sus propios
+  parámetros y se sigue verificando con ellos. Re-hashear con los valores
+  nuevos en el próximo login exitoso queda pendiente para cuando cambien.
+
+- Lockout: 5 intentos fallidos → 15 minutos bloqueado. Es el ejemplo de la
+  especificación técnica (§4.1), no un valor de OWASP. Se aplica en el
+  paso 7 (lockout y anti-enumeración); acá solo queda definido.
+
+- Política de clave: mínimo 8 caracteres, el mismo mínimo que tenía el alta
+  con emailpass. Las reglas "no igual a la inicial" y "no derivada del RUT"
+  llegan con el paso 6.
+
+*/
+
+export const RUT_AUTH_PROVIDER_ID = "rut";
+
+export const ARGON2_PARAMS = {
+  /** KiB. 19456 KiB = 19 MiB. */
+  memoryCost: 19456,
+  timeCost: 2,
+  parallelism: 1,
+} as const;
+
+export const LOCKOUT = {
+  maxFailedAttempts: 5,
+  lockMinutes: 15,
+} as const;
+
+export const PASSWORD_POLICY = {
+  minLength: 8,
+} as const;
+
+/** Mensaje único para cualquier falla de login (sin enumeración de RUTs). */
+export const INVALID_CREDENTIALS_MESSAGE = "RUT o clave incorrectos";

@@ -1,71 +1,65 @@
-import readline from "node:readline";
-import { ExecArgs, MedusaContainer } from "@medusajs/framework/types";
-import { ContainerRegistrationKeys } from "@medusajs/framework/utils";
+import { ExecArgs, IAuthModuleService, MedusaContainer } from "@medusajs/framework/types";
+import { ContainerRegistrationKeys, Modules } from "@medusajs/framework/utils";
+import { RUT_AUTH_PROVIDER_ID } from "../modules/rut-auth/config";
 import { isValidEmail, normalizeEmail } from "../utils/email";
+import { maskRut, normalizeRut } from "../utils/rut";
 import { ensureSonrieCompany } from "../utils/sonrie-company";
 import { createColaboradorWorkflow } from "../workflows/colaborador/workflows";
 import { createEmployeesWorkflow } from "../workflows/employee/workflows";
 
 /*
 
-Alta manual de colaboradores, mientras no existan bulk-import ni rut-auth.
-Reemplaza los `curl` de "dev-crear-usuario-prueba-storefront". Idempotente.
+Alta manual de colaboradores, mientras no exista bulk-import.
+Reemplaza los `curl` de "dev-crear-usuario-prueba-storefront". Idempotente
+por RUT.
 
-  # crea la company única (si falta) y un colaborador; pide la clave
-  npx medusa exec ./src/scripts/alta-colaborador.ts juana.perez@sonriemarket.cl Juana "Pérez Soto"
+  # crea la company única (si falta) y un colaborador
+  npx medusa exec ./src/scripts/alta-colaborador.ts 12.345.678-5 juana.perez@sonriemarket.cl Juana "Pérez Soto"
 
   # vincula a la company los customers con cuenta que no tienen employee
   # (p. ej. los usuarios de prueba creados antes con curl)
   npx medusa exec ./src/scripts/alta-colaborador.ts vincular-existentes
 
-Si el correo ya tiene un customer con cuenta, no crea otro: solo le agrega
-el employee si le falta.
+Si el RUT ya tiene identidad, no crea nada: solo le agrega el employee al
+customer si le falta.
 
-La clave NO va en el comando (quedaría en el historial de la consola): el
-script la pide dos veces sin mostrarla. Nunca se escribe en el log.
+No se pide ni se escribe ninguna clave: la clave inicial la genera la
+plataforma (últimos 4 dígitos del RUT antes del DV) y el colaborador debe
+cambiarla en su primer ingreso. En el log el RUT aparece enmascarado.
 Manual de uso: docs/manual-usuarios.md.
 
 */
 
 type Logger = { info: (m: string) => void; warn: (m: string) => void };
 
-/**
- * Pide uno o más textos por consola sin mostrarlos (solo se ven las
- * preguntas). Lee las líneas con un iterador, que no pierde las que llegan
- * antes de tiempo: funciona igual en una terminal interactiva que con la
- * entrada redirigida.
- */
-const askHidden = async (questions: string[]) => {
-  const rl = readline.createInterface({
-    input: process.stdin,
-    output: process.stdout,
-    terminal: true,
+/** Customer (con su employee) vinculado a la identidad `rut` de ese RUT. */
+const findByRut = async (container: MedusaContainer, rut: string) => {
+  const authModule = container.resolve<IAuthModuleService>(Modules.AUTH);
+  const [providerIdentity] = await authModule.listProviderIdentities({
+    provider: RUT_AUTH_PROVIDER_ID,
+    entity_id: rut,
   });
-  // No mostrar lo que se escribe (ni el eco de la terminal).
-  (rl as any)._writeToOutput = () => {};
 
-  const lines = rl[Symbol.asyncIterator]();
-  const answers: string[] = [];
-
-  for (const question of questions) {
-    process.stdout.write(question);
-    const { value } = await lines.next();
-    process.stdout.write("\n");
-    answers.push(value ?? "");
+  if (!providerIdentity) {
+    return null;
   }
 
-  rl.close();
-  return answers;
-};
+  const authIdentity = await authModule.retrieveAuthIdentity(
+    providerIdentity.auth_identity_id!
+  );
+  const customerId = authIdentity.app_metadata?.customer_id as string | undefined;
 
-const findAccountCustomer = async (container: MedusaContainer, email: string) => {
+  if (!customerId) {
+    return { customer: null };
+  }
+
   const query = container.resolve(ContainerRegistrationKeys.QUERY);
   const { data } = await query.graph({
     entity: "customer",
     fields: ["id", "email", "employee.id"],
-    filters: { email, has_account: true },
+    filters: { id: customerId },
   });
-  return data[0] ?? null;
+  return { customer: data[0] ?? null };
 };
 
 const linkEmployee = (container: MedusaContainer, customerId: string, companyId: string) =>
@@ -120,59 +114,63 @@ export default async function altaColaborador({ container, args }: ExecArgs) {
     return;
   }
 
-  const [email, first_name, last_name, ...extra] = args ?? [];
+  const [rutArg, email, first_name, last_name, ...extra] = args ?? [];
 
   if (extra.length) {
     logger.warn(
-      "La clave no va en el comando (queda en el historial). Quítala: el script la pide. " +
-        'Si el nombre o el apellido tienen espacios, escríbelos entre comillas: "Pérez Soto".'
+      "Sobran argumentos. Si el nombre o el apellido tienen espacios, escríbelos entre comillas: \"Pérez Soto\". " +
+        "La clave no va en el comando: la genera la plataforma."
     );
     return;
   }
 
-  if (!email || !first_name || !last_name) {
+  if (!rutArg || !email || !first_name || !last_name) {
     logger.warn(
-      'Uso: npx medusa exec ./src/scripts/alta-colaborador.ts <correo> <nombre> "<apellido>"'
+      'Uso: npx medusa exec ./src/scripts/alta-colaborador.ts <rut> <correo> <nombre> "<apellido>"'
     );
     return;
   }
 
-  // Antes de pedir la clave: no tiene sentido escribirla si el correo está mal.
+  const rut = normalizeRut(rutArg);
+
+  if (!rut) {
+    logger.warn(`✘ RUT inválido (formato o dígito verificador). No se creó nada.`);
+    return;
+  }
+
   if (!isValidEmail(normalizeEmail(email))) {
     logger.warn(`✘ Correo inválido: "${email}". No se creó nada.`);
     return;
   }
 
-  const existing = await findAccountCustomer(container, normalizeEmail(email));
+  const existing = await findByRut(container, rut);
 
-  if (existing?.employee?.id) {
-    logger.info(`${email} ya existe y tiene employee; no se hace nada.`);
+  if (existing?.customer?.employee?.id) {
+    logger.info(`RUT ${maskRut(rut)} ya existe y tiene employee; no se hace nada.`);
+    return;
+  }
+
+  if (existing?.customer) {
+    await linkEmployee(container, existing.customer.id, company.id);
+    logger.info(`✔ RUT ${maskRut(rut)} ya existía sin employee: vinculado a la company.`);
     return;
   }
 
   if (existing) {
-    await linkEmployee(container, existing.id, company.id);
-    logger.info(`✔ ${email} ya existía sin employee: vinculado a la company.`);
-    return;
-  }
-
-  const [password, confirmacion] = await askHidden([
-    `Clave inicial para ${email}: `,
-    "Repite la clave: ",
-  ]);
-
-  if (password !== confirmacion) {
-    logger.warn("Las claves no coinciden. No se creó nada; vuelve a correr el comando.");
+    logger.warn(
+      `✘ RUT ${maskRut(rut)} tiene identidad pero ningún customer vinculado. Revisar a mano; no se creó nada.`
+    );
     return;
   }
 
   try {
     const { result } = await createColaboradorWorkflow(container).run({
-      input: { company_id: company.id, email, password, first_name, last_name },
+      input: { company_id: company.id, rut, email, first_name, last_name },
     });
 
     logger.info(
-      `✔ Colaborador ${result.customer.email} creado (customer ${result.customer.id}, employee ${result.employee.id}).`
+      `✔ Colaborador RUT ${maskRut(rut)} creado (customer ${result.customer.id}, employee ${result.employee.id}). ` +
+        "Clave inicial: últimos 4 dígitos del RUT; se le pedirá cambiarla al primer ingreso."
     );
   } catch (e: any) {
     // El workflow ya revirtió lo creado: no quedan cuentas a medias.
