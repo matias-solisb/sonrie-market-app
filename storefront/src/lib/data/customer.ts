@@ -146,6 +146,11 @@ export const redirectIfPasswordChangeRequired = async (countryCode: string) => {
 
 const INVALID_CREDENTIALS = "RUT o clave incorrectos"
 
+// El backend no dice si la cuenta está bloqueada (sería revelar que el RUT
+// existe): el aviso va siempre, junto al mensaje de credenciales. Los números
+// son los de LOCKOUT en backend/src/modules/rut-auth/config.ts.
+const INVALID_CREDENTIALS_HELP = `${INVALID_CREDENTIALS}. Después de 5 intentos fallidos, la cuenta se bloquea por 15 minutos.`
+
 export async function login(_currentState: unknown, formData: FormData) {
   const rut = formData.get("rut") as string
   const password = formData.get("password") as string
@@ -176,7 +181,11 @@ export async function login(_currentState: unknown, formData: FormData) {
       const customer = await retrieveCustomer()
       const cart = await retrieveCart()
 
-      if (customer?.employee?.company_id) {
+      // Solo si ya hay un carrito (anónimo, de antes de iniciar sesión):
+      // updateCart lanza error sin carrito, y eso mostraba "No pudimos
+      // iniciar tu sesión" aunque el login hubiera funcionado (y no se
+      // seguía el redirect_to).
+      if (cart && customer?.employee?.company_id) {
         await updateCart({
           metadata: {
             ...cart?.metadata,
@@ -196,7 +205,7 @@ export async function login(_currentState: unknown, formData: FormData) {
     const rawMessage = (error?.message ?? error?.toString() ?? "").toLowerCase()
 
     if (rawMessage.includes(INVALID_CREDENTIALS.toLowerCase())) {
-      return INVALID_CREDENTIALS
+      return INVALID_CREDENTIALS_HELP
     }
 
     return "No pudimos iniciar tu sesión. Intenta nuevamente en unos minutos."

@@ -14,9 +14,10 @@ revisar vive en este archivo, para cambiarlo en un solo lugar.
   parámetros y se sigue verificando con ellos. Re-hashear con los valores
   nuevos en el próximo login exitoso queda pendiente para cuando cambien.
 
-- Lockout: 5 intentos fallidos → 15 minutos bloqueado. Es el ejemplo de la
-  especificación técnica (§4.1), no un valor de OWASP. Se aplica en el
-  paso 7 (lockout y anti-enumeración); acá solo queda definido.
+- Lockout: 5 intentos fallidos seguidos → 15 minutos bloqueado. Es el
+  ejemplo de la especificación técnica (§4.1), no un valor de OWASP. Lo
+  aplica lockout.ts. El storefront repite estos números en el mensaje de
+  login (storefront/src/lib/data/customer.ts): si cambian, cambiarlos allá.
 
 - Política de clave: entre 8 y 128 caracteres y sin números del RUT (ver
   password-policy.ts). El mínimo es el que tenía el alta con emailpass; el

@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import { hash, verify } from "@node-rs/argon2";
 import {
   AuthenticationInput,
@@ -18,6 +19,7 @@ import {
   PASSWORD_POLICY,
   RUT_AUTH_PROVIDER_ID,
 } from "./config";
+import { registerAttempt, resetAttempts } from "./lockout";
 import { checkNewPassword } from "./password-policy";
 import { RutProviderMetadata } from "./types";
 
@@ -35,20 +37,31 @@ los customers solo con este provider.
                 clave inicial. La ruta HTTP de registro está bloqueada
                 (self-signup-disabled.ts); solo el alta la usa, vía el Auth
                 Module.
-- authenticate: verifica RUT + clave. Toda falla responde el mismo mensaje.
-                El lockout, el tiempo de respuesta uniforme y el corte por
-                `enabled` llegan en los pasos 7 y 9.
+- authenticate: verifica RUT + clave con lockout (lockout.ts): el intento
+                se cuenta ANTES de verificar y una cuenta bloqueada se
+                rechaza aunque la clave sea correcta. Toda falla (RUT
+                inexistente o inválido, clave incorrecta, bloqueo) responde
+                el mismo mensaje y hace UNA verificación argon2, contra un
+                hash señuelo cuando no hay hash real: así todas tardan lo
+                mismo y no revelan qué RUTs existen. El corte por `enabled`
+                llega en el paso 9.
 - update:       cambia la clave (reset por correo o cambio de clave) si
                 cumple la política (password-policy.ts). Deja
-                must_change_password en false. No verifica la clave actual:
+                must_change_password en false y reinicia el lockout (el
+                reset por correo del paso 8 desbloquea la cuenta). No verifica la clave actual:
                 eso lo hace quien llama (POST /store/customers/me/password).
 
 Hash: argon2id con los parámetros explícitos de config.ts.
 
 */
 
+type Knex = {
+  raw: (sql: string, bindings?: unknown[]) => Promise<{ rows: any[] }>;
+};
+
 type InjectedDependencies = {
   logger: Logger;
+  __pg_connection__: Knex;
 };
 
 const ARGON2ID = 2; // Algorithm.Argon2id de @node-rs/argon2 (const enum)
@@ -56,16 +69,38 @@ const ARGON2ID = 2; // Algorithm.Argon2id de @node-rs/argon2 (const enum)
 export const hashPassword = (password: string) =>
   hash(password, { algorithm: ARGON2ID as any, ...ARGON2_PARAMS });
 
+/*
+Hash señuelo: misma configuración que los reales, de una clave aleatoria que
+nadie conoce. Se calcula una vez por proceso (la primera vez que hace falta).
+*/
+let decoyHash: Promise<string> | null = null;
+
+const verifyAgainstDecoy = async (password: unknown) => {
+  decoyHash ??= hashPassword(randomBytes(32).toString("hex"));
+  const candidate = (isString(password) ? password : "").slice(
+    0,
+    PASSWORD_POLICY.maxLength
+  );
+  try {
+    await verify(await decoyHash, candidate || "-");
+  } catch {
+    // Nunca coincide; solo importa el tiempo que toma.
+  }
+  return false;
+};
+
 class RutAuthProviderService extends AbstractAuthModuleProvider {
   static identifier = RUT_AUTH_PROVIDER_ID;
   static DISPLAY_NAME = "RUT + clave";
 
   protected logger_: Logger;
+  protected pg_: Knex;
 
-  constructor({ logger }: InjectedDependencies) {
+  constructor({ logger, __pg_connection__ }: InjectedDependencies) {
     // @ts-ignore — el constructor base recibe (container, options)
     super(...arguments);
     this.logger_ = logger;
+    this.pg_ = __pg_connection__;
   }
 
   async register(
@@ -128,28 +163,28 @@ class RutAuthProviderService extends AbstractAuthModuleProvider {
       !password ||
       password.length > PASSWORD_POLICY.maxLength
     ) {
+      await verifyAgainstDecoy(password);
       return fail;
     }
 
-    let authIdentity: AuthIdentityDTO;
+    let attempt: Awaited<ReturnType<typeof registerAttempt>>;
     try {
-      authIdentity = await authIdentityService.retrieve({ entity_id: rut });
+      attempt = await registerAttempt(this.pg_, rut);
     } catch (error) {
-      if (error.type === MedusaError.Types.NOT_FOUND) {
-        return fail;
-      }
-      return { success: false, error: error.message };
+      this.logger_.error(`rut-auth: no se pudo registrar el intento: ${error.message}`);
+      return { success: false, error: "No se pudo iniciar sesión" };
     }
 
-    const metadata = this.metadataOf_(authIdentity);
-
-    if (!isString(metadata?.password_hash)) {
+    // RUT inexistente o cuenta bloqueada: mismo trabajo y misma respuesta que
+    // una clave incorrecta.
+    if (!attempt.exists || attempt.locked || !isString(attempt.metadata?.password_hash)) {
+      await verifyAgainstDecoy(password);
       return fail;
     }
 
     let valid = false;
     try {
-      valid = await verify(metadata.password_hash, password);
+      valid = await verify(attempt.metadata.password_hash, password);
     } catch (error) {
       this.logger_.error(`rut-auth: no se pudo verificar el hash: ${error.message}`);
       return fail;
@@ -159,7 +194,14 @@ class RutAuthProviderService extends AbstractAuthModuleProvider {
       return fail;
     }
 
-    return { success: true, authIdentity: this.sanitize_(authIdentity) };
+    await resetAttempts(this.pg_, rut);
+
+    try {
+      const authIdentity = await authIdentityService.retrieve({ entity_id: rut });
+      return { success: true, authIdentity: this.sanitize_(authIdentity) };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
   }
 
   async update(
@@ -189,6 +231,8 @@ class RutAuthProviderService extends AbstractAuthModuleProvider {
         password_hash: await hashPassword(password as string),
         must_change_password: false,
         password_changed_at: new Date().toISOString(),
+        failed_attempts: 0,
+        locked_until: null,
       };
 
       const authIdentity = await authIdentityService.update(rut, {

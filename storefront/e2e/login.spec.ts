@@ -11,7 +11,8 @@ const MSG = {
     rutRequired: "El RUT es requerido",
     rutInvalid: "El RUT no es válido",
     passwordRequired: "La Contraseña es requerida",
-    badCredentials: "RUT o clave incorrectos",
+    badCredentials:
+        "RUT o clave incorrectos. Después de 5 intentos fallidos, la cuenta se bloquea por 15 minutos.",
 }
 
 /**
@@ -271,6 +272,33 @@ test.describe("login exitoso", () => {
 // 6.6 Pendientes de rut-auth (el primer ingreso está en first-login.spec.ts)
 // ─────────────────────────────────────────────────────────────
 test.describe("rut-auth (pendiente)", () => {
-    test.fixme("lockout tras N intentos fallidos (paso 7)", async () => { })
     test.fixme("usuario deshabilitado no puede entrar (paso 9)", async () => { })
+})
+
+// ─────────────────────────────────────────────────────────────
+// 6.7 Lockout (rut-auth, paso 7)
+// ─────────────────────────────────────────────────────────────
+// Usa un colaborador DEDICADO (E2E_LOCKOUT_RUT / E2E_LOCKOUT_PASSWORD, con la
+// clave inicial ya cambiada): el test lo deja bloqueado 15 minutos. No uses
+// E2E_USER_RUT, que comparten los demás specs.
+test.describe("lockout", () => {
+    const LOCK_RUT = process.env.E2E_LOCKOUT_RUT
+    const LOCK_PASSWORD = process.env.E2E_LOCKOUT_PASSWORD
+    test.skip(
+        !LOCK_RUT || !LOCK_PASSWORD,
+        "Define E2E_LOCKOUT_RUT y E2E_LOCKOUT_PASSWORD (usuario dedicado) en .env.e2e"
+    )
+
+    test("tras 5 intentos fallidos ni la clave correcta entra, con el mismo mensaje", async ({ page }) => {
+        for (let i = 0; i < 5; i++) {
+            await login.login(LOCK_RUT!, `ClaveEquivocada${i}`)
+            await expect(login.serverError).toHaveText(MSG.badCredentials, { timeout: 30_000 })
+            await login.serverError.getByRole("button", { name: /close|cerrar/i }).click()
+        }
+
+        await login.login(LOCK_RUT!, LOCK_PASSWORD!)
+
+        await expect(login.serverError).toHaveText(MSG.badCredentials, { timeout: 30_000 })
+        await expect(page.getByTestId("overview-page-wrapper")).toHaveCount(0)
+    })
 })

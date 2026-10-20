@@ -145,7 +145,8 @@ const MSG = {
     success: "Contraseña actualizada correctamente",
     tooShort: "Debe tener al menos 8 caracteres",
     mismatch: "Las contraseñas no coinciden",
-    badCredentials: "RUT o clave incorrectos",
+    badCredentials:
+        "RUT o clave incorrectos. Después de 5 intentos fallidos, la cuenta se bloquea por 15 minutos.",
     derivedFromRut: "La clave no puede contener números de tu RUT.",
 }
 

@@ -6,8 +6,9 @@ contenedor del Auth Module: no puede leer customers ni otros módulos.
 
 - password_hash:        hash argon2id (formato PHC, incluye los parámetros).
                         Nunca sale del provider: `sanitize` lo borra.
-- failed_attempts:      intentos fallidos seguidos (paso 7).
-- locked_until:         ISO 8601 o null (paso 7).
+- failed_attempts:      intentos fallidos seguidos; vuelve a 0 con un login
+                        correcto o un cambio de clave (lockout.ts).
+- locked_until:         ISO 8601 (UTC) hasta cuando está bloqueada, o null.
 - must_change_password: true desde el alta hasta que el colaborador cambia
                         la clave inicial (paso 6).
 - password_changed_at:  ISO 8601 del último cambio; null = clave inicial.
