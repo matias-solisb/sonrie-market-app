@@ -18,6 +18,7 @@ import LocalizedClientLink from "@/modules/common/components/localized-client-li
 import Alert from "@mui/material/Alert"
 import Snackbar from "@mui/material/Snackbar"
 import { ThemeProvider } from "@mui/material/styles"
+import { useParams } from "next/navigation"
 import { useEffect, useState } from "react"
 
 type Props = {
@@ -33,9 +34,19 @@ type Props = {
 }
 
 
+/*
+
+Login de colaboradores con RUT + clave (rut-auth, paso 5). zod valida el
+dígito verificador antes de enviar; el backend normaliza el RUT (puntos,
+guion, k minúscula) y responde siempre "RUT o clave incorrectos" ante
+cualquier falla. Si el colaborador tiene pendiente el cambio de clave
+inicial, el server action `login` lo manda a /cambiar-clave.
+
+*/
 const Login = ({ setCurrentView: _setCurrentView, redirectTo }: Props) => {
+  const { countryCode } = useParams<{ countryCode: string }>()
   const {
-    form: { control, reset },
+    form: { control, reset, getValues },
     state: message,
     isPending,
     onSubmit,
@@ -43,8 +54,8 @@ const Login = ({ setCurrentView: _setCurrentView, redirectTo }: Props) => {
     schema: loginSchema,
     action: login,
     initialState: undefined,
-    defaultValues: { email: "", password: "" },
-    extraFields: { redirect_to: redirectTo },
+    defaultValues: { rut: "", password: "" },
+    extraFields: { redirect_to: redirectTo, country_code: countryCode },
   })
   
   const [alertOpen, setAlertOpen] = useState(false)
@@ -54,10 +65,11 @@ const Login = ({ setCurrentView: _setCurrentView, redirectTo }: Props) => {
       setAlertOpen(false)
     } else if (message) {
       setAlertOpen(true)
-      // Junto con la alerta se vacían correo y contraseña.
-      reset({ email: "", password: "" })
+      // Junto con la alerta se vacía la contraseña; el RUT se conserva para
+      // reintentar sin volver a escribirlo.
+      reset({ rut: getValues("rut"), password: "" })
     }
-  }, [isPending, message, reset])
+  }, [isPending, message, reset, getValues])
 
   return (
     <AuthCard data-testid="login-page">
@@ -67,11 +79,13 @@ const Login = ({ setCurrentView: _setCurrentView, redirectTo }: Props) => {
         <div className="mt-6 flex flex-col gap-y-4">
           <FormTextField
             control={control}
-            name="email"
-            label="Correo"
-            type="email"
-            autoComplete="email"
-            slotProps={{ htmlInput: { "data-testid": "email-input" } }}
+            name="rut"
+            label="RUT"
+            placeholder="12.345.678-9"
+            autoComplete="username"
+            slotProps={{
+              htmlInput: { "data-testid": "rut-input", inputMode: "text" },
+            }}
           />
           <FormPasswordField
             control={control}

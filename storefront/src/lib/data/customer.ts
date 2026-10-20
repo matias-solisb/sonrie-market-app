@@ -9,7 +9,6 @@ import { track } from "@vercel/analytics/server"
 import { revalidateTag } from "next/cache"
 import { redirect } from "next/navigation"
 import { retrieveCart, updateCart } from "./cart"
-import { createCompany, createEmployee } from "./companies"
 import {
   getAuthHeaders,
   getCacheOptions,
@@ -94,76 +93,6 @@ export const updateCustomer = async (body: HttpTypes.StoreUpdateCustomer) => {
   return updateRes
 }
 
-export async function signup(_currentState: unknown, formData: FormData) {
-  const password = formData.get("password") as string
-  const customerForm = {
-    email: formData.get("email") as string,
-    first_name: formData.get("first_name") as string,
-    last_name: formData.get("last_name") as string,
-    phone: formData.get("phone") as string,
-    company_name: formData.get("company_name") as string,
-  }
-
-  try {
-    const token = await sdk.auth.register("customer", "emailpass", {
-      email: customerForm.email,
-      password: password,
-    })
-
-    const customHeaders = { authorization: `Bearer ${token}` }
-
-    const { customer: createdCustomer } = await sdk.store.customer.create(
-      customerForm,
-      {},
-      customHeaders
-    )
-
-    const loginToken = await sdk.auth.login("customer", "emailpass", {
-      email: customerForm.email,
-      password,
-    })
-
-    setAuthToken(loginToken as string)
-
-    const companyForm = {
-      name: formData.get("company_name") as string,
-      email: formData.get("email") as string,
-      phone: formData.get("company_phone") as string,
-      address: formData.get("company_address") as string,
-      city: formData.get("company_city") as string,
-      state: formData.get("company_state") as string,
-      zip: formData.get("company_zip") as string,
-      country: formData.get("company_country") as string,
-      currency_code: formData.get("currency_code") as string,
-    }
-
-    const createdCompany = await createCompany(companyForm)
-
-    const createdEmployee = await createEmployee({
-      company_id: createdCompany?.id as string,
-      customer_id: createdCustomer.id,
-      is_admin: true,
-      spending_limit: 0,
-    }).catch((err) => {
-      console.log("error creating employee", err)
-    })
-
-    const cacheTag = await getCacheTag("customers")
-    revalidateTag(cacheTag)
-
-    await transferCart()
-
-    return {
-      customer: createdCustomer,
-      company: createdCompany,
-      employee: createdEmployee,
-    }
-  } catch (error: any) {
-    console.log("error", error)
-    return error.toString()
-  }
-}
-
 // Evita open redirects: solo se sigue una ruta interna que empiece con "/"
 // (y no "//", que el navegador puede interpretar como otro host).
 function getSafeRedirect(value: FormDataEntryValue | null): string | null {
@@ -173,53 +102,110 @@ function getSafeRedirect(value: FormDataEntryValue | null): string | null {
   return value
 }
 
+/*
+
+Estado del cambio de clave obligatorio (rut-auth, paso 6). El backend es la
+única fuente de verdad: `GET /store/customers/me/password` lee la identidad
+`rut` del colaborador. Sin caché, porque cambia apenas el colaborador
+cambia la clave.
+
+- true:  debe cambiar la clave antes de usar la tienda.
+- false: puede usar la tienda.
+- null:  sin sesión o no se pudo consultar (se trata como "no sé": quien
+         llama decide; los layouts no redirigen en ese caso).
+
+*/
+export const retrievePasswordChangeRequired = async (): Promise<
+  boolean | null
+> => {
+  const authHeaders = await getAuthHeaders()
+
+  if (!("authorization" in authHeaders)) return null
+
+  return await sdk.client
+    .fetch<{ must_change_password: boolean }>(`/store/customers/me/password`, {
+      method: "GET",
+      headers: { ...authHeaders },
+      cache: "no-store",
+    })
+    .then(({ must_change_password }) => must_change_password === true)
+    .catch(() => null)
+}
+
+/**
+ * Para los layouts de la tienda y el checkout: si el colaborador logueado
+ * todavía no cambia la clave inicial, lo manda a /cambiar-clave. El backend
+ * igual bloquea la Store API (403 password_change_required); esto evita que
+ * vea páginas a medio cargar.
+ */
+export const redirectIfPasswordChangeRequired = async (countryCode: string) => {
+  if ((await retrievePasswordChangeRequired()) === true) {
+    redirect(`/${countryCode}/cambiar-clave`)
+  }
+}
+
+const INVALID_CREDENTIALS = "RUT o clave incorrectos"
+
 export async function login(_currentState: unknown, formData: FormData) {
-  const email = formData.get("email") as string
+  const rut = formData.get("rut") as string
   const password = formData.get("password") as string
+  const countryCode = (formData.get("country_code") as string) || "cl"
+
+  let mustChangePassword = false
 
   try {
-    await sdk.auth
-      .login("customer", "emailpass", { email, password })
-      .then(async (token) => {
-        track("customer_logged_in")
-        setAuthToken(token as string)
+    const token = await sdk.auth.login("customer", "rut", { rut, password })
 
-        const [customerCacheTag, productsCacheTag, cartsCacheTag] =
-          await Promise.all([
-            getCacheTag("customers"),
-            getCacheTag("products"),
-            getCacheTag("carts"),
-          ])
+    track("customer_logged_in")
+    await setAuthToken(token as string)
 
-        revalidateTag(customerCacheTag)
+    const customerCacheTag = await getCacheTag("customers")
+    revalidateTag(customerCacheTag)
 
-        const customer = await retrieveCustomer()
-        const cart = await retrieveCart()
+    // Primer ingreso (o clave reseteada): antes de cualquier otra cosa hay
+    // que cambiar la clave. El backend bloquea el carrito hasta entonces, así
+    // que no se toca.
+    mustChangePassword = (await retrievePasswordChangeRequired()) === true
 
-        if (customer?.employee?.company_id) {
-          await updateCart({
-            metadata: {
-              ...cart?.metadata,
-              company_id: customer.employee.company_id,
-            },
-          })
-        }
+    if (!mustChangePassword) {
+      const [productsCacheTag, cartsCacheTag] = await Promise.all([
+        getCacheTag("products"),
+        getCacheTag("carts"),
+      ])
 
-        revalidateTag(productsCacheTag)
-        revalidateTag(cartsCacheTag)
-      })
+      const customer = await retrieveCustomer()
+      const cart = await retrieveCart()
+
+      if (customer?.employee?.company_id) {
+        await updateCart({
+          metadata: {
+            ...cart?.metadata,
+            company_id: customer.employee.company_id,
+          },
+        })
+      }
+
+      revalidateTag(productsCacheTag)
+      revalidateTag(cartsCacheTag)
+    }
   } catch (error: any) {
-    // No mostramos el MedusaError crudo ("MedusaError: Invalid email or
-    // password") en pantalla: es texto interno en inglés. Si es un error de
-    // credenciales lo traducimos a un mensaje claro; cualquier otra falla
-    // (backend caído, red, etc.) muestra un mensaje genérico.
+    // El backend responde el mismo mensaje para RUT inexistente, RUT
+    // inválido y clave incorrecta (sin enumeración de cuentas). No se
+    // muestra el error crudo: cualquier otra falla (backend caído, red)
+    // muestra un mensaje genérico.
     const rawMessage = (error?.message ?? error?.toString() ?? "").toLowerCase()
 
-    if (rawMessage.includes("invalid email or password")) {
-      return "Usuario y contraseña no coinciden"
+    if (rawMessage.includes(INVALID_CREDENTIALS.toLowerCase())) {
+      return INVALID_CREDENTIALS
     }
 
     return "No pudimos iniciar tu sesión. Intenta nuevamente en unos minutos."
+  }
+
+  // Fuera de los try/catch: redirect() lanza NEXT_REDIRECT y no debe
+  // capturarse como si fuera un error de login.
+  if (mustChangePassword) {
+    redirect(`/${countryCode}/cambiar-clave`)
   }
 
   try {
@@ -229,9 +215,7 @@ export async function login(_currentState: unknown, formData: FormData) {
   }
 
   // Si el middleware nos mandó acá por falta de sesión (home o catálogo
-  // protegidos), volvemos a la página que se quería visitar. Va fuera de
-  // los try/catch de arriba: redirect() lanza NEXT_REDIRECT y no debe ser
-  // capturado como si fuera un error de login.
+  // protegidos), volvemos a la página que se quería visitar.
   const redirectTo = getSafeRedirect(formData.get("redirect_to"))
 
   if (redirectTo) {
@@ -250,6 +234,11 @@ export type PasswordResetActionState = {
   success?: boolean
 }
 
+// ⚠️ "Olvidé mi contraseña" (requestPasswordReset / resetPassword) sigue
+// con emailpass: se migra a RUT en el paso 8 de rut-auth (recuperación por
+// correo). Mientras tanto no le sirve a ningún colaborador, porque ya no
+// tienen identidad emailpass.
+//
 // Paso 1 del flujo "Olvidé mi contraseña": pide el reset a Medusa
 // (`POST /auth/customer/emailpass/reset-password`, vía el SDK). Ese
 // endpoint SIEMPRE responde 201 aunque el email no exista en el sistema
@@ -324,53 +313,35 @@ export async function resetPassword(
   return { success: true }
 }
 
-// Cambio de contraseña desde la cuenta ya logueada (ProfileCard). A
-// diferencia del flujo de "Olvidé mi contraseña", acá no hay token de
-// email: el usuario ya tiene sesión.
-//
-// Paso 1 — verificar la "contraseña actual": el endpoint de Medusa para
-// actualizar contraseña (`EmailPassAuthService.update()`) NO verifica la
-// contraseña actual por sí solo, así que la verificamos nosotros acá
-// mismo, haciendo un login real con el email de la cuenta + la
-// contraseña "actual" ingresada. Si ese login falla, la contraseña
-// actual está mal.
-//
-// Paso 2 — aplicar la contraseña nueva: NO se puede reusar el token que
-// devuelve ese login de verificación contra el endpoint nativo
-// `POST /auth/customer/emailpass/update` — ese endpoint exige un JWT con
-// un claim `entity_id` que solo trae el token especial del flujo de
-// "olvidé mi contraseña"; un token normal de sesión/login (`actor_id` +
-// `app_metadata`) SIEMPRE lo rechaza con "Invalid token", confirmado
-// leyendo el código fuente de Medusa. Por eso se llama en cambio a una
-// ruta propia del backend (`POST /store/customers/me/password`, ver
-// `backend/src/api/store/customers/me/password/route.ts`), protegida
-// por el middleware estándar de sesión — ahí sí se puede aplicar la
-// contraseña nueva usando la sesión actual del usuario (`getAuthHeaders`),
-// sin depender del token de verificación del paso 1.
+export type ChangePasswordResult = {
+  error?: string
+  /** Campo del formulario donde mostrar el error. */
+  field?: "current_password" | "password"
+  success?: boolean
+}
+
+/*
+
+Cambio de clave del colaborador logueado: el obligatorio del primer ingreso
+(/cambiar-clave) y el voluntario desde el perfil. Ambos van a
+`POST /store/customers/me/password` (backend), que:
+
+- verifica la clave actual en el servidor (antes lo hacía este archivo con
+  un login aparte),
+- aplica la política de clave (largo, sin números del RUT) y
+- toma el RUT de la sesión, nunca del body.
+
+Los mensajes de error del backend ya vienen en español y se muestran tal
+cual; el `code` decide en qué campo.
+
+*/
 export async function changePassword({
   currentPassword,
   newPassword,
 }: {
   currentPassword: string
   newPassword: string
-}): Promise<PasswordResetActionState> {
-  const customer = await retrieveCustomer()
-
-  if (!customer?.email) {
-    return {
-      error: "No pudimos identificar tu cuenta. Vuelve a iniciar sesión.",
-    }
-  }
-
-  try {
-    await sdk.auth.login("customer", "emailpass", {
-      email: customer.email,
-      password: currentPassword,
-    })
-  } catch (error: any) {
-    return { error: "La contraseña actual no es correcta." }
-  }
-
+}): Promise<ChangePasswordResult> {
   const headers = {
     ...(await getAuthHeaders()),
   }
@@ -378,33 +349,74 @@ export async function changePassword({
   try {
     await sdk.client.fetch("/store/customers/me/password", {
       method: "POST",
-      body: { password: newPassword },
+      body: { current_password: currentPassword, password: newPassword },
       headers,
     })
   } catch (error: any) {
-    // Este llamado corre en el servidor de Next.js (es un Server Action),
-    // así que su resultado NUNCA aparece en la pestaña Network del
-    // navegador — esa pestaña solo ve el POST del navegador hacia el
-    // propio Next.js (aparece con el nombre de la página, p. ej.
-    // "profile"), no la llamada de Next.js hacia el backend de Medusa.
-    // Por eso se loggea acá el detalle real (status + body del error de
-    // Medusa): para verlo hay que mirar la terminal donde corre
-    // `npm run dev` del storefront, no la consola del navegador.
+    const status = error?.status
+    const message: string | undefined = error?.message
+
+    if (status === 400 && message) {
+      // El SDK no expone el `code` del body: se distingue por el mensaje
+      // (ver backend/src/api/store/customers/me/password/route.ts).
+      const aboutCurrent =
+        message.startsWith("La clave actual") ||
+        message.startsWith("Ingresa tu clave actual")
+      return {
+        error: message,
+        field: aboutCurrent ? "current_password" : "password",
+      }
+    }
+
+    if (status === 401) {
+      return { error: "Tu sesión expiró. Vuelve a iniciar sesión." }
+    }
+
+    // Corre en el servidor de Next.js (Server Action): el detalle solo se ve
+    // en la terminal del storefront, no en el navegador.
     console.error(
       "[changePassword] falló POST /store/customers/me/password:",
       "status:",
-      error?.status,
+      status,
       "message:",
-      error?.message,
-      "body:",
-      error?.body ?? error
+      message
     )
-    return {
-      error: "No pudimos actualizar la contraseña. Intenta nuevamente.",
-    }
+    return { error: "No pudimos actualizar la contraseña. Intenta nuevamente." }
   }
 
+  const cacheTag = await getCacheTag("customers")
+  revalidateTag(cacheTag)
+
   return { success: true }
+}
+
+/**
+ * Server action de /cambiar-clave (cambio obligatorio del primer ingreso).
+ * En éxito deja seguir a la tienda: traspasa el carrito anónimo, si había, y
+ * redirige al inicio.
+ */
+export async function forcedChangePassword(
+  _currentState: ChangePasswordResult,
+  formData: FormData
+): Promise<ChangePasswordResult> {
+  const countryCode = (formData.get("country_code") as string) || "cl"
+
+  const result = await changePassword({
+    currentPassword: formData.get("current_password") as string,
+    newPassword: formData.get("password") as string,
+  })
+
+  if (!result.success) {
+    return result
+  }
+
+  try {
+    await transferCart()
+  } catch {
+    // Sin carrito anónimo que traspasar: no es un error para el colaborador.
+  }
+
+  redirect(`/${countryCode}`)
 }
 
 export async function signout(countryCode: string, customerId: string) {

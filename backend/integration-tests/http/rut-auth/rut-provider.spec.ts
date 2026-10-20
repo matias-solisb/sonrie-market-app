@@ -177,6 +177,17 @@ medusaIntegrationTestRunner({
         ).toBe(200);
       });
 
+      it("rechaza una clave derivada del RUT y no cambia nada", async () => {
+        const { success, error } = await auth().updateProvider("rut", {
+          entity_id: RUT_NORMALIZADO,
+          password: `Clave${CLAVE_INICIAL}x`,
+        });
+
+        expect(success).toBe(false);
+        expect(error).toMatch(/RUT/);
+        expect((await metadataDe(RUT_NORMALIZADO))!.must_change_password).toBe(true);
+      });
+
       it("rechaza una clave más corta que el mínimo y no cambia nada", async () => {
         const { success } = await auth().updateProvider("rut", {
           entity_id: RUT_NORMALIZADO,

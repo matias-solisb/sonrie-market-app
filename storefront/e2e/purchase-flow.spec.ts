@@ -162,16 +162,16 @@ test.describe("acceso al checkout", () => {
     })
 
     test("no se puede ver el carrito de otro colaborador con ?cartId=", async ({ page, browser }) => {
-        const email2 = process.env.E2E_USER2_EMAIL
+        const rut2 = process.env.E2E_USER2_RUT
         const password2 = process.env.E2E_USER2_PASSWORD
-        test.skip(!email2 || !password2, "Define E2E_USER2_EMAIL y E2E_USER2_PASSWORD en .env.e2e")
+        test.skip(!rut2 || !password2, "Define E2E_USER2_RUT y E2E_USER2_PASSWORD en .env.e2e")
 
         // El colaborador B arma un carrito
         const ctxB = await browser.newContext({ storageState: { cookies: [], origins: [] } })
         const pageB = await ctxB.newPage()
         const loginB = new LoginPage(pageB)
         await loginB.goto()
-        await loginB.login(email2!, password2!)
+        await loginB.login(rut2!, password2!)
         await expect(pageB.getByTestId("overview-page-wrapper")).toBeVisible({ timeout: 30_000 })
         const { title } = await cartWithOneItem(pageB)
         const cartIdB = (await ctxB.cookies()).find((c) => c.name === "_medusa_cart_id")?.value

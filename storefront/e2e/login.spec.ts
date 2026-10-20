@@ -1,14 +1,17 @@
 import { expect, test, type Page } from "@playwright/test"
 import { LoginPage } from "./pages/login-page"
 
-const USER_EMAIL = process.env.E2E_USER_EMAIL
+const USER_RUT = process.env.E2E_USER_RUT
 const USER_PASSWORD = process.env.E2E_USER_PASSWORD
 
+// RUT con DV correcto que no existe en la base de prueba (12.345.678-5).
+const RUT_INEXISTENTE = "12.345.678-5"
+
 const MSG = {
-    emailRequired: "El Correo es requerido",
-    emailInvalid: "Debe ser un email válido",
+    rutRequired: "El RUT es requerido",
+    rutInvalid: "El RUT no es válido",
     passwordRequired: "La Contraseña es requerida",
-    badCredentials: "Usuario y contraseña no coinciden",
+    badCredentials: "RUT o clave incorrectos",
 }
 
 /**
@@ -42,85 +45,85 @@ test.describe("campos vacíos", () => {
 
         await login.submit.click()
 
-        await expect(login.fieldError(MSG.emailRequired)).toBeVisible()
+        await expect(login.fieldError(MSG.rutRequired)).toBeVisible()
         await expect(login.fieldError(MSG.passwordRequired)).toBeVisible()
-        await expect(login.email).toHaveAttribute("aria-invalid", "true")
+        await expect(login.rut).toHaveAttribute("aria-invalid", "true")
         await expect(login.password).toHaveAttribute("aria-invalid", "true")
         expect(calls).toHaveLength(0)
     })
 
-    test("solo correo vacío", async () => {
+    test("solo RUT vacío", async () => {
         await login.password.fill("cualquiera")
         await login.submit.click()
 
-        await expect(login.fieldError(MSG.emailRequired)).toBeVisible()
+        await expect(login.fieldError(MSG.rutRequired)).toBeVisible()
         await expect(login.fieldError(MSG.passwordRequired)).toBeHidden()
     })
 
     test("solo contraseña vacía", async () => {
-        await login.email.fill("test@sonriemarket.cl")
+        await login.rut.fill(RUT_INEXISTENTE)
         await login.submit.click()
 
         await expect(login.fieldError(MSG.passwordRequired)).toBeVisible()
-        await expect(login.fieldError(MSG.emailRequired)).toBeHidden()
+        await expect(login.fieldError(MSG.rutRequired)).toBeHidden()
     })
 
-    test("correo con solo espacios cuenta como vacío", async () => {
-        await login.email.fill("     ")
+    test("RUT con solo espacios cuenta como vacío", async () => {
+        await login.rut.fill("     ")
         await login.password.fill("cualquiera")
         await login.submit.click()
 
-        await expect(login.fieldError(MSG.emailRequired)).toBeVisible()
+        await expect(login.fieldError(MSG.rutRequired)).toBeVisible()
     })
 
     test("el error desaparece al escribir (revalidación onChange)", async () => {
         await login.submit.click()
-        await expect(login.fieldError(MSG.emailRequired)).toBeVisible()
+        await expect(login.fieldError(MSG.rutRequired)).toBeVisible()
 
-        await login.email.fill("test@sonriemarket.cl")
+        await login.rut.fill(RUT_INEXISTENTE)
 
-        await expect(login.fieldError(MSG.emailRequired)).toBeHidden()
-        await expect(login.email).toHaveAttribute("aria-invalid", "false")
+        await expect(login.fieldError(MSG.rutRequired)).toBeHidden()
+        await expect(login.rut).toHaveAttribute("aria-invalid", "false")
     })
 })
 
 // ─────────────────────────────────────────────────────────────
-// 6.2 Correo mal escrito: un test por cada caso (test parametrizado)
+// 6.2 RUT mal escrito: el dígito verificador se valida en el cliente
 // ─────────────────────────────────────────────────────────────
-test.describe("correo con formato inválido", () => {
-    const invalidEmails = [
-        "matias",               // sin @
-        "matias@",              // sin dominio
-        "@quantor.cl",          // sin usuario
-        "matias@quantor",       // sin TLD
-        "matias@quantor.c",     // TLD de 1 letra
-        "matias quantor.cl",    // espacio en vez de @
-        "matias@@quantor.cl",   // doble @
-        ".matias@quantor.cl",   // empieza con punto
-        "matias..solis@quantor.cl", // puntos consecutivos
+test.describe("RUT con formato o DV inválido", () => {
+    const invalidRuts = [
+        "12.345.678-4",   // DV incorrecto
+        "10.000.013-0",   // DV 0 donde corresponde K
+        "12.345.678-X",   // DV con letra que no es K
+        "12a45678-5",     // letra en el cuerpo
+        "99999-9",        // cuerpo demasiado corto
+        "123456789-2",    // cuerpo de 9 dígitos
+        "matias@quantor.cl", // un correo (el login anterior)
     ]
 
-    for (const email of invalidEmails) {
-        test(`rechaza "${email}"`, async ({ page }) => {
+    for (const rut of invalidRuts) {
+        test(`rechaza "${rut}" sin enviar`, async ({ page }) => {
             const calls = trackServerActions(page)
 
-            await login.login(email, "cualquiera")
+            await login.login(rut, "cualquiera")
 
-            await expect(login.fieldError(MSG.emailInvalid)).toBeVisible()
+            await expect(login.fieldError(MSG.rutInvalid)).toBeVisible()
             expect(calls).toHaveLength(0)
         })
     }
 
-    test("acepta un correo con espacios alrededor (trim)", async ({ page }) => {
-        const calls = trackServerActions(page)
+    for (const rut of ["12345678-5", "123456785", " 12.345.678-5 ", "10.000.013-k"]) {
+        test(`acepta el formato "${rut}" y lo manda al servidor`, async ({ page }) => {
+            const calls = trackServerActions(page)
 
-        await login.login("  noexiste@sonriemarket.cl  ", "Incorrecta123")
+            await login.login(rut, "Incorrecta123")
 
-        await expect(login.fieldError(MSG.emailInvalid)).toBeHidden()
-        // Pasa la validación del cliente → llega al servidor → credenciales malas
-        await expect(login.serverError).toHaveText(MSG.badCredentials)
-        expect(calls.length).toBeGreaterThan(0)
-    })
+            await expect(login.fieldError(MSG.rutInvalid)).toBeHidden()
+            // Pasa la validación del cliente → llega al servidor → credenciales malas
+            await expect(login.serverError).toHaveText(MSG.badCredentials)
+            expect(calls.length).toBeGreaterThan(0)
+        })
+    }
 })
 
 // ─────────────────────────────────────────────────────────────
@@ -128,37 +131,37 @@ test.describe("correo con formato inválido", () => {
 // ─────────────────────────────────────────────────────────────
 test.describe("credenciales incorrectas", () => {
     test("usuario inexistente muestra el mensaje genérico", async () => {
-        await login.login("noexiste@sonriemarket.cl", "Incorrecta123")
+        await login.login(RUT_INEXISTENTE, "Incorrecta123")
 
         await expect(login.serverError).toBeVisible()
         await expect(login.serverError).toHaveText(MSG.badCredentials)
     })
 
     test("contraseña incorrecta muestra el MISMO mensaje (sin enumeración)", async () => {
-        test.skip(!USER_EMAIL, "Falta E2E_USER_EMAIL en .env.e2e")
+        test.skip(!USER_RUT, "Falta E2E_USER_RUT en .env.e2e")
 
-        await login.login(USER_EMAIL!, "ClaveEquivocada999")
+        await login.login(USER_RUT!, "ClaveEquivocada999")
 
         await expect(login.serverError).toHaveText(MSG.badCredentials)
     })
 
-    test("después del error se vacían ambos campos", async () => {
-        await login.login("noexiste@sonriemarket.cl", "Incorrecta123")
+    test("después del error se vacía la contraseña y se conserva el RUT", async () => {
+        await login.login(RUT_INEXISTENTE, "Incorrecta123")
 
         await expect(login.serverError).toBeVisible()
-        await expect(login.email).toHaveValue("")
+        await expect(login.rut).toHaveValue(RUT_INEXISTENTE)
         await expect(login.password).toHaveValue("")
     })
 
     test("contraseña de solo espacios pasa el cliente y la rechaza el servidor", async () => {
-        await login.login("noexiste@sonriemarket.cl", "     ")
+        await login.login(RUT_INEXISTENTE, "     ")
 
         await expect(login.fieldError(MSG.passwordRequired)).toBeHidden()
         await expect(login.serverError).toHaveText(MSG.badCredentials)
     })
 
     test("el aviso se puede cerrar", async () => {
-        await login.login("noexiste@sonriemarket.cl", "Incorrecta123")
+        await login.login(RUT_INEXISTENTE, "Incorrecta123")
         await expect(login.serverError).toBeVisible()
 
         await login.serverError.getByRole("button", { name: /close|cerrar/i }).click()
@@ -167,7 +170,7 @@ test.describe("credenciales incorrectas", () => {
     })
 
     test("no queda cookie de sesión", async ({ context }) => {
-        await login.login("noexiste@sonriemarket.cl", "Incorrecta123")
+        await login.login(RUT_INEXISTENTE, "Incorrecta123")
         await expect(login.serverError).toBeVisible()
 
         const cookies = await context.cookies()
@@ -192,7 +195,7 @@ test.describe("comportamiento del formulario", () => {
     })
 
     test("Enter envía el formulario", async () => {
-        await login.email.fill("noexiste@sonriemarket.cl")
+        await login.rut.fill(RUT_INEXISTENTE)
         await login.password.fill("Incorrecta123")
         await login.password.press("Enter")
 
@@ -214,15 +217,14 @@ test.describe("comportamiento del formulario", () => {
 // ─────────────────────────────────────────────────────────────
 test.describe("login exitoso", () => {
     test.skip(
-        !USER_EMAIL || !USER_PASSWORD,
-        "Define E2E_USER_EMAIL y E2E_USER_PASSWORD en .env.e2e"
+        !USER_RUT || !USER_PASSWORD,
+        "Define E2E_USER_RUT y E2E_USER_PASSWORD en .env.e2e"
     )
 
     test("entra a la cuenta y deja la cookie de sesión", async ({ page, context }) => {
-        await login.login(USER_EMAIL!, USER_PASSWORD!)
+        await login.login(USER_RUT!, USER_PASSWORD!)
 
         await expect(page.getByTestId("overview-page-wrapper")).toBeVisible()
-        await expect(page.getByTestId("customer-email")).toContainText(USER_EMAIL!)
 
         const cookies = await context.cookies()
         const jwt = cookies.find((c) => c.name === "_medusa_jwt")
@@ -234,7 +236,7 @@ test.describe("login exitoso", () => {
         await page.goto("/cl/store")
         await expect(page).toHaveURL(/\/cl\/account\?redirect_to=/)
 
-        await login.login(USER_EMAIL!, USER_PASSWORD!)
+        await login.login(USER_RUT!, USER_PASSWORD!)
 
         // redirect() renderiza /cl/store en la misma respuesta; en `next dev`
         // la primera vez se compila la ruta, por eso el margen extra.
@@ -246,7 +248,7 @@ test.describe("login exitoso", () => {
     for (const evil of ["https://evil.com", "//evil.com"]) {
         test(`no redirige fuera del sitio con redirect_to=${evil}`, async ({ page }) => {
             await login.goto(evil)
-            await login.login(USER_EMAIL!, USER_PASSWORD!)
+            await login.login(USER_RUT!, USER_PASSWORD!)
 
             await expect(page.getByTestId("overview-page-wrapper")).toBeVisible({ timeout: 30_000 })
             expect(new URL(page.url()).host).toBe("localhost:8000")
@@ -257,7 +259,7 @@ test.describe("login exitoso", () => {
     // no con "//", y no tiene "://"). Lo que importa es no terminar fuera del sitio.
     test("redirect_to=/\\evil.com no saca al usuario del sitio", async ({ page }) => {
         await login.goto("/\\evil.com")
-        await login.login(USER_EMAIL!, USER_PASSWORD!)
+        await login.login(USER_RUT!, USER_PASSWORD!)
 
         // Espera a que el action termine (el botón deja de decir "Ingresando...")
         await expect(page.getByRole("button", { name: "Ingresando..." })).toHaveCount(0, { timeout: 30_000 })
@@ -266,11 +268,9 @@ test.describe("login exitoso", () => {
 })
 
 // ─────────────────────────────────────────────────────────────
-// 6.6 Pendientes para cuando exista rut-auth (Fase 1a)
+// 6.6 Pendientes de rut-auth (el primer ingreso está en first-login.spec.ts)
 // ─────────────────────────────────────────────────────────────
-test.describe("rut-auth (futuro)", () => {
-    test.fixme("RUT con DV inválido (módulo 11) se rechaza en el cliente", async () => { })
-    test.fixme("primer ingreso obliga a cambiar la clave", async () => { })
-    test.fixme("lockout tras N intentos fallidos", async () => { })
-    test.fixme("usuario deshabilitado desde el backoffice no puede entrar", async () => { })
+test.describe("rut-auth (pendiente)", () => {
+    test.fixme("lockout tras N intentos fallidos (paso 7)", async () => { })
+    test.fixme("usuario deshabilitado no puede entrar (paso 9)", async () => { })
 })

@@ -1,5 +1,7 @@
 import { z } from "zod"
 
+import { isValidRut } from "@/lib/util/rut"
+
 /*
 
 Reglas de validación reutilizables para los esquemas zod de los
@@ -28,6 +30,13 @@ export const optionalEmail = () =>
     .email("Debe ser un email válido")
     .or(z.literal(""))
     .optional()
+
+/**
+ * RUT: requerido y con dígito verificador válido (módulo 11). Acepta puntos,
+ * guion y k minúscula; el backend lo normaliza.
+ */
+export const requiredRut = (label = "RUT") =>
+  requiredString(label).refine(isValidRut, "El RUT no es válido")
 
 export const PASSWORD_MIN_LENGTH = 8
 

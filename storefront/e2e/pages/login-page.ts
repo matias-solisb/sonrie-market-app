@@ -3,7 +3,7 @@ import { expect, type Locator, type Page } from "@playwright/test"
 export class LoginPage {
     readonly page: Page
     readonly form: Locator
-    readonly email: Locator
+    readonly rut: Locator
     readonly password: Locator
     readonly submit: Locator
     readonly serverError: Locator
@@ -13,7 +13,7 @@ export class LoginPage {
     constructor(page: Page) {
         this.page = page
         this.form = page.getByTestId("login-page")
-        this.email = page.getByTestId("email-input")
+        this.rut = page.getByTestId("rut-input")
         this.password = page.getByTestId("password-input")
         this.submit = page.getByTestId("sign-in-button")
         // Snackbar/Alert de MUI que muestra el mensaje devuelto por el server action
@@ -32,8 +32,8 @@ export class LoginPage {
         await expect(this.form).toBeVisible()
     }
 
-    async login(email: string, password: string) {
-        await this.email.fill(email)
+    async login(rut: string, password: string) {
+        await this.rut.fill(rut)
         await this.password.fill(password)
         await this.submit.click()
     }

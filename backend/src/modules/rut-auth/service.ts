@@ -18,6 +18,7 @@ import {
   PASSWORD_POLICY,
   RUT_AUTH_PROVIDER_ID,
 } from "./config";
+import { checkNewPassword } from "./password-policy";
 import { RutProviderMetadata } from "./types";
 
 /*
@@ -37,8 +38,10 @@ los customers solo con este provider.
 - authenticate: verifica RUT + clave. Toda falla responde el mismo mensaje.
                 El lockout, el tiempo de respuesta uniforme y el corte por
                 `enabled` llegan en los pasos 7 y 9.
-- update:       cambia la clave (reset por correo o cambio de clave). Deja
-                must_change_password en false.
+- update:       cambia la clave (reset por correo o cambio de clave) si
+                cumple la política (password-policy.ts). Deja
+                must_change_password en false. No verifica la clave actual:
+                eso lo hace quien llama (POST /store/customers/me/password).
 
 Hash: argon2id con los parámetros explícitos de config.ts.
 
@@ -119,7 +122,12 @@ class RutAuthProviderService extends AbstractAuthModuleProvider {
     const { password } = data.body ?? {};
     const rut = normalizeRut(data.body?.rut);
 
-    if (!rut || !isString(password) || !password) {
+    if (
+      !rut ||
+      !isString(password) ||
+      !password ||
+      password.length > PASSWORD_POLICY.maxLength
+    ) {
       return fail;
     }
 
@@ -168,18 +176,17 @@ class RutAuthProviderService extends AbstractAuthModuleProvider {
       };
     }
 
-    if (!isString(password) || password.length < PASSWORD_POLICY.minLength) {
-      return {
-        success: false,
-        error: `La clave debe tener al menos ${PASSWORD_POLICY.minLength} caracteres`,
-      };
+    const policyError = checkNewPassword(rut, password);
+
+    if (policyError) {
+      return { success: false, error: policyError };
     }
 
     try {
       const current = await authIdentityService.retrieve({ entity_id: rut });
       const metadata: RutProviderMetadata = {
         ...this.metadataOf_(current),
-        password_hash: await hashPassword(password),
+        password_hash: await hashPassword(password as string),
         must_change_password: false,
         password_changed_at: new Date().toISOString(),
       };

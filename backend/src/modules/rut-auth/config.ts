@@ -18,9 +18,9 @@ revisar vive en este archivo, para cambiarlo en un solo lugar.
   especificación técnica (§4.1), no un valor de OWASP. Se aplica en el
   paso 7 (lockout y anti-enumeración); acá solo queda definido.
 
-- Política de clave: mínimo 8 caracteres, el mismo mínimo que tenía el alta
-  con emailpass. Las reglas "no igual a la inicial" y "no derivada del RUT"
-  llegan con el paso 6.
+- Política de clave: entre 8 y 128 caracteres y sin números del RUT (ver
+  password-policy.ts). El mínimo es el que tenía el alta con emailpass; el
+  máximo evita claves enormes que carguen el CPU con argon2.
 
 */
 
@@ -40,6 +40,7 @@ export const LOCKOUT = {
 
 export const PASSWORD_POLICY = {
   minLength: 8,
+  maxLength: 128,
 } as const;
 
 /** Mensaje único para cualquier falla de login (sin enumeración de RUTs). */

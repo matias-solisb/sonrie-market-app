@@ -1,5 +1,8 @@
 import { retrieveCart } from "@/lib/data/cart"
-import { retrieveCustomer } from "@/lib/data/customer"
+import {
+  redirectIfPasswordChangeRequired,
+  retrieveCustomer,
+} from "@/lib/data/customer"
 import { listCartFreeShippingPrices } from "@/lib/data/fulfillment"
 import { getBaseURL } from "@/lib/util/env"
 import CartMismatchBanner from "@/modules/layout/components/cart-mismatch-banner"
@@ -13,7 +16,16 @@ export const metadata: Metadata = {
   metadataBase: new URL(getBaseURL()),
 }
 
-export default async function PageLayout(props: { children: React.ReactNode }) {
+export default async function PageLayout(props: {
+  children: React.ReactNode
+  params: Promise<{ countryCode: string }>
+}) {
+  // Colaborador con la clave inicial: primero tiene que cambiarla
+  // (rut-auth, paso 6). Va antes de cargar el carrito, que el backend
+  // bloquea mientras el cambio esté pendiente.
+  const { countryCode } = await props.params
+  await redirectIfPasswordChangeRequired(countryCode)
+
   const customer = await retrieveCustomer().catch(() => null)
   const cart = await retrieveCart()
   let freeShippingPrices: StoreFreeShippingPrice[] = []

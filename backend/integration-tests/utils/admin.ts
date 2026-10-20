@@ -4,7 +4,11 @@ import {
 } from "@medusajs/framework/types";
 import { MedusaContainer } from "@medusajs/framework/types";
 import { Modules } from "@medusajs/framework/utils";
-import { computeRutDv, initialPasswordFromRut } from "../../src/utils/rut";
+import {
+  computeRutDv,
+  initialPasswordFromRut,
+  normalizeRut,
+} from "../../src/utils/rut";
 import { ensureSonrieCompany } from "../../src/utils/sonrie-company";
 import { createColaboradorWorkflow } from "../../src/workflows/colaborador/workflows";
 import jwt from "jsonwebtoken";
@@ -77,9 +81,17 @@ Colaboradores de prueba. El autorregistro por API está cerrado
 (src/api/middlewares/self-signup-disabled.ts), así que se crean igual que en
 producción: con el workflow `create-colaborador`, como employees de la
 company única. Después se loguean por la ruta normal (POST
-/auth/customer/rut) con la clave inicial.
+/auth/customer/rut).
+
+Por defecto el colaborador ya cambió la clave inicial (como cualquiera que
+haya entrado una vez): sin eso, el middleware de cambio obligatorio le
+responde 403 a casi toda la Store API. Con `cambiarClave: false` queda
+recién creado, con la clave inicial y el cambio pendiente.
 
 */
+
+/** Clave "ya cambiada" de los colaboradores de prueba (sin dígitos del RUT). */
+export const CLAVE_COLABORADOR = "ClaveDePruebaSegura";
 export const createColaboradorSession = async ({
   api,
   container,
@@ -87,6 +99,7 @@ export const createColaboradorSession = async ({
   rut = rutDePrueba(email),
   first_name = "Test",
   last_name = "User",
+  cambiarClave = true,
 }: {
   api: any;
   container: MedusaContainer;
@@ -94,13 +107,27 @@ export const createColaboradorSession = async ({
   rut?: string;
   first_name?: string;
   last_name?: string;
+  cambiarClave?: boolean;
 }) => {
   const { company } = await ensureSonrieCompany(container);
   const { result } = await createColaboradorWorkflow(container).run({
     input: { company_id: company.id, rut, email, first_name, last_name },
   });
 
-  const password = initialPasswordFromRut(rut);
+  let password = initialPasswordFromRut(rut);
+
+  if (cambiarClave) {
+    const authModule: IAuthModuleService = container.resolve(Modules.AUTH);
+    const { success, error } = await authModule.updateProvider("rut", {
+      entity_id: normalizeRut(rut),
+      password: CLAVE_COLABORADOR,
+    });
+    if (!success) {
+      throw new Error(`No se pudo cambiar la clave de prueba: ${error}`);
+    }
+    password = CLAVE_COLABORADOR;
+  }
+
   const token = (await api.post("/auth/customer/rut", { rut, password })).data
     .token;
 

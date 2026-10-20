@@ -13,16 +13,20 @@ Cada test inicia su propia sesión (no usa el storageState compartido) para no
 afectar a los demás specs.
 
 Variables en .env.e2e:
-- E2E_USER_EMAIL / E2E_USER_PASSWORD      → logout, cookies y validaciones
-- E2E_PWD_USER_EMAIL / E2E_PWD_USER_PASSWORD → usuario DEDICADO al cambio de
+- E2E_USER_RUT / E2E_USER_PASSWORD        → logout, cookies y validaciones
+  (con la clave inicial ya cambiada)
+- E2E_USER_EMAIL (opcional)               → el correo de ese usuario, para
+  revisar que el perfil no se vea después de cerrar sesión
+- E2E_PWD_USER_RUT / E2E_PWD_USER_PASSWORD → usuario DEDICADO al cambio de
   clave (el test le cambia la clave y al final se la restaura)
 - E2E_JWT_SECRET (opcional) → el JWT_SECRET del backend de DEV, para firmar un
   token vencido de verdad. NUNCA el de otro ambiente.
 */
 
+const USER_RUT = process.env.E2E_USER_RUT
 const USER_EMAIL = process.env.E2E_USER_EMAIL
 const USER_PASSWORD = process.env.E2E_USER_PASSWORD
-const PWD_USER_EMAIL = process.env.E2E_PWD_USER_EMAIL
+const PWD_USER_RUT = process.env.E2E_PWD_USER_RUT
 const PWD_USER_PASSWORD = process.env.E2E_PWD_USER_PASSWORD
 const JWT_SECRET = process.env.E2E_JWT_SECRET
 
@@ -32,10 +36,10 @@ test.use({ storageState: { cookies: [], origins: [] } })
 test.describe.configure({ timeout: 120_000 })
 
 // ─── helpers ────────────────────────────────────────────────
-async function loginAs(page: Page, email: string, password: string) {
+async function loginAs(page: Page, rut: string, password: string) {
     const login = new LoginPage(page)
     await login.goto()
-    await login.login(email, password)
+    await login.login(rut, password)
     await expect(page.getByTestId("overview-page-wrapper")).toBeVisible({ timeout: 30_000 })
 }
 
@@ -69,10 +73,10 @@ async function expectNoCrash(page: Page, status: number | undefined) {
 // 1. Cerrar sesión
 // ─────────────────────────────────────────────────────────────
 test.describe("cerrar sesión", () => {
-    test.skip(!USER_EMAIL || !USER_PASSWORD, "Define E2E_USER_EMAIL y E2E_USER_PASSWORD en .env.e2e")
+    test.skip(!USER_RUT || !USER_PASSWORD, "Define E2E_USER_RUT y E2E_USER_PASSWORD en .env.e2e")
 
     test("desde el menú del header borra la cookie y vuelve al login", async ({ page, context }) => {
-        await loginAs(page, USER_EMAIL!, USER_PASSWORD!)
+        await loginAs(page, USER_RUT!, USER_PASSWORD!)
         expect(await authCookie(context)).toBeDefined()
 
         await page.getByTestId("nav-account-menu-button").click()
@@ -84,7 +88,8 @@ test.describe("cerrar sesión", () => {
     })
 
     test('después de cerrar sesión, "Atrás" no vuelve a mostrar datos de la cuenta', async ({ page }) => {
-        await loginAs(page, USER_EMAIL!, USER_PASSWORD!)
+        test.skip(!USER_EMAIL, "Define E2E_USER_EMAIL (correo del usuario de prueba) en .env.e2e")
+        await loginAs(page, USER_RUT!, USER_PASSWORD!)
         await page.goto("/cl/account/profile")
         await expect(page.getByText(USER_EMAIL!).first()).toBeVisible({ timeout: 30_000 })
 
@@ -100,7 +105,7 @@ test.describe("cerrar sesión", () => {
     })
 
     test("después de cerrar sesión, las rutas protegidas piden login", async ({ page }) => {
-        await loginAs(page, USER_EMAIL!, USER_PASSWORD!)
+        await loginAs(page, USER_RUT!, USER_PASSWORD!)
         await page.getByTestId("nav-account-menu-button").click()
         await page.getByTestId("nav-account-menu-logout").click()
         await expect(page.getByTestId("login-page")).toBeVisible({ timeout: 30_000 })
@@ -117,7 +122,7 @@ test.describe("cerrar sesión", () => {
     // sirviendo después del logout. Es un hallazgo de seguridad para revisar,
     // no un error del test.
     test.fixme("el token anterior deja de servir después de cerrar sesión", async ({ page, context }) => {
-        await loginAs(page, USER_EMAIL!, USER_PASSWORD!)
+        await loginAs(page, USER_RUT!, USER_PASSWORD!)
         const oldToken = (await authCookie(context))!.value
 
         await page.getByTestId("nav-account-menu-button").click()
@@ -136,11 +141,12 @@ test.describe("cerrar sesión", () => {
 // 2. Cambio de contraseña desde "Mis Datos"
 // ─────────────────────────────────────────────────────────────
 const MSG = {
-    wrongCurrent: "La contraseña actual no es correcta.",
+    wrongCurrent: "La clave actual no es correcta.",
     success: "Contraseña actualizada correctamente",
     tooShort: "Debe tener al menos 8 caracteres",
     mismatch: "Las contraseñas no coinciden",
-    badCredentials: "Usuario y contraseña no coinciden",
+    badCredentials: "RUT o clave incorrectos",
+    derivedFromRut: "La clave no puede contener números de tu RUT.",
 }
 
 async function openPasswordForm(page: Page) {
@@ -157,8 +163,8 @@ async function fillPasswordForm(page: Page, current: string, next: string, repea
 }
 
 /** Cambia la clave por la UI en un contexto nuevo (para el cambio y la restauración). */
-async function changePasswordViaUi(page: Page, email: string, current: string, next: string) {
-    await loginAs(page, email, current)
+async function changePasswordViaUi(page: Page, rut: string, current: string, next: string) {
+    await loginAs(page, rut, current)
     await openPasswordForm(page)
     await fillPasswordForm(page, current, next)
     await expect(page.getByText(MSG.success).first()).toBeVisible({ timeout: 30_000 })
@@ -166,10 +172,10 @@ async function changePasswordViaUi(page: Page, email: string, current: string, n
 
 test.describe("cambio de contraseña", () => {
     test.describe("validaciones (sin cambiar la clave)", () => {
-        test.skip(!USER_EMAIL || !USER_PASSWORD, "Define E2E_USER_EMAIL y E2E_USER_PASSWORD en .env.e2e")
+        test.skip(!USER_RUT || !USER_PASSWORD, "Define E2E_USER_RUT y E2E_USER_PASSWORD en .env.e2e")
 
         test.beforeEach(async ({ page }) => {
-            await loginAs(page, USER_EMAIL!, USER_PASSWORD!)
+            await loginAs(page, USER_RUT!, USER_PASSWORD!)
             await openPasswordForm(page)
         })
 
@@ -189,6 +195,14 @@ test.describe("cambio de contraseña", () => {
             await expect(page.getByText(MSG.success)).toHaveCount(0)
         })
 
+        test("una clave nueva con números del RUT la rechaza el servidor", async ({ page }) => {
+            const ultimos4 = USER_RUT!.replace(/[.\s]/g, "").split("-")[0].slice(-4)
+            await fillPasswordForm(page, USER_PASSWORD!, `Soprole-${ultimos4}`)
+
+            await expect(page.getByText(MSG.derivedFromRut).first()).toBeVisible({ timeout: 30_000 })
+            await expect(page.getByText(MSG.success)).toHaveCount(0)
+        })
+
         test("si la repetición no coincide se rechaza", async ({ page }) => {
             await fillPasswordForm(page, USER_PASSWORD!, "NuevaClave123", "NuevaClave124")
 
@@ -198,7 +212,7 @@ test.describe("cambio de contraseña", () => {
     })
 
     test.describe("cambio real (usuario dedicado)", () => {
-        test.skip(!PWD_USER_EMAIL || !PWD_USER_PASSWORD, "Define E2E_PWD_USER_EMAIL y E2E_PWD_USER_PASSWORD en .env.e2e")
+        test.skip(!PWD_USER_RUT || !PWD_USER_PASSWORD, "Define E2E_PWD_USER_RUT y E2E_PWD_USER_PASSWORD en .env.e2e")
 
         test("después del cambio, la clave anterior deja de servir y la nueva funciona", async ({ browser }) => {
             const original = PWD_USER_PASSWORD!
@@ -208,7 +222,7 @@ test.describe("cambio de contraseña", () => {
             try {
                 // 1. Cambiar la clave
                 const ctx1 = await browser.newContext()
-                await changePasswordViaUi(await ctx1.newPage(), PWD_USER_EMAIL!, original, next)
+                await changePasswordViaUi(await ctx1.newPage(), PWD_USER_RUT!, original, next)
                 changed = true
                 await ctx1.close()
 
@@ -217,19 +231,19 @@ test.describe("cambio de contraseña", () => {
                 const page2 = await ctx2.newPage()
                 const login = new LoginPage(page2)
                 await login.goto()
-                await login.login(PWD_USER_EMAIL!, original)
+                await login.login(PWD_USER_RUT!, original)
                 await expect(login.serverError).toHaveText(MSG.badCredentials, { timeout: 30_000 })
                 await ctx2.close()
 
                 // 3. La nueva sí
                 const ctx3 = await browser.newContext()
-                await loginAs(await ctx3.newPage(), PWD_USER_EMAIL!, next)
+                await loginAs(await ctx3.newPage(), PWD_USER_RUT!, next)
                 await ctx3.close()
             } finally {
                 // 4. Restaurar la clave original para la próxima ejecución
                 if (changed) {
                     const ctx = await browser.newContext()
-                    await changePasswordViaUi(await ctx.newPage(), PWD_USER_EMAIL!, next, original)
+                    await changePasswordViaUi(await ctx.newPage(), PWD_USER_RUT!, next, original)
                     await ctx.close()
                 }
             }
@@ -264,8 +278,8 @@ test.describe("cookie de sesión inválida", () => {
     })
 
     test("un token con el contenido adulterado (firma inválida) no da acceso", async ({ page, context }) => {
-        test.skip(!USER_EMAIL || !USER_PASSWORD, "Define E2E_USER_EMAIL y E2E_USER_PASSWORD en .env.e2e")
-        await loginAs(page, USER_EMAIL!, USER_PASSWORD!)
+        test.skip(!USER_RUT || !USER_PASSWORD, "Define E2E_USER_RUT y E2E_USER_PASSWORD en .env.e2e")
+        await loginAs(page, USER_RUT!, USER_PASSWORD!)
         const token = (await authCookie(context))!.value
 
         // Cambia el payload sin volver a firmar: la firma deja de calzar.
@@ -282,8 +296,8 @@ test.describe("cookie de sesión inválida", () => {
 
     test("un token vencido (bien firmado) no da acceso", async ({ page, context }) => {
         test.skip(!JWT_SECRET, "Define E2E_JWT_SECRET (JWT_SECRET del backend de DEV) en .env.e2e")
-        test.skip(!USER_EMAIL || !USER_PASSWORD, "Define E2E_USER_EMAIL y E2E_USER_PASSWORD en .env.e2e")
-        await loginAs(page, USER_EMAIL!, USER_PASSWORD!)
+        test.skip(!USER_RUT || !USER_PASSWORD, "Define E2E_USER_RUT y E2E_USER_PASSWORD en .env.e2e")
+        await loginAs(page, USER_RUT!, USER_PASSWORD!)
         const token = (await authCookie(context))!.value
 
         const now = Math.floor(Date.now() / 1000)

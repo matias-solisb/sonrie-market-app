@@ -4,10 +4,11 @@ import {
   newPassword,
   requiredEmail,
   requiredPassword,
+  requiredRut,
 } from "@/lib/validations/common"
 
 export const loginSchema = z.object({
-  email: requiredEmail(),
+  rut: requiredRut(),
   password: requiredPassword(),
 })
 export type LoginFormValues = z.infer<typeof loginSchema>

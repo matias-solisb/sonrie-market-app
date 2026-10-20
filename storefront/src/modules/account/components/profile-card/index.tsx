@@ -68,13 +68,11 @@ tal como pide la referencia. Se pone como hermano después de cada sección
   `lib/validations/auth`): cada error se muestra en su campo.
 - "Cambiar contraseña" valida en el cliente (campos completos, largo
   mínimo, nueva = repetida) y llama al server action
-  `changePassword` (`lib/data/customer.ts`), que primero verifica la
-  "contraseña actual" haciendo un login real contra el provider
-  `emailpass` de Medusa (el endpoint de update NO valida esa contraseña
-  por sí solo — ver el comentario en `changePassword`) y recién ahí
-  actualiza la contraseña. Si la actual está mal, o algo falla, se
-  muestra el error con `toast.error`; si todo sale bien se cierra el
-  formulario y se muestra el toast verde de éxito
+  `changePassword` (`lib/data/customer.ts`). El backend verifica la
+  contraseña actual y la política (largo, sin números del RUT) en
+  `POST /store/customers/me/password`. Si algo falla, el error se marca
+  en el campo que corresponde y además sale en `toast.error`; si todo
+  sale bien se cierra el formulario y se muestra el toast verde de éxito
   (`showSuccessToast`, en `common/components/success-toast`).
 - "Notificaciones": no existe ningún campo de preferencia de
   notificaciones en el customer hoy — el checkbox es solo visual
@@ -170,9 +168,11 @@ const ProfileCard = ({ customer }: { customer: B2BCustomer }) => {
     })
 
     if (result.error) {
-      // El error típico es "contraseña actual incorrecta": se marca en ese
-      // campo además del toast.
-      passwordForm.setError("current_password", { message: result.error })
+      // El backend dice si el problema es la contraseña actual o la nueva
+      // (política); sin campo (sesión vencida, backend caído) solo va el toast.
+      if (result.field) {
+        passwordForm.setError(result.field, { message: result.error })
+      }
       toast.error(result.error)
       return
     }

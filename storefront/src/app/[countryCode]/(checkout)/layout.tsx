@@ -1,14 +1,22 @@
+import { redirectIfPasswordChangeRequired } from "@/lib/data/customer"
 import Footer from "@/modules/layout/templates/footer"
 import { NavigationHeader } from "@/modules/layout/templates/nav"
 
 // Layout del checkout: mismo header y footer que el resto de la tienda
 // (logo, buscador, cuenta, carrito y barra roja de categorías), para que
 // carrito → checkout → pedido confirmado se vean como un solo recorrido.
-export default function CheckoutLayout({
+export default async function CheckoutLayout({
   children,
+  params,
 }: {
   children: React.ReactNode
+  params: Promise<{ countryCode: string }>
 }) {
+  // Igual que en (main)/layout.tsx: sin cambiar la clave inicial no se
+  // llega al checkout (rut-auth, paso 6).
+  const { countryCode } = await params
+  await redirectIfPasswordChangeRequired(countryCode)
+
   return (
     <div className="w-full bg-white relative small:min-h-screen">
       <NavigationHeader />
