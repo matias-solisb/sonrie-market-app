@@ -3,8 +3,9 @@ import type {
   MedusaResponse,
 } from "@medusajs/framework";
 import { IAuthModuleService } from "@medusajs/framework/types";
-import { Modules } from "@medusajs/framework/utils";
+import { ContainerRegistrationKeys, Modules } from "@medusajs/framework/utils";
 import { RUT_AUTH_PROVIDER_ID } from "../../../../../modules/rut-auth/config";
+import { auditAuth, clientIp } from "../../../../../utils/auth-audit";
 import { getRutIdentity } from "../../../../../utils/rut-identity";
 
 /*
@@ -27,6 +28,12 @@ Seguridad del POST:
   body: no se puede cambiar la clave de otra cuenta.
 - La política de clave la aplica el provider en `update`
   (password-policy.ts), igual que en el reset por correo.
+
+Auditoría (paso 10): auth.cambio_clave / auth.cambio_clave_fallido con
+origen "primer_ingreso" o "voluntario". Con una clave actual equivocada,
+además, el provider registra auth.login_fallido con canal "cambio_clave"
+(con el motivo real: clave incorrecta o cuenta bloqueada) y, si corresponde,
+auth.bloqueo: el intento cuenta para el bloqueo.
 
 Ambos métodos quedan abiertos aunque el cambio de clave esté pendiente (ver
 middlewares/account-state.ts), salvo con la cuenta deshabilitada. `/store/customers/me*` ya exige
@@ -75,13 +82,27 @@ export const POST = async (
     return res.status(401).json({ message: "No pudimos identificar tu cuenta." });
   }
 
+  const logger = req.scope.resolve(ContainerRegistrationKeys.LOGGER);
+  const audit = {
+    customer_id: req.auth_context?.actor_id ?? null,
+    origen:
+      identity.state.must_change_password === true ? "primer_ingreso" : "voluntario",
+    ...clientIp(req.headers),
+  };
+
   const authModule = req.scope.resolve<IAuthModuleService>(Modules.AUTH);
 
+  // Sin `url`: el provider lo registra con canal "cambio_clave".
   const verified = await authModule.authenticate(RUT_AUTH_PROVIDER_ID, {
     body: { rut: identity.rut, password: current_password },
+    headers: req.headers,
   } as any);
 
   if (!verified.success) {
+    auditAuth(logger, "auth.cambio_clave_fallido", {
+      ...audit,
+      motivo: "clave_actual_incorrecta",
+    });
     return badRequest(
       res,
       "invalid_current_password",
@@ -90,6 +111,7 @@ export const POST = async (
   }
 
   if (password === current_password) {
+    auditAuth(logger, "auth.cambio_clave_fallido", { ...audit, motivo: "misma_clave" });
     return badRequest(
       res,
       "same_password",
@@ -103,8 +125,10 @@ export const POST = async (
   });
 
   if (!success) {
+    auditAuth(logger, "auth.cambio_clave_fallido", { ...audit, motivo: "politica" });
     return badRequest(res, "password_policy", error ?? "No se pudo cambiar la clave.");
   }
 
+  auditAuth(logger, "auth.cambio_clave", audit);
   res.status(200).json({ success: true });
 };

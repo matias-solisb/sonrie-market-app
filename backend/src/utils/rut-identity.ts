@@ -80,3 +80,27 @@ export const getRutIdentityByCustomer = async (
 
   return { rut: rows[0].entity_id, state };
 };
+
+/**
+ * Customer de un RUT normalizado (para la auditoría del reset: el token del
+ * correo trae el RUT, no el customer). null si no hay identidad o customer.
+ */
+export const getCustomerIdByRut = async (
+  container: MedusaContainer,
+  rut: string
+): Promise<string | null> => {
+  const pg = container.resolve(ContainerRegistrationKeys.PG_CONNECTION);
+  const { rows } = await pg.raw(
+    `select ai.app_metadata->>'customer_id' as customer_id
+       from provider_identity pi
+       join auth_identity ai on ai.id = pi.auth_identity_id
+      where pi.provider = ?
+        and pi.entity_id = ?
+        and pi.deleted_at is null
+        and ai.deleted_at is null
+      limit 1`,
+    [RUT_AUTH_PROVIDER_ID, rut]
+  );
+
+  return rows[0]?.customer_id ?? null;
+};

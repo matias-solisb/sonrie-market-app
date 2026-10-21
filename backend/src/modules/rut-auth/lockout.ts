@@ -39,7 +39,11 @@ export type AttemptResult =
       exists: true;
       /** Ya estaba bloqueada: no se verifica la clave. */
       locked: boolean;
+      /** Este intento la bloqueó (llegó al máximo de fallos). */
+      lockedNow: boolean;
       metadata: RutProviderMetadata;
+      /** Para la auditoría (paso 10); null si la identidad no tiene customer. */
+      customerId: string | null;
     };
 
 const ISO_NOW_PLUS = `to_jsonb(to_char((now() + make_interval(mins => ?)) at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'))`;
@@ -76,7 +80,10 @@ export const registerAttempt = async (
             updated_at = now()
        from prev
       where p.id = prev.id
-     returning ${IS_LOCKED("prev.m")} as was_locked, p.provider_metadata`,
+     returning ${IS_LOCKED("prev.m")} as was_locked, p.provider_metadata,
+               (select ai.app_metadata->>'customer_id'
+                  from auth_identity ai
+                 where ai.id = p.auth_identity_id) as customer_id`,
     [
       RUT_AUTH_PROVIDER_ID,
       rut,
@@ -89,10 +96,15 @@ export const registerAttempt = async (
     return { exists: false };
   }
 
+  const locked = rows[0].was_locked === true;
+  const metadata = rows[0].provider_metadata as RutProviderMetadata;
+
   return {
     exists: true,
-    locked: rows[0].was_locked === true,
-    metadata: rows[0].provider_metadata as RutProviderMetadata,
+    locked,
+    lockedNow: !locked && !!metadata.locked_until,
+    metadata,
+    customerId: rows[0].customer_id ?? null,
   };
 };
 

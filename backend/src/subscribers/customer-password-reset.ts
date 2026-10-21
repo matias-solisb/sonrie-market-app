@@ -12,6 +12,7 @@ import {
   PASSWORD_RESET_TTL_MINUTES,
   renderPasswordResetEmail,
 } from "../utils/email-templates/password-reset"
+import { auditAuth, rutRef } from "../utils/auth-audit"
 import { maskRut } from "../utils/rut"
 
 /*
@@ -41,6 +42,10 @@ Entrega según el ambiente (utils/email-delivery.ts):
 
 Nunca se registra ni se guarda el token fuera del modo "console". El RUT va
 enmascarado.
+
+Auditoría (paso 10): auth.reset_enviado o auth.reset_no_enviado (con
+motivo), con customer_id y el mismo rut_ref de auth.reset_solicitado (ver
+middlewares/reset-password-rut.ts) para unir la solicitud con su resultado.
 
 */
 
@@ -100,18 +105,22 @@ export default async function customerPasswordResetHandler({
   const found = await findCustomerByRut(container, data.entity_id)
   const customer = found?.customer
 
+  const audit = {
+    customer_id: customer?.id ?? null,
+    rut_ref: rutRef(data.entity_id, logger),
+  }
+
   if (!customer?.email) {
-    logger.warn(
-      `[password-reset] RUT ${rutMasked}: sin customer o sin correo; no se envía el enlace.`
-    )
+    auditAuth(logger, "auth.reset_no_enviado", {
+      ...audit,
+      motivo: customer ? "sin_correo" : "sin_customer",
+    })
     return
   }
 
   // Cuenta deshabilitada (paso 9): aunque cambiara la clave no podría entrar.
   if (!found?.enabled) {
-    logger.warn(
-      `[password-reset] RUT ${rutMasked}: cuenta deshabilitada; no se envía el enlace.`
-    )
+    auditAuth(logger, "auth.reset_no_enviado", { ...audit, motivo: "cuenta_deshabilitada" })
     return
   }
 
@@ -122,6 +131,7 @@ export default async function customerPasswordResetHandler({
       `[password-reset] RUT ${rutMasked}: no hay provider de correo configurado (NOTIFICATION_PROVIDER=local en producción). ` +
         "No se envía el enlace ni se registra en el log."
     )
+    auditAuth(logger, "auth.reset_no_enviado", { ...audit, motivo: "correo_no_configurado" })
     return
   }
 
@@ -155,6 +165,8 @@ export default async function customerPasswordResetHandler({
       data: delivery === "console" ? { reset_url: resetUrl } : {},
     },
   ])
+
+  auditAuth(logger, "auth.reset_enviado", { ...audit, entrega: delivery })
 
   if (delivery === "console") {
     // El enlace va FUERA del recuadro, en su propia línea y sin bordes:

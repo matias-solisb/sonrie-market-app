@@ -11,6 +11,7 @@ import { redirect } from "next/navigation"
 import { retrieveCart, updateCart } from "./cart"
 import { checkNewPassword } from "@/lib/util/password-policy"
 import { sessionClosedUrl } from "@/lib/util/session"
+import { forwardedForHeaders } from "@/lib/util/forwarded-for"
 import {
   getAuthHeaders,
   getCacheOptions,
@@ -191,7 +192,20 @@ export async function login(_currentState: unknown, formData: FormData) {
   let mustChangePassword = false
 
   try {
-    const token = await sdk.auth.login("customer", "rut", { rut, password })
+    // Mismo endpoint que sdk.auth.login, pero con la IP del colaborador
+    // (auditoría, paso 10): sdk.auth.login no acepta headers.
+    const { token } = await sdk.client.fetch<{ token?: string }>(
+      "/auth/customer/rut",
+      {
+        method: "POST",
+        body: { rut, password },
+        headers: await forwardedForHeaders(),
+      }
+    )
+
+    if (!token) {
+      throw new Error("Unexpected authentication response")
+    }
 
     track("customer_logged_in")
     await setAuthToken(token as string)
@@ -308,8 +322,11 @@ export async function requestPasswordReset(
   const rut = formData.get("rut") as string
 
   try {
-    await sdk.auth.resetPassword("customer", "rut", {
-      identifier: rut,
+    // Equivale a sdk.auth.resetPassword, más la IP del colaborador.
+    await sdk.client.fetch("/auth/customer/rut/reset-password", {
+      method: "POST",
+      body: { identifier: rut },
+      headers: { accept: "text/plain", ...(await forwardedForHeaders()) },
     })
   } catch (error: any) {
     return {
@@ -365,7 +382,15 @@ export async function resetPassword(
   }
 
   try {
-    await sdk.auth.updateProvider("customer", "rut", { password }, token)
+    // Equivale a sdk.auth.updateProvider, más la IP del colaborador.
+    await sdk.client.fetch("/auth/customer/rut/update", {
+      method: "POST",
+      body: { password },
+      headers: {
+        Authorization: `Bearer ${token}`,
+        ...(await forwardedForHeaders()),
+      },
+    })
   } catch (error: any) {
     return { error: INVALID_RESET_LINK }
   }
@@ -404,6 +429,7 @@ export async function changePassword({
 }): Promise<ChangePasswordResult> {
   const headers = {
     ...(await getAuthHeaders()),
+    ...(await forwardedForHeaders()),
   }
 
   try {

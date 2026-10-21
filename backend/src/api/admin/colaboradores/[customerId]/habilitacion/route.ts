@@ -2,6 +2,8 @@ import type {
   AuthenticatedMedusaRequest,
   MedusaResponse,
 } from "@medusajs/framework";
+import { ContainerRegistrationKeys } from "@medusajs/framework/utils";
+import { auditAuth, clientIp } from "../../../../../utils/auth-audit";
 import { getRutIdentityByCustomer } from "../../../../../utils/rut-identity";
 import { setColaboradorEnabledWorkflow } from "../../../../../workflows/colaborador/workflows";
 import { AdminSetHabilitacionType } from "../../validators";
@@ -13,6 +15,11 @@ Body: { enabled: boolean }
 
 Habilita o deshabilita al colaborador (rut-auth, paso 9). Registra qué
 usuario del Admin hizo el cambio. Ver el workflow set-colaborador-enabled.
+
+Auditoría (paso 10): auth.habilitar / auth.deshabilitar, después de que el
+workflow terminó bien (un cambio revertido no deja evento). Lleva el estado
+anterior: repetir la acción sobre una cuenta que ya estaba así también se
+registra.
 
 */
 export const POST = async (
@@ -35,6 +42,17 @@ export const POST = async (
       actor_id: req.auth_context?.actor_id ?? null,
     },
   });
+
+  auditAuth(
+    req.scope.resolve(ContainerRegistrationKeys.LOGGER),
+    result.enabled ? "auth.habilitar" : "auth.deshabilitar",
+    {
+      customer_id: req.params.customerId,
+      habilitada_antes: identity.state.enabled !== false,
+      actor_id: req.auth_context?.actor_id ?? null,
+      ...clientIp(req.headers),
+    }
+  );
 
   res.json({
     colaborador: {

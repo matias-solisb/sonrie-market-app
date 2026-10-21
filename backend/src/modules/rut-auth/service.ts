@@ -12,6 +12,7 @@ import {
   isString,
   MedusaError,
 } from "@medusajs/framework/utils";
+import { auditAuth, clientIp, colaboradorRef } from "../../utils/auth-audit";
 import { initialPasswordFromRut, normalizeRut } from "../../utils/rut";
 import {
   ACCOUNT_DISABLED_MESSAGE,
@@ -52,6 +53,11 @@ los customers solo con este provider.
                 must_change_password en false y reinicia el lockout (el
                 reset por correo del paso 8 desbloquea la cuenta). No verifica la clave actual:
                 eso lo hace quien llama (POST /store/customers/me/password).
+
+Auditoría (paso 10): authenticate registra auth.login_ok, auth.login_fallido
+(con motivo) y auth.bloqueo; ver utils/auth-audit.ts. El cambio de clave lo
+registran quienes llaman a update (ruta de cambio de clave y middleware del
+reset), porque solo ellos saben el origen.
 
 Hash: argon2id con los parámetros explícitos de config.ts.
 
@@ -156,6 +162,15 @@ class RutAuthProviderService extends AbstractAuthModuleProvider {
       error: INVALID_CREDENTIALS_MESSAGE,
     };
 
+    // Auditoría (paso 10). La ruta HTTP de login del core siempre manda
+    // `url`; POST /store/customers/me/password llama sin `url` para verificar
+    // la clave actual: esos intentos cuentan igual para el bloqueo, pero se
+    // registran con canal "cambio_clave" y sin login_ok.
+    const canal = data.url ? "login" : "cambio_clave";
+    const origin = { canal, ...clientIp(data.headers as any) };
+    const failed = (motivo: string, fields: Record<string, unknown>) =>
+      auditAuth(this.logger_, "auth.login_fallido", { motivo, ...fields, ...origin });
+
     const { password } = data.body ?? {};
     const rut = normalizeRut(data.body?.rut);
 
@@ -166,6 +181,11 @@ class RutAuthProviderService extends AbstractAuthModuleProvider {
       password.length > PASSWORD_POLICY.maxLength
     ) {
       await verifyAgainstDecoy(password);
+      // Con un RUT válido pero sin clave usable, igual se sabe a qué RUT
+      // apuntaba; con un RUT inválido no hay nada que identificar.
+      failed(rut ? "clave_invalida" : "rut_invalido", {
+        ...(rut ? colaboradorRef(null, rut, this.logger_) : { customer_id: null }),
+      });
       return fail;
     }
 
@@ -174,6 +194,7 @@ class RutAuthProviderService extends AbstractAuthModuleProvider {
       attempt = await registerAttempt(this.pg_, rut);
     } catch (error) {
       this.logger_.error(`rut-auth: no se pudo registrar el intento: ${error.message}`);
+      failed("error_interno", colaboradorRef(null, rut, this.logger_));
       return { success: false, error: "No se pudo iniciar sesión" };
     }
 
@@ -181,18 +202,43 @@ class RutAuthProviderService extends AbstractAuthModuleProvider {
     // una clave incorrecta.
     if (!attempt.exists || attempt.locked || !isString(attempt.metadata?.password_hash)) {
       await verifyAgainstDecoy(password);
+
+      if (!attempt.exists) {
+        failed("rut_inexistente", colaboradorRef(null, rut, this.logger_));
+      } else {
+        failed(attempt.locked ? "cuenta_bloqueada" : "sin_clave", {
+          ...colaboradorRef(attempt.customerId, rut, this.logger_),
+          bloqueada_hasta: attempt.metadata?.locked_until ?? null,
+        });
+      }
       return fail;
     }
+
+    const who = colaboradorRef(attempt.customerId, rut, this.logger_);
 
     let valid = false;
     try {
       valid = await verify(attempt.metadata.password_hash, password);
     } catch (error) {
       this.logger_.error(`rut-auth: no se pudo verificar el hash: ${error.message}`);
+      failed("error_interno", who);
       return fail;
     }
 
     if (!valid) {
+      failed("clave_incorrecta", {
+        ...who,
+        intentos_fallidos: attempt.metadata.failed_attempts ?? null,
+      });
+
+      if (attempt.lockedNow) {
+        auditAuth(this.logger_, "auth.bloqueo", {
+          ...who,
+          intentos_fallidos: attempt.metadata.failed_attempts ?? null,
+          bloqueada_hasta: attempt.metadata.locked_until ?? null,
+          ...origin,
+        });
+      }
       return fail;
     }
 
@@ -200,13 +246,20 @@ class RutAuthProviderService extends AbstractAuthModuleProvider {
     await resetAttempts(this.pg_, rut);
 
     if (attempt.metadata.enabled === false) {
+      failed("cuenta_deshabilitada", who);
       return { success: false, error: ACCOUNT_DISABLED_MESSAGE };
     }
 
     try {
       const authIdentity = await authIdentityService.retrieve({ entity_id: rut });
+
+      if (canal === "login") {
+        auditAuth(this.logger_, "auth.login_ok", { ...who, ...origin });
+      }
+
       return { success: true, authIdentity: this.sanitize_(authIdentity) };
     } catch (error) {
+      failed("error_interno", who);
       return { success: false, error: error.message };
     }
   }
