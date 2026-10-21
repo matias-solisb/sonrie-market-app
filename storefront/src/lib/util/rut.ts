@@ -8,6 +8,8 @@ backend es el que manda: esta copia solo adelanta el error en el formulario.
 
 */
 
+import { clean, format } from "rut.js"
+
 const BODY_REGEX = /^[1-9]\d{5,7}$/
 
 /** DV (módulo 11) de un cuerpo de RUT con solo dígitos. */
@@ -94,4 +96,18 @@ export const maskRut = (rut: unknown): string => {
 
   const [body, dv] = normalized.split("-")
   return `${body.slice(0, 2)}${"*".repeat(body.length - 2)}-${dv}`
+}
+
+/**
+ * Formatea el RUT mientras se escribe ("123456785" → "12.345.678-5") con
+ * `rut.js`. Solo da formato, no valida: eso lo hace `normalizeRut` vía zod.
+ * Deja la K únicamente como último carácter y corta en 9 caracteres
+ * (8 de cuerpo + DV).
+ */
+export const formatRutInput = (input: string): string => {
+  const cleaned = clean(input)
+    .replace(/K(?=.)/g, "")
+    .slice(0, 9)
+
+  return cleaned.length > 1 ? format(cleaned) : cleaned
 }

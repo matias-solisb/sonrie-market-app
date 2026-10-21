@@ -13,7 +13,7 @@ import {
   AuthTitle,
 } from "@/modules/account/components/auth-card"
 import ErrorMessage from "@/modules/checkout/components/error-message"
-import { FormTextField } from "@/modules/common/components/form"
+import { FormRutField } from "@/modules/common/components/form"
 import LocalizedClientLink from "@/modules/common/components/localized-client-link"
 
 const initialState: PasswordResetActionState = {}
@@ -64,7 +64,7 @@ const RecoverPasswordForm = () => {
           </AuthText>
 
           <div className="mt-6">
-            <FormTextField
+            <FormRutField
               control={control}
               name="rut"
               label="RUT"

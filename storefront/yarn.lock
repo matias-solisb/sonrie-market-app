@@ -6572,6 +6572,7 @@ __metadata:
     react-hook-form: "npm:^7.53.0"
     react-intersection-observer: "npm:^9.3.4"
     react-markdown: "npm:^9.0.1"
+    rut.js: "npm:^2.1.0"
     server-only: "npm:^0.0.1"
     tailwindcss: "npm:^3.4.1"
     typescript: "npm:^5.5.3"
@@ -8191,6 +8192,13 @@ __metadata:
   dependencies:
     queue-microtask: "npm:^1.2.2"
   checksum: 10/cb4f97ad25a75ebc11a8ef4e33bb962f8af8516bb2001082ceabd8902e15b98f4b84b4f8a9b222e5d57fc3bd1379c483886ed4619367a7680dad65316993021d
+  languageName: node
+  linkType: hard
+
+"rut.js@npm:^2.1.0":
+  version: 2.1.0
+  resolution: "rut.js@npm:2.1.0"
+  checksum: 10/34695eb3af7aa23806c6c1902baac8ca13f2fbd4a301ea5c50af7180da57c7a5db953c6f76d000ccb21fa6b6fdcdbd6b846ddd70f21c01426d63d737e87ae7de
   languageName: node
   linkType: hard
 

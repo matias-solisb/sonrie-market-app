@@ -8,6 +8,7 @@ y `lib/forms/use-action-form` para el estado del formulario, y
 */
 export { FormTextField, type FormTextFieldProps } from "./form-text-field"
 export { FormPasswordField } from "./form-password-field"
+export { FormRutField } from "./form-rut-field"
 export { FormSelectField, type FormSelectOption } from "./form-select-field"
 export { FormReadOnlyField } from "./form-read-only-field"
 export { FormSubmitButton, FormCancelButton } from "./form-buttons"

@@ -12,7 +12,7 @@ import { muiTheme } from "@/lib/mui/theme"
 import { LOGIN_VIEW } from "@/modules/account/templates/login-template"
 import {
   FormPasswordField,
-  FormTextField,
+  FormRutField,
 } from "@/modules/common/components/form"
 import LocalizedClientLink from "@/modules/common/components/localized-client-link"
 import Alert from "@mui/material/Alert"
@@ -77,15 +77,13 @@ const Login = ({ setCurrentView: _setCurrentView, redirectTo }: Props) => {
         <AuthTitle>Bienvenido a Sonríe Market Store</AuthTitle>
 
         <div className="mt-6 flex flex-col gap-y-4">
-          <FormTextField
+          <FormRutField
             control={control}
             name="rut"
             label="RUT"
             placeholder="12.345.678-9"
             autoComplete="username"
-            slotProps={{
-              htmlInput: { "data-testid": "rut-input", inputMode: "text" },
-            }}
+            slotProps={{ htmlInput: { "data-testid": "rut-input" } }}
           />
           <FormPasswordField
             control={control}
