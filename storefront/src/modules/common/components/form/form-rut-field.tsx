@@ -19,6 +19,10 @@ así que no hace falta limpiarlo antes de enviar.
 El formateo asume que el último carácter es el DV, por eso mientras se
 escribe se ve 1.234-5 antes de llegar a 12.345.678-5.
 
+Todo lo que no sea dígito o K se descarta al escribir o pegar: un correo
+queda como campo vacío ("El RUT es requerido") y un RUT pegado con espacios
+queda bien formateado.
+
 */
 export function FormRutField<TValues extends FieldValues>({
   name,
@@ -51,7 +55,9 @@ export function FormRutField<TValues extends FieldValues>({
             // "text" y no "numeric": el DV puede ser K.
             inputMode: "text",
             autoCapitalize: "characters",
-            maxLength: 12, // 12.345.678-5
+            // Sin maxLength: el navegador cortaría lo pegado ANTES de
+            // limpiarlo (" 12.345.678-5 " → " 12.345.678-" → DV incorrecto).
+            // El largo lo limita formatRutInput (9 caracteres limpios).
             ...(slotProps?.htmlInput as object | undefined),
           },
         }}

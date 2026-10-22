@@ -75,7 +75,7 @@ test.describe("solicitar recuperación", () => {
         expect(calls).toHaveLength(0)
     })
 
-    for (const rut of ["12.345.678-4", "matias@quantor.cl", "12345", "12.3a5.678-5"]) {
+    for (const rut of ["12.345.678-4", "12345", "12.3a5.678-5"]) {
         test(`RUT inválido "${rut}" muestra error y no envía`, async ({ page }) => {
             const calls = trackServerActions(page)
 
@@ -85,6 +85,16 @@ test.describe("solicitar recuperación", () => {
             expect(calls).toHaveLength(0)
         })
     }
+
+    test("un correo se borra al escribirlo y no se envía", async ({ page }) => {
+        const calls = trackServerActions(page)
+
+        await recover.request("matias@quantor.cl")
+
+        await expect(recover.rut).toHaveValue("")
+        await expect(recover.fieldError(MSG.rutRequired)).toBeVisible()
+        expect(calls).toHaveLength(0)
+    })
 
     test("RUT existente muestra el mensaje de confirmación", async () => {
         test.skip(!USER_RUT, "Falta E2E_USER_RUT en .env.e2e")

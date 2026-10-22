@@ -99,7 +99,6 @@ test.describe("RUT con formato o DV inválido", () => {
         "12a45678-5",     // letra en el cuerpo
         "99999-9",        // cuerpo demasiado corto
         "123456789-2",    // cuerpo de 9 dígitos
-        "matias@quantor.cl", // un correo (el login anterior)
     ]
 
     for (const rut of invalidRuts) {
@@ -112,6 +111,18 @@ test.describe("RUT con formato o DV inválido", () => {
             expect(calls).toHaveLength(0)
         })
     }
+
+    // El campo descarta todo lo que no sea dígito o K: un correo (el login
+    // anterior) queda vacío y no se envía.
+    test("un correo se borra al escribirlo y no se envía", async ({ page }) => {
+        const calls = trackServerActions(page)
+
+        await login.login("matias@quantor.cl", "cualquiera")
+
+        await expect(login.rut).toHaveValue("")
+        await expect(login.fieldError(MSG.rutRequired)).toBeVisible()
+        expect(calls).toHaveLength(0)
+    })
 
     for (const rut of ["12345678-5", "123456785", " 12.345.678-5 ", "10.000.013-k"]) {
         test(`acepta el formato "${rut}" y lo manda al servidor`, async ({ page }) => {
