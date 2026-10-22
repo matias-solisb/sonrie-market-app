@@ -1,5 +1,6 @@
 import { expect, test, type BrowserContext, type Page } from "@playwright/test"
 import { createHmac } from "node:crypto"
+import { INVALID_CREDENTIALS_MESSAGE } from "./constants"
 import { LoginPage } from "./pages/login-page"
 
 /*
@@ -145,8 +146,7 @@ const MSG = {
     success: "Contraseña actualizada correctamente",
     tooShort: "Debe tener al menos 8 caracteres",
     mismatch: "Las contraseñas no coinciden",
-    badCredentials:
-        "RUT o clave incorrectos. Después de 5 intentos fallidos, la cuenta se bloquea por 15 minutos.",
+    badCredentials: INVALID_CREDENTIALS_MESSAGE,
     derivedFromRut: "La clave no puede contener números de tu RUT.",
 }
 

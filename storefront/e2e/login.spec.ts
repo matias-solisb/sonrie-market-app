@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test"
+import { INVALID_CREDENTIALS_MESSAGE, LOCKOUT } from "./constants"
 import { LoginPage } from "./pages/login-page"
 
 const USER_RUT = process.env.E2E_USER_RUT
@@ -11,8 +12,7 @@ const MSG = {
     rutRequired: "El RUT es requerido",
     rutInvalid: "El RUT no es válido",
     passwordRequired: "La Contraseña es requerida",
-    badCredentials:
-        "RUT o clave incorrectos. Después de 5 intentos fallidos, la cuenta se bloquea por 15 minutos.",
+    badCredentials: INVALID_CREDENTIALS_MESSAGE,
 }
 
 /**
@@ -286,8 +286,8 @@ test.describe("lockout", () => {
         "Define E2E_LOCKOUT_RUT y E2E_LOCKOUT_PASSWORD (usuario dedicado) en .env.e2e"
     )
 
-    test("tras 5 intentos fallidos ni la clave correcta entra, con el mismo mensaje", async ({ page }) => {
-        for (let i = 0; i < 5; i++) {
+    test(`tras ${LOCKOUT.maxFailedAttempts} intentos fallidos ni la clave correcta entra, con el mismo mensaje`, async ({ page }) => {
+        for (let i = 0; i < LOCKOUT.maxFailedAttempts; i++) {
             await login.login(LOCK_RUT!, `ClaveEquivocada${i}`)
             await expect(login.serverError).toHaveText(MSG.badCredentials, { timeout: 30_000 })
             await login.serverError.getByRole("button", { name: /close|cerrar/i }).click()

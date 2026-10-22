@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test"
+import { INVALID_CREDENTIALS_MESSAGE } from "./constants"
 import { LoginPage } from "./pages/login-page"
 import { AdminApi, hasAdmin } from "./utils/admin-api"
 
@@ -17,8 +18,7 @@ const PASSWORD = process.env.E2E_DISABLED_PASSWORD
 
 const MSG = {
     disabled: "Tu cuenta está deshabilitada. Contacta a tu administrador.",
-    badCredentials:
-        "RUT o clave incorrectos. Después de 5 intentos fallidos, la cuenta se bloquea por 15 minutos.",
+    badCredentials: INVALID_CREDENTIALS_MESSAGE,
     sessionClosed: "Tu sesión se cerró",
 }
 

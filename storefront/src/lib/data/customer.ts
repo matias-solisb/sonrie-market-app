@@ -180,9 +180,9 @@ const ACCOUNT_DISABLED_LOGIN_MESSAGE =
   "Tu cuenta está deshabilitada. Contacta a tu administrador."
 
 // El backend no dice si la cuenta está bloqueada (sería revelar que el RUT
-// existe): el aviso va siempre, junto al mensaje de credenciales. Los números
-// son los de LOCKOUT en backend/src/modules/rut-auth/config.ts.
-const INVALID_CREDENTIALS_HELP = `${INVALID_CREDENTIALS}. Después de 5 intentos fallidos, la cuenta se bloquea por 15 minutos.`
+// existe): su mensaje de credenciales trae siempre el aviso de bloqueo, armado
+// con LOCKOUT (backend/src/modules/rut-auth/config.ts). Se muestra tal cual:
+// los números NO se repiten acá.
 
 export async function login(_currentState: unknown, formData: FormData) {
   const rut = formData.get("rut") as string
@@ -251,7 +251,7 @@ export async function login(_currentState: unknown, formData: FormData) {
     const rawMessage = (error?.message ?? error?.toString() ?? "").toLowerCase()
 
     if (rawMessage.includes(INVALID_CREDENTIALS.toLowerCase())) {
-      return INVALID_CREDENTIALS_HELP
+      return error.message as string
     }
 
     // Cuenta deshabilitada: el backend solo lo dice si la clave es correcta
