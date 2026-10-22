@@ -262,7 +262,7 @@ test.describe("flujo completo", () => {
             await expect(login.serverError).toBeVisible({ timeout: 30_000 })
             await login.goto()
             await login.login(RESET_RUT!, nueva)
-            await expect(login.page.getByTestId("overview-page-wrapper")).toBeVisible({ timeout: 30_000 })
+            await login.expectHome()
             await ctx.close()
 
             // El mismo enlace no se puede usar dos veces

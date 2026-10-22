@@ -172,7 +172,7 @@ test.describe("acceso al checkout", () => {
         const loginB = new LoginPage(pageB)
         await loginB.goto()
         await loginB.login(rut2!, password2!)
-        await expect(pageB.getByTestId("overview-page-wrapper")).toBeVisible({ timeout: 30_000 })
+        await loginB.expectHome()
         const { title } = await cartWithOneItem(pageB)
         const cartIdB = (await ctxB.cookies()).find((c) => c.name === "_medusa_cart_id")?.value
         await ctxB.close()

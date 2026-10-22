@@ -1,4 +1,5 @@
 import { retrieveCart } from "@/lib/data/cart"
+import { isProfileBannerDismissed } from "@/lib/data/cookies"
 import {
   enforceAccountState,
   retrieveCustomer,
@@ -6,6 +7,7 @@ import {
 import { listCartFreeShippingPrices } from "@/lib/data/fulfillment"
 import { getBaseURL } from "@/lib/util/env"
 import CartMismatchBanner from "@/modules/layout/components/cart-mismatch-banner"
+import ProfileIncompleteBanner from "@/modules/layout/components/profile-incomplete-banner"
 import Footer from "@/modules/layout/templates/footer"
 import { NavigationHeader } from "@/modules/layout/templates/nav"
 import FreeShippingPriceNudge from "@/modules/shipping/components/free-shipping-price-nudge"
@@ -43,6 +45,14 @@ export default async function PageLayout(props: {
           Sonríe Market. En su lugar, para un customer con categorías, ya
           queda visible justo debajo del header la barra roja de
           "Categorías de productos" que renderiza NavigationHeader. */}
+
+      {/* Datos del perfil que faltan (lib/util/profile-completion.ts). */}
+      {customer && (
+        <ProfileIncompleteBanner
+          customer={customer}
+          initiallyDismissed={await isProfileBannerDismissed(customer.id)}
+        />
+      )}
 
       {customer && cart && (
         <CartMismatchBanner customer={customer} cart={cart} />

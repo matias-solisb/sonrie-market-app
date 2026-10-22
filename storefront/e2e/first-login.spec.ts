@@ -87,12 +87,12 @@ test("después de cambiarla entra a la tienda, y con la clave nueva ya no se le 
     await fill(page, claveInicial(RUT!), NUEVA)
     await expect(page).not.toHaveURL(/cambiar-clave/, { timeout: 30_000 })
 
-    // Otra sesión, con la clave nueva: directo a la cuenta
+    // Otra sesión, con la clave nueva: directo al home
     const ctx = await browser.newContext({ storageState: { cookies: [], origins: [] } })
     const page2 = await ctx.newPage()
     const login = new LoginPage(page2)
     await login.goto()
     await login.login(RUT!, NUEVA)
-    await expect(page2.getByTestId("overview-page-wrapper")).toBeVisible({ timeout: 30_000 })
+    await login.expectHome()
     await ctx.close()
 })

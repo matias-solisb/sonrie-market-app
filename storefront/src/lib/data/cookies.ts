@@ -61,6 +61,39 @@ export const setAuthToken = async (token: string) => {
     sameSite: "strict",
     secure: process.env.NODE_ENV === "production",
   })
+
+  // Cada login empieza con la franja de perfil incompleto visible (si falta
+  // algún dato), aunque en la sesión anterior se hubiera cerrado con la ✕.
+  cookies.delete(PROFILE_BANNER_COOKIE)
+}
+
+/*
+
+Franja de perfil incompleto cerrada con la ✕ (ProfileIncompleteBanner).
+
+Va en una cookie, no en sessionStorage, para que el layout sepa en el
+servidor si mostrarla: así viene en el HTML inicial y no empuja el home hacia
+abajo al aparecer después de hidratar. Cookie de sesión (sin maxAge): se
+pierde al cerrar el navegador; setAuthToken la borra en cada login. Guarda el
+id del customer, para que no aplique a otra cuenta en el mismo navegador.
+
+*/
+const PROFILE_BANNER_COOKIE = "_sonrie_profile_banner_dismissed"
+
+export const isProfileBannerDismissed = async (customerId: string) => {
+  const cookies = await nextCookies()
+
+  return cookies.get(PROFILE_BANNER_COOKIE)?.value === customerId
+}
+
+export const setProfileBannerDismissed = async (customerId: string) => {
+  const cookies = await nextCookies()
+
+  cookies.set(PROFILE_BANNER_COOKIE, customerId, {
+    httpOnly: true,
+    sameSite: "strict",
+    secure: process.env.NODE_ENV === "production",
+  })
 }
 
 export const removeAuthToken = async () => {

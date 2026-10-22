@@ -4,6 +4,7 @@ import { Menu, MenuButton, MenuItem, MenuItems, Transition } from "@headlessui/r
 import { ChevronDownMini, DocumentText, QueueList } from "@medusajs/icons"
 import { HttpTypes } from "@medusajs/types"
 import { signout } from "@/lib/data/customer"
+import { getMissingProfileFields } from "@/lib/util/profile-completion"
 import LocalizedClientLink from "@/modules/common/components/localized-client-link"
 import User from "@/modules/common/icons/user"
 import UserCog from "@/modules/common/icons/user-cog"
@@ -20,6 +21,10 @@ const AccountMenu = ({ customer }: { customer: HttpTypes.StoreCustomer }) => {
     .filter(Boolean)
     .join(" ")
     .toUpperCase()
+
+  // Datos del perfil que faltan: punto junto al nombre y "Completar (n)" en
+  // el ítem Perfil (misma regla que la franja del layout).
+  const missingProfile = getMissingProfileFields(customer)
 
   const handleLogout = async () => {
     await signout(countryCode, customer.id)
@@ -42,7 +47,17 @@ const AccountMenu = ({ customer }: { customer: HttpTypes.StoreCustomer }) => {
         className="flex items-center gap-x-2 text-ui-fg-base hover:text-ui-fg-subtle txt-compact-small-plus"
         data-testid="nav-account-menu-button"
       >
-        <User size={20} />
+        <span className="relative">
+          <User size={20} />
+          {missingProfile.length > 0 && (
+            <span
+              className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full border-2 border-white bg-blue-600"
+              data-testid="nav-account-menu-profile-dot"
+            >
+              <span className="sr-only">Perfil incompleto</span>
+            </span>
+          )}
+        </span>
         <span className="hidden min-[601px]:inline">{displayName}</span>
         <ChevronDownMini />
       </MenuButton>
@@ -84,6 +99,14 @@ const AccountMenu = ({ customer }: { customer: HttpTypes.StoreCustomer }) => {
                 >
                   <UserCog size={18} />
                   Perfil
+                  {missingProfile.length > 0 && (
+                    <span
+                      className="ml-auto rounded-full bg-blue-50 px-2 py-0.5 text-xs font-semibold text-blue-900"
+                      data-testid="nav-account-menu-profile-pending"
+                    >
+                      Completar ({missingProfile.length})
+                    </span>
+                  )}
                 </LocalizedClientLink>
               )}
             </MenuItem>

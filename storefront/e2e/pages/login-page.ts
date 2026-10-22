@@ -38,6 +38,15 @@ export class LoginPage {
         await this.submit.click()
     }
 
+    /**
+     * Login exitoso sin redirect_to: se llega al home (/cl) con sesión
+     * (menú de usuario en el header). Antes se quedaba en /cl/account.
+     */
+    async expectHome(timeout = 30_000) {
+        await expect(this.page).toHaveURL(/\/cl\/?(\?.*)?$/, { timeout })
+        await expect(this.page.getByTestId("nav-account-menu-button")).toBeVisible({ timeout })
+    }
+
     /** Mensaje de error de zod bajo un campo (helperText de MUI). */
     fieldError(text: string) {
         return this.page.getByText(text, { exact: true })

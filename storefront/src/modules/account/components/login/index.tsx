@@ -63,6 +63,11 @@ const Login = ({ setCurrentView: _setCurrentView, redirectTo }: Props) => {
   useEffect(() => {
     if (isPending) {
       setAlertOpen(false)
+      // Si el login funciona, el action hace redirect() al home. Next no
+      // vuelve arriba cuando el inicio del home ya cabe en pantalla
+      // (layout-router: topOfElementInViewport), así que conservaría el
+      // scroll de este formulario y el home aparecería corrido hacia abajo.
+      window.scrollTo({ top: 0 })
     } else if (message) {
       setAlertOpen(true)
       // Junto con la alerta se vacía la contraseña; el RUT se conserva para

@@ -10,7 +10,7 @@ setup("iniciar sesión con el usuario de prueba", async ({ page }) => {
     const login = new LoginPage(page)
     await login.goto()
     await login.login(rut!, password!)
-    await expect(page.getByTestId("overview-page-wrapper")).toBeVisible({ timeout: 30_000 })
+    await login.expectHome()
 
     // Solo la sesión: sin carrito, así cada test arranca con el carrito vacío.
     await page.context().storageState({ path: AUTH_FILE })

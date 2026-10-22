@@ -20,6 +20,7 @@ import {
   removeAuthToken,
   removeCartId,
   setAuthToken,
+  setProfileBannerDismissed,
 } from "./cookies"
 
 export const retrieveCustomer = async (): Promise<B2BCustomer | null> => {
@@ -175,6 +176,11 @@ export const enforceAccountState = async (countryCode: string) => {
   }
 }
 
+// `country_code` viene del formulario y termina en un redirect(): solo se
+// aceptan dos letras. Con "/evil.com" quedaría "//evil.com" (open redirect).
+const safeCountryCode = (value: FormDataEntryValue | null) =>
+  typeof value === "string" && /^[a-z]{2}$/i.test(value) ? value.toLowerCase() : "cl"
+
 const INVALID_CREDENTIALS = "RUT o clave incorrectos"
 const ACCOUNT_DISABLED_LOGIN_MESSAGE =
   "Tu cuenta está deshabilitada. Contacta a tu administrador."
@@ -187,7 +193,7 @@ const ACCOUNT_DISABLED_LOGIN_MESSAGE =
 export async function login(_currentState: unknown, formData: FormData) {
   const rut = formData.get("rut") as string
   const password = formData.get("password") as string
-  const countryCode = (formData.get("country_code") as string) || "cl"
+  const countryCode = safeCountryCode(formData.get("country_code"))
 
   let mustChangePassword = false
 
@@ -276,12 +282,12 @@ export async function login(_currentState: unknown, formData: FormData) {
   }
 
   // Si el middleware nos mandó acá por falta de sesión (home o catálogo
-  // protegidos), volvemos a la página que se quería visitar.
+  // protegidos), volvemos a la página que se quería visitar. Si no, al home:
+  // ahí la franja de perfil incompleto avisa si falta algún dato.
   const redirectTo = getSafeRedirect(formData.get("redirect_to"))
-
-  if (redirectTo) {
-    redirect(redirectTo)
-  }
+  console.log('redirectTo', redirectTo)
+  redirect(redirectTo || `/${countryCode}`)
+  
 }
 
 // Estado que devuelven `requestPasswordReset` y `resetPassword` a
@@ -485,7 +491,7 @@ export async function forcedChangePassword(
   _currentState: ChangePasswordResult,
   formData: FormData
 ): Promise<ChangePasswordResult> {
-  const countryCode = (formData.get("country_code") as string) || "cl"
+  const countryCode = safeCountryCode(formData.get("country_code"))
 
   const result = await changePassword({
     currentPassword: formData.get("current_password") as string,
@@ -527,6 +533,18 @@ export async function signout(countryCode: string, customerId: string) {
   revalidateTag(cartsCacheTag)
 
   redirect(`/${countryCode}/account`)
+}
+
+/**
+ * La ✕ de la franja de perfil incompleto: la oculta por el resto de la
+ * sesión (cookie, ver cookies.ts). El id sale de la sesión, no del cliente.
+ */
+export async function dismissProfileBanner() {
+  const customer = await retrieveCustomer().catch(() => null)
+
+  if (customer) {
+    await setProfileBannerDismissed(customer.id)
+  }
 }
 
 export async function transferCart() {

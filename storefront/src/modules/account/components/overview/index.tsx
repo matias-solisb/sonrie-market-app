@@ -1,5 +1,7 @@
+import { getMissingProfileFields, joinLabels } from "@/lib/util/profile-completion"
 import OrderCard from "@/modules/account/components/order-card"
 import PreviouslyPurchasedProducts from "@/modules/account/components/previously-purchased"
+import LocalizedClientLink from "@/modules/common/components/localized-client-link"
 import { B2BCustomer } from "@/types/global"
 import { HttpTypes } from "@medusajs/types"
 import { Heading } from "@medusajs/ui"
@@ -11,6 +13,8 @@ type OverviewProps = {
 }
 
 const Overview = ({ customer, orders }: OverviewProps) => {
+  const missing = getMissingProfileFields(customer)
+
   return (
     <div data-testid="overview-page-wrapper">
       <div className="hidden small:block">
@@ -31,38 +35,36 @@ const Overview = ({ customer, orders }: OverviewProps) => {
         </div>
         <div className="flex flex-col gap py-8 border-t border-gray-200">
           <div className="flex flex-col gap-y-8 h-full col-span-1 row-span-2 flex-1">
-            <div className="flex items-start gap-x-16 mb-6">
-              <div className="flex flex-col gap-y-4">
-                <h3 className="text-large-semi">Profile</h3>
-                <div className="flex items-end gap-x-2">
-                  <span
-                    className="text-3xl-semi leading-none"
-                    data-testid="customer-profile-completion"
-                    data-value={getProfileCompletion(customer)}
-                  >
-                    {getProfileCompletion(customer)}%
-                  </span>
-                  <span className="uppercase text-base-regular text-ui-fg-subtle">
-                    Completed
-                  </span>
-                </div>
-              </div>
-
-              <div className="flex flex-col gap-y-4">
-                <h3 className="text-large-semi">Addresses</h3>
-                <div className="flex items-end gap-x-2">
-                  <span
-                    className="text-3xl-semi leading-none"
-                    data-testid="addresses-count"
-                    data-value={customer?.addresses?.length || 0}
-                  >
-                    {customer?.addresses?.length || 0}
-                  </span>
-                  <span className="uppercase text-base-regular text-ui-fg-subtle">
-                    Saved
-                  </span>
-                </div>
-              </div>
+            {/* Estado del perfil con la regla de lib/util/profile-completion.ts.
+                Reemplaza el "% completado" y el contador de direcciones del
+                B2B Starter: en Sonríe no hay facturación ni despacho (se
+                retira en un site), así que no aplican. */}
+            <div className="flex flex-col gap-y-2 mb-6">
+              <h3 className="text-large-semi">Perfil</h3>
+              <span
+                className="text-base-regular"
+                data-testid="customer-profile-status"
+                data-value={missing.length ? "incompleto" : "completo"}
+              >
+                {missing.length === 0 ? (
+                  "Completo"
+                ) : (
+                  <>
+                    Falta: <b>{joinLabels(missing)}</b>
+                    {missing.some((f) => f.editable) && (
+                      <>
+                        {" · "}
+                        <LocalizedClientLink
+                          href="/account/profile"
+                          className="font-semibold text-blue-900 underline underline-offset-2"
+                        >
+                          Completar
+                        </LocalizedClientLink>
+                      </>
+                    )}
+                  </>
+                )}
+              </span>
             </div>
 
             <div className="flex flex-col gap-y-4">
@@ -109,36 +111,6 @@ const Overview = ({ customer, orders }: OverviewProps) => {
       </div>
     </div>
   )
-}
-
-const getProfileCompletion = (customer: B2BCustomer | null) => {
-  let count = 0
-
-  if (!customer) {
-    return 0
-  }
-
-  if (customer.email) {
-    count++
-  }
-
-  if (customer.first_name && customer.last_name) {
-    count++
-  }
-
-  if (customer.phone) {
-    count++
-  }
-
-  const billingAddress = customer.addresses?.find(
-    (addr) => addr.is_default_billing
-  )
-
-  if (billingAddress) {
-    count++
-  }
-
-  return (count / 4) * 100
 }
 
 export default Overview

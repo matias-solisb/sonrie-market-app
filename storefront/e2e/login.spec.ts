@@ -222,10 +222,10 @@ test.describe("login exitoso", () => {
         "Define E2E_USER_RUT y E2E_USER_PASSWORD en .env.e2e"
     )
 
-    test("entra a la cuenta y deja la cookie de sesión", async ({ page, context }) => {
+    test("entra al home (/cl) y deja la cookie de sesión", async ({ page, context }) => {
         await login.login(USER_RUT!, USER_PASSWORD!)
 
-        await expect(page.getByTestId("overview-page-wrapper")).toBeVisible()
+        await login.expectHome()
 
         const cookies = await context.cookies()
         const jwt = cookies.find((c) => c.name === "_medusa_jwt")
@@ -245,13 +245,13 @@ test.describe("login exitoso", () => {
     })
 
     // getSafeRedirect() solo acepta rutas internas: "/..." sin "//" ni "://"
-    // Estos dos los rechaza → no hay redirección y se ve la cuenta.
+    // Estos dos los rechaza → no hay redirección y se llega al home.
     for (const evil of ["https://evil.com", "//evil.com"]) {
         test(`no redirige fuera del sitio con redirect_to=${evil}`, async ({ page }) => {
             await login.goto(evil)
             await login.login(USER_RUT!, USER_PASSWORD!)
 
-            await expect(page.getByTestId("overview-page-wrapper")).toBeVisible({ timeout: 30_000 })
+            await login.expectHome()
             expect(new URL(page.url()).host).toBe("localhost:8000")
         })
     }
@@ -296,6 +296,8 @@ test.describe("lockout", () => {
         await login.login(LOCK_RUT!, LOCK_PASSWORD!)
 
         await expect(login.serverError).toHaveText(MSG.badCredentials, { timeout: 30_000 })
-        await expect(page.getByTestId("overview-page-wrapper")).toHaveCount(0)
+        // Sin sesión: el header no muestra el menú de usuario (el login exitoso ya no
+        // queda en /account, así que mirar el dashboard no probaría nada).
+        await expect(page.getByTestId("nav-account-menu-button")).toHaveCount(0)
     })
 })

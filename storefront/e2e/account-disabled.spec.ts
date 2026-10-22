@@ -52,7 +52,7 @@ test("con la sesión abierta, al deshabilitarlo se cierra la sesión y ve el avi
     const login = new LoginPage(page)
     await login.goto()
     await login.login(RUT!, PASSWORD!)
-    await expect(page.getByTestId("overview-page-wrapper")).toBeVisible({ timeout: 30_000 })
+    await login.expectHome()
 
     await setEnabled(admin, false)
 
@@ -71,7 +71,9 @@ test("deshabilitado: con la clave correcta ve el aviso; con una incorrecta, el m
 
     await login.login(RUT!, PASSWORD!)
     await expect(login.serverError).toHaveText(MSG.disabled, { timeout: 30_000 })
-    await expect(page.getByTestId("overview-page-wrapper")).toHaveCount(0)
+    // Sin sesión: el header no muestra el menú de usuario (el login exitoso ya no
+    // queda en /account, así que mirar el dashboard no probaría nada).
+    await expect(page.getByTestId("nav-account-menu-button")).toHaveCount(0)
     await login.serverError.getByRole("button", { name: /close|cerrar/i }).click()
 
     await login.login(RUT!, "ClaveEquivocada123")
@@ -85,5 +87,5 @@ test("habilitado de nuevo, entra con la misma clave", async ({ page, request }) 
     await login.goto()
     await login.login(RUT!, PASSWORD!)
 
-    await expect(page.getByTestId("overview-page-wrapper")).toBeVisible({ timeout: 30_000 })
+    await login.expectHome()
 })

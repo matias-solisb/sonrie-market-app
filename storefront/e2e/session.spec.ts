@@ -41,7 +41,7 @@ async function loginAs(page: Page, rut: string, password: string) {
     const login = new LoginPage(page)
     await login.goto()
     await login.login(rut, password)
-    await expect(page.getByTestId("overview-page-wrapper")).toBeVisible({ timeout: 30_000 })
+    await login.expectHome()
 }
 
 async function authCookie(context: BrowserContext) {
