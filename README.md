@@ -48,7 +48,7 @@
 
 ⚠️ We have tested this repo with the below versions:
 
-- ✅ Node 20
+- ✅ Node 24.22.1 o superior. Mínimos: 22.23.4 / 24.22.1 / 26.12.1, por las [security releases de oct-2026](https://nodejs.org/en/blog/vulnerability/october-2026-security-releases)
 - ✅ Postgres 15
 - ✅ Medusa 2.4
 - ✅ Next.js 15
