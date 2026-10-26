@@ -103,6 +103,9 @@ export const maskRut = (rut: unknown): string => {
  * `rut.js`. Solo da formato, no valida: eso lo hace `normalizeRut` vía zod.
  * Deja la K únicamente como último carácter y corta en 9 caracteres
  * (8 de cuerpo + DV).
+ *
+ * El backend tiene su equivalente sin rut.js (backend/src/utils/rut.ts, lo
+ * usa el campo RUT del Admin): si cambias esta regla, cambia también esa.
  */
 export const formatRutInput = (input: string): string => {
   const cleaned = clean(input)

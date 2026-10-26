@@ -1,5 +1,6 @@
 import {
   computeRutDv,
+  formatRutInput,
   initialPasswordFromRut,
   isValidRut,
   maskRut,
@@ -119,5 +120,44 @@ describe("maskRut", () => {
     expect(maskRut("hola")).toBe("[rut-invalido]");
     expect(maskRut("12.345.678-4")).toBe("[rut-invalido]");
     expect(maskRut(undefined as any)).toBe("[rut-invalido]");
+  });
+});
+
+/*
+formatRutInput: mismos resultados que el campo RUT del login
+(storefront/src/lib/util/rut.ts, con rut.js). Los esperados salen de rut.js
+2.1.0; además se comparó contra rut.js con 200.000 entradas al azar, sin
+diferencias.
+*/
+describe("formatRutInput", () => {
+  it.each([
+    ["", ""],
+    ["1", "1"],
+    ["12", "1-2"],
+    ["12345", "1.234-5"],
+    ["123456785", "12.345.678-5"],
+    ["12.345.678-5", "12.345.678-5"],
+    [" 12.345.678-5 ", "12.345.678-5"],
+    ["12345678-5", "12.345.678-5"],
+    ["7654321-6", "7.654.321-6"],
+    ["10000013k", "10.000.013-K"],
+    ["10.000.013-k", "10.000.013-K"],
+    ["1K2", "1-2"],
+    ["juana.perez@sonriemarket.cl", "K"],
+    ["1234567890", "12.345.678-9"],
+    ["0012345678-5", "12.345.678-5"],
+    [".0012", "1-2"],
+  ])("%j → %j", (input, expected) => {
+    expect(formatRutInput(input)).toBe(expected);
+  });
+
+  it("el resultado formateado de un RUT válido lo acepta normalizeRut", () => {
+    expect(normalizeRut(formatRutInput("100000136"))).toBeNull();
+    expect(normalizeRut(formatRutInput("10000013K"))).toBe("10000013-K");
+    expect(normalizeRut(formatRutInput("123456785"))).toBe("12345678-5");
+  });
+
+  it("no revienta con algo que no es texto", () => {
+    expect(formatRutInput(undefined as any)).toBe("");
   });
 });

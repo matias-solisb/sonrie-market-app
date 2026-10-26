@@ -41,6 +41,7 @@ export type AuthAuditEvent =
   | "auth.reset_no_enviado"
   | "auth.habilitar"
   | "auth.deshabilitar"
+  | "auth.alta"
 
 type Headers = Record<string, string | string[] | undefined> | undefined
 

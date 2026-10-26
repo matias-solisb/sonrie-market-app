@@ -38,10 +38,16 @@ No crea la fila de benefit-budget: el checkout la crea si no existe y el
 job diario `benefit-budget-period` abre el mes para todos.
 
 La idempotencia (no duplicar si el colaborador ya existe) la resuelve quien
-llama — ver src/scripts/alta-colaborador.ts —, porque este workflow es la
-unidad que reusarán bulk-import y employee-sync.
+llama — ver src/utils/colaborador-alta.ts, que usan el script y el Admin —,
+porque este workflow es la unidad que reusarán bulk-import y employee-sync.
+
+`origen` queda en `customer.metadata.origen`: de dónde salió la cuenta
+("manual" = script o Admin; "bulk" / "sync" = carga masiva y sincronización).
+Sirve para que employee-sync distinga las altas manuales de las de nómina.
 
 */
+
+export type ColaboradorOrigen = "manual" | "bulk" | "sync";
 
 export type CreateColaboradorInput = {
   company_id: string;
@@ -50,6 +56,8 @@ export type CreateColaboradorInput = {
   first_name: string;
   last_name: string;
   phone?: string | null;
+  /** Por defecto "manual". */
+  origen?: ColaboradorOrigen;
 };
 
 export const createColaboradorWorkflow = createWorkflow(
@@ -65,11 +73,12 @@ export const createColaboradorWorkflow = createWorkflow(
 
     const authIdentityId = registerRutIdentityStep({ rut: data.rut });
 
-    const customerData = transform({ data }, ({ data }) => ({
+    const customerData = transform({ data, input }, ({ data, input }) => ({
       email: data.email,
       first_name: data.first_name,
       last_name: data.last_name,
       phone: data.phone,
+      metadata: { origen: input.origen ?? "manual" },
     }));
 
     const customer = createCustomerAccountWorkflow.runAsStep({

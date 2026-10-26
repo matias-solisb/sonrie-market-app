@@ -106,3 +106,37 @@ export const maskRut = (rut: unknown): string => {
   const [body, dv] = normalized.split("-");
   return `${body.slice(0, 2)}${"*".repeat(body.length - 2)}-${dv}`;
 };
+
+/**
+ * Formatea el RUT mientras se escribe ("123456785" → "12.345.678-5"). Solo da
+ * formato, no valida: eso lo hace `normalizeRut`. Lo usa el campo RUT del
+ * Admin (widget "Alta de colaborador").
+ *
+ * Mismo resultado que `formatRutInput` del storefront
+ * (storefront/src/lib/util/rut.ts), que usa `clean` + `format` de rut.js; acá
+ * se replica sin la dependencia:
+ *
+ * - descarta todo lo que no sea dígito o K (al escribir o pegar) y los ceros
+ *   con que empieza el texto (igual que `clean` de rut.js);
+ * - deja la K solo como último carácter;
+ * - corta en 9 caracteres (8 de cuerpo + DV);
+ * - asume que el último carácter es el DV, por eso mientras se escribe se ve
+ *   1.234-5 antes de llegar a 12.345.678-5.
+ */
+export const formatRutInput = (input: string): string => {
+  const cleaned = (typeof input === "string" ? input : "")
+    .replace(/^0+|[^0-9kK]+/g, "")
+    .toUpperCase()
+    .replace(/K(?=.)/g, "")
+    .slice(0, 9);
+
+  if (cleaned.length <= 1) {
+    return cleaned;
+  }
+
+  // rut.js `format` vuelve a limpiar: quita los ceros que quedaron al inicio
+  // después de sacar lo demás (".0012" → "1-2").
+  const rut = cleaned.replace(/^0+/, "");
+  const body = rut.slice(0, -1).replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+  return `${body}-${rut.slice(-1)}`;
+};

@@ -28,6 +28,25 @@ async function gotoProducts(page: Page, query = "") {
     await page.goto(`/cl/products${query}`)
     await expect(page.getByTestId("products-count").or(page.getByTestId("empty-products-state")).first())
         .toBeVisible({ timeout: 30_000 })
+    await waitForHydration(page)
+}
+
+/*
+El contador de productos viene renderizado desde el servidor: se ve antes de
+que React tome la página. Un clic o un `fill` en ese momento se pierde (el
+link aún no navega con el router, el input no actualiza el estado). Se espera
+a que React haya enganchado el buscador del header, que está en todas las
+páginas de la tienda.
+*/
+async function waitForHydration(page: Page) {
+    await page.waitForFunction(
+        () => {
+            const form = document.querySelector('[data-testid="nav-search-form"]')
+            return !!form && Object.keys(form).some((k) => k.startsWith("__reactProps"))
+        },
+        undefined,
+        { timeout: 30_000 }
+    )
 }
 
 /** "8 productos encontrados" → 8 (0 si aparece el estado vacío). */

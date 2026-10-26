@@ -250,9 +250,10 @@ test.describe("login exitoso", () => {
 
         await login.login(USER_RUT!, USER_PASSWORD!)
 
-        // redirect() renderiza /cl/store en la misma respuesta; en `next dev`
-        // la primera vez se compila la ruta, por eso el margen extra.
-        await expect(page).toHaveURL(/\/cl\/store/, { timeout: 30_000 })
+        // El login vuelve a /cl/store, que hoy es solo un redirect a
+        // /cl/products (ver app/[countryCode]/(main)/store/page.tsx).
+        // En `next dev` la primera vez se compila la ruta: margen extra.
+        await expect(page).toHaveURL(/\/cl\/(store|products)(\?|$)/, { timeout: 30_000 })
     })
 
     // getSafeRedirect() solo acepta rutas internas: "/..." sin "//" ni "://"

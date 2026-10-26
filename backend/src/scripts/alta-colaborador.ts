@@ -1,17 +1,16 @@
-import { ExecArgs, IAuthModuleService, MedusaContainer } from "@medusajs/framework/types";
-import { ContainerRegistrationKeys, Modules } from "@medusajs/framework/utils";
-import { RUT_AUTH_PROVIDER_ID } from "../modules/rut-auth/config";
-import { isValidEmail, normalizeEmail } from "../utils/email";
+import { ExecArgs, MedusaContainer } from "@medusajs/framework/types";
+import { ContainerRegistrationKeys } from "@medusajs/framework/utils";
+import { altaColaborador as alta, linkEmployee } from "../utils/colaborador-alta";
 import { maskRut, normalizeRut } from "../utils/rut";
 import { ensureSonrieCompany } from "../utils/sonrie-company";
-import { createColaboradorWorkflow } from "../workflows/colaborador/workflows";
-import { createEmployeesWorkflow } from "../workflows/employee/workflows";
 
 /*
 
-Alta manual de colaboradores, mientras no exista bulk-import.
-Reemplaza los `curl` de "dev-crear-usuario-prueba-storefront". Idempotente
-por RUT.
+Alta manual de colaboradores desde la consola del backend. Lo mismo que
+Admin → Clientes → "Alta de colaborador" (misma lógica:
+src/utils/colaborador-alta.ts). Reemplaza los `curl` de
+"dev-crear-usuario-prueba-storefront". Idempotente por RUT. Las cuentas
+quedan con `metadata.origen = "manual"`.
 
   # crea la company única (si falta) y un colaborador
   npx medusa exec ./src/scripts/alta-colaborador.ts 12.345.678-5 juana.perez@sonriemarket.cl Juana "Pérez Soto"
@@ -31,49 +30,6 @@ Manual de uso: docs/manual-usuarios.md.
 */
 
 type Logger = { info: (m: string) => void; warn: (m: string) => void };
-
-/** Customer (con su employee) vinculado a la identidad `rut` de ese RUT. */
-const findByRut = async (container: MedusaContainer, rut: string) => {
-  const authModule = container.resolve<IAuthModuleService>(Modules.AUTH);
-  const [providerIdentity] = await authModule.listProviderIdentities({
-    provider: RUT_AUTH_PROVIDER_ID,
-    entity_id: rut,
-  });
-
-  if (!providerIdentity) {
-    return null;
-  }
-
-  const authIdentity = await authModule.retrieveAuthIdentity(
-    providerIdentity.auth_identity_id!
-  );
-  const customerId = authIdentity.app_metadata?.customer_id as string | undefined;
-
-  if (!customerId) {
-    return { customer: null };
-  }
-
-  const query = container.resolve(ContainerRegistrationKeys.QUERY);
-  const { data } = await query.graph({
-    entity: "customer",
-    fields: ["id", "email", "employee.id"],
-    filters: { id: customerId },
-  });
-  return { customer: data[0] ?? null };
-};
-
-const linkEmployee = (container: MedusaContainer, customerId: string, companyId: string) =>
-  createEmployeesWorkflow(container).run({
-    input: {
-      customerId,
-      employeeData: {
-        customer_id: customerId,
-        company_id: companyId,
-        spending_limit: 0,
-        is_admin: false,
-      },
-    },
-  });
 
 const vincularExistentes = async (
   container: MedusaContainer,
@@ -131,49 +87,36 @@ export default async function altaColaborador({ container, args }: ExecArgs) {
     return;
   }
 
-  const rut = normalizeRut(rutArg);
+  const masked = maskRut(normalizeRut(rutArg) ?? rutArg);
+  const result = await alta(container, {
+    rut: rutArg,
+    email,
+    first_name,
+    last_name,
+    origen: "manual",
+  });
 
-  if (!rut) {
-    logger.warn(`✘ RUT inválido (formato o dígito verificador). No se creó nada.`);
-    return;
-  }
-
-  if (!isValidEmail(normalizeEmail(email))) {
-    logger.warn(`✘ Correo inválido: "${email}". No se creó nada.`);
-    return;
-  }
-
-  const existing = await findByRut(container, rut);
-
-  if (existing?.customer?.employee?.id) {
-    logger.info(`RUT ${maskRut(rut)} ya existe y tiene employee; no se hace nada.`);
-    return;
-  }
-
-  if (existing?.customer) {
-    await linkEmployee(container, existing.customer.id, company.id);
-    logger.info(`✔ RUT ${maskRut(rut)} ya existía sin employee: vinculado a la company.`);
-    return;
-  }
-
-  if (existing) {
-    logger.warn(
-      `✘ RUT ${maskRut(rut)} tiene identidad pero ningún customer vinculado. Revisar a mano; no se creó nada.`
-    );
-    return;
-  }
-
-  try {
-    const { result } = await createColaboradorWorkflow(container).run({
-      input: { company_id: company.id, rut, email, first_name, last_name },
-    });
-
-    logger.info(
-      `✔ Colaborador RUT ${maskRut(rut)} creado (customer ${result.customer.id}, employee ${result.employee.id}). ` +
-        "Clave inicial: últimos 4 dígitos del RUT; se le pedirá cambiarla al primer ingreso."
-    );
-  } catch (e: any) {
-    // El workflow ya revirtió lo creado: no quedan cuentas a medias.
-    logger.warn(`✘ No se creó el colaborador: ${e?.message ?? e}`);
+  switch (result.status) {
+    case "creado":
+      logger.info(
+        `✔ Colaborador RUT ${masked} creado (customer ${result.customer_id}, employee ${result.employee_id}). ` +
+          "Clave inicial: últimos 4 dígitos del RUT; se le pedirá cambiarla al primer ingreso."
+      );
+      return;
+    case "vinculado":
+      logger.info(`✔ RUT ${masked} ya existía sin employee: vinculado a la company.`);
+      return;
+    case "ya_existe":
+      logger.info(`RUT ${masked} ya existe y tiene employee; no se hace nada.`);
+      return;
+    case "revisar":
+      logger.warn(`✘ RUT ${masked}: ${result.message} No se creó nada.`);
+      return;
+    case "invalido":
+      logger.warn(`✘ ${result.message} No se creó nada.`);
+      return;
+    case "error":
+      logger.warn(`✘ No se creó el colaborador: ${result.message}`);
+      return;
   }
 }

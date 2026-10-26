@@ -34,7 +34,9 @@ export const GET = async (req: AuthenticatedMedusaRequest, res: MedusaResponse) 
       })
     : { data: [] as any[] };
 
-  const byId = new Map<string, any>(users.map((u: any) => [u.id, u]));
+  const byId = new Map<string, any>(
+    users.map((u: any): [string, any] => [u.id, u])
+  );
   const names = await siteNames(req);
 
   res.json({

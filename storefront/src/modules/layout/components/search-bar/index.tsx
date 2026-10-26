@@ -12,7 +12,11 @@ const SearchBar = () => {
   const handleSubmit = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault()
 
-    const trimmed = query.trim()
+    // Se lee del formulario y no del estado: si alguien escribe antes de que
+    // React termine de hidratar, el DOM tiene el texto pero `query` sigue
+    // vacío, y la búsqueda se perdía (hallazgo del E2E de búsqueda).
+    const value = new FormData(e.currentTarget).get("q")
+    const trimmed = typeof value === "string" ? value.trim() : ""
     const search = trimmed ? `?q=${encodeURIComponent(trimmed)}` : ""
 
     router.push(`/${countryCode}/products${search}`)

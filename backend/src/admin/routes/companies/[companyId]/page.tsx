@@ -2,19 +2,17 @@ import { ExclamationCircle } from "@medusajs/icons";
 import {
   Avatar,
   Badge,
+  Button,
   Container,
   Heading,
   Table,
   Text,
 } from "@medusajs/ui";
 import { QueryEmployee } from "../../../../types";
-import { useParams } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 import { useAdminCustomerGroups, useCompany } from "../../../hooks/api";
 import { CompanyActionsMenu } from "../components";
-import {
-  EmployeeCreateDrawer,
-  EmployeesActionsMenu,
-} from "../components/employees";
+import { EmployeesActionsMenu } from "../components/employees";
 
 const CompanyDetails = () => {
   const { companyId } = useParams();
@@ -146,7 +144,12 @@ const CompanyDetails = () => {
                   Employees
                 </Heading>
               </div>
-              <EmployeeCreateDrawer company={company} />
+              {/* El alta de colaboradores está en Clientes ("Alta de
+                  colaborador"): el "Add" del B2B Starter creaba customers sin
+                  identidad RUT y POST /admin/customers está bloqueado. */}
+              <Button variant="secondary" size="small" asChild>
+                <Link to="/customers">Alta en Clientes</Link>
+              </Button>
             </div>
             {company?.employees && company?.employees.length > 0 ? (
               <Table>

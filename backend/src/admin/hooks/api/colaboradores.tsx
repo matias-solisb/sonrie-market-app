@@ -5,8 +5,9 @@ import { queryKeysFactory } from "../../lib/query-key-factory";
 
 /*
 
-Cuenta del colaborador (rut-auth, paso 9): estado y habilitación.
+Cuenta del colaborador: alta, estado y habilitación.
 
+POST /admin/colaboradores                           { rut, email, first_name, last_name, phone? }
 GET  /admin/colaboradores/:customerId
 POST /admin/colaboradores/:customerId/habilitacion  { enabled }
 
@@ -54,6 +55,40 @@ export const useSetColaboradorHabilitacion = (customerId: string) => {
       queryClient.invalidateQueries({
         queryKey: colaboradorQueryKey.detail(customerId),
       });
+    },
+  });
+};
+
+export type AdminAltaColaboradorBody = {
+  rut: string;
+  email: string;
+  first_name: string;
+  last_name: string;
+  phone?: string | null;
+};
+
+export type AdminAltaColaboradorResponse = {
+  colaborador: {
+    status: "creado" | "vinculado";
+    customer_id: string;
+    employee_id: string;
+  };
+};
+
+export const useAltaColaborador = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation<AdminAltaColaboradorResponse, FetchError, AdminAltaColaboradorBody>({
+    mutationFn: (body) =>
+      sdk.client.fetch(`/admin/colaboradores`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body,
+      }),
+    onSuccess: () => {
+      // Lista de Clientes del core ("customers") y la propia ("customer").
+      queryClient.invalidateQueries({ queryKey: ["customers"] });
+      queryClient.invalidateQueries({ queryKey: ["customer"] });
     },
   });
 };

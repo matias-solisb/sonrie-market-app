@@ -1,5 +1,3 @@
-import { defineRouteConfig } from "@medusajs/admin-sdk";
-import { BuildingStorefront } from "@medusajs/icons";
 import {
   Avatar,
   Badge,
@@ -87,9 +85,11 @@ const Companies = () => {
   );
 };
 
-export const config = defineRouteConfig({
-  label: "Companies",
-  icon: BuildingStorefront,
-});
-
+/*
+Sin `config` (defineRouteConfig): Companies no aparece en el menú lateral.
+Sonríe Market tiene una sola company (Soprole, ver utils/sonrie-company.ts)
+y los colaboradores se dan de alta en Clientes ("Alta de colaborador").
+La ruta sigue existiendo (/app/companies): el detalle de un quote enlaza a
+/companies/:id y ahí está la configuración de aprobaciones de la company.
+*/
 export default Companies;
