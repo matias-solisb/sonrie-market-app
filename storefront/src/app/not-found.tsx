@@ -2,6 +2,7 @@ import { Metadata } from "next"
 import Image from "next/image"
 import Link from "next/link"
 import { SONRIE_LOGO_URL } from "@/lib/constants"
+import NotFoundContent from "@/modules/common/components/not-found-content"
 
 export const metadata: Metadata = {
   title: "404",
@@ -106,23 +107,7 @@ export default function NotFound() {
         </a>
       </header>
 
-      <div className="flex flex-1 flex-col items-center px-6 pt-16 text-center sm:pt-4">
-        <h1 className="text-2xl-semi text-ui-fg-base sm:text-3xl-semi">
-          ¡Lo siento, página no encontrada!
-        </h1>
-        <p className="mt-4 max-w-md text-base-regular text-ui-fg-subtle">
-          Lo sentimos, no pudimos encontrar la página que estás buscando.
-          ¿Quizás has escrito mal la URL? Asegúrate de revisar tu ortografía.
-        </p>
-
-        <Link
-          href="/"
-          className="mt-12 flex h-11 items-center justify-center rounded-md bg-gray-900 px-8 font-semibold text-white hover:bg-gray-800"
-          data-testid="not-found-home-link"
-        >
-          Ir a Inicio
-        </Link>
-      </div>
+      <NotFoundContent className="pt-16 sm:pt-4" />
     </div>
   )
 }

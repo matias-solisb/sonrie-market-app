@@ -26,7 +26,7 @@ export const GET = async (
   const companyId = customer?.employee?.company?.id as string;
 
   if (!companyId) {
-    return res.json({ approvals: [], count: 0 });
+    return res.json({ carts_with_approvals: [], count: 0 });
   }
 
   const {
@@ -48,11 +48,20 @@ export const GET = async (
     return res.json({ carts_with_approvals: [], count: 0 });
   }
 
+  // Vulnerabilidad #1: cada colaborador ve solo SUS carritos en aprobación.
+  // Antes se devolvían los de toda la company (vista de company_admin); la
+  // gestión de aprobaciones de todos queda solo en el Admin (/admin/approvals).
+  const ownCarts = company.carts.filter(
+    (cart) => cart !== undefined && cart !== null && cart.customer_id === customer_id
+  );
+
+  if (!ownCarts.length) {
+    return res.json({ carts_with_approvals: [], count: 0 });
+  }
+
   const { status } = req.validatedQuery || {};
 
-  const cartIds = company.carts
-    .filter((cart) => cart !== undefined && cart !== null)
-    .map((cart) => cart.id);
+  const cartIds = ownCarts.map((cart) => cart!.id);
 
   let approvalStatusFilters: any = {
     cart_id: cartIds,
@@ -84,7 +93,7 @@ export const GET = async (
     },
   });
 
-  const cartsWithAdminApprovals = company.carts
+  const cartsWithAdminApprovals = ownCarts
     .map((cart) => {
       const cartApprovals = approvals.filter(
         (approval) => approval.cart_id === cart?.id

@@ -1,5 +1,5 @@
 import { HttpTypes } from "@medusajs/framework/types";
-import { Link, LockClosedSolid, PencilSquare, Trash } from "@medusajs/icons";
+import { Link, PencilSquare, Trash } from "@medusajs/icons";
 import { toast } from "@medusajs/ui";
 import { QueryCompany } from "../../../../types";
 import { useState } from "react";
@@ -7,11 +7,11 @@ import { useNavigate } from "react-router-dom";
 import { ActionMenu } from "../../../components/common";
 import { DeletePrompt } from "../../../components/common/delete-prompt";
 import { useDeleteCompany } from "../../../hooks/api";
-import {
-  CompanyApprovalSettingsDrawer,
-  CompanyCustomerGroupDrawer,
-  CompanyUpdateDrawer,
-} from "./";
+import { CompanyCustomerGroupDrawer, CompanyUpdateDrawer } from "./";
+
+// "Approval settings" se quitó del menú: las aprobaciones están fuera del MVP
+// y el backend responde 404 salvo APPROVALS_ENABLED=true
+// (src/api/middlewares/approvals-disabled.ts). El drawer sigue en ./.
 
 export const CompanyActionsMenu = ({
   company,
@@ -22,7 +22,6 @@ export const CompanyActionsMenu = ({
 }) => {
   const [editOpen, setEditOpen] = useState(false);
   const [customerGroupOpen, setCustomerGroupOpen] = useState(false);
-  const [approvalSettingsOpen, setApprovalSettingsOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const { mutateAsync: mutateDelete, isPending: loadingDelete } =
     useDeleteCompany(company.id);
@@ -54,11 +53,6 @@ export const CompanyActionsMenu = ({
                 label: "Manage customer group",
                 onClick: () => setCustomerGroupOpen(true),
               },
-              {
-                icon: <LockClosedSolid />,
-                label: "Approval settings",
-                onClick: () => setApprovalSettingsOpen(true),
-              },
             ],
           },
           {
@@ -83,11 +77,6 @@ export const CompanyActionsMenu = ({
         customerGroups={customerGroups}
         open={customerGroupOpen}
         setOpen={setCustomerGroupOpen}
-      />
-      <CompanyApprovalSettingsDrawer
-        company={company}
-        open={approvalSettingsOpen}
-        setOpen={setApprovalSettingsOpen}
       />
       <DeletePrompt
         handleDelete={handleDelete}

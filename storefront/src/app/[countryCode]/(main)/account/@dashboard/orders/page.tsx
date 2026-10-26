@@ -1,5 +1,4 @@
 import { listApprovals } from "@/lib/data/approvals"
-import { retrieveCompany } from "@/lib/data/companies"
 import { retrieveCustomer } from "@/lib/data/customer"
 import { listOrdersWithCount } from "@/lib/data/orders"
 import DocumentFilters from "@/modules/account/components/document-filters"
@@ -43,25 +42,17 @@ export default async function Orders({
   const customer = await retrieveCustomer()
   const { orders, count } = await listOrdersWithCount(PAGE_SIZE, offset, dateFilters)
 
-  // El panel de "Pending Approvals" es solo para employees con rol
-  // company_admin (ver ensureRole("company_admin") en
-  // backend/src/api/store/approvals/middlewares.ts). Un customer sin
-  // company (company_id undefined) o sin ese rol recibe un error del
-  // backend acá — no debe tumbar el resto de la página, que sí tiene
-  // que mostrar sus propios pedidos sin restricción.
-  const companyId = customer?.employee?.company_id
-
-  const { approval_settings } =
-    (companyId ? await retrieveCompany(companyId).catch(() => null) : null) ||
-    {}
-
-  const approval_required =
-    approval_settings?.requires_admin_approval ||
-    approval_settings?.requires_sales_manager_approval
-
+  // Panel "Pending Approvals": los carritos del propio colaborador que
+  // esperan aprobación (GET /store/approvals filtra por el customer de la
+  // sesión). Se aprueban/rechazan solo desde el Admin (/admin/approvals).
+  // Antes la visibilidad salía de retrieveCompany() (approval_settings), pero
+  // /store/companies* quedó bloqueado (vulnerabilidad #1): si la company no
+  // exige aprobación no hay pendientes y el panel no se muestra.
   const { carts_with_approvals } = await listApprovals({
     status: ApprovalStatusType.PENDING,
   }).catch(() => ({ carts_with_approvals: [] }))
+
+  const approval_required = carts_with_approvals.length > 0
 
   return (
     <div className="w-full flex flex-col gap-y-4" data-testid="orders-page-wrapper">

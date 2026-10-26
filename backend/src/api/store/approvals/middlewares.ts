@@ -1,57 +1,22 @@
-import {
-  authenticate,
-  AuthenticatedMedusaRequest,
-  MedusaNextFunction,
-  MedusaResponse,
-  validateAndTransformBody,
-  validateAndTransformQuery,
-} from "@medusajs/framework";
+import { authenticate, validateAndTransformQuery } from "@medusajs/framework";
 import { MiddlewareRoute } from "@medusajs/medusa";
-import { ensureRole } from "../../middlewares/ensure-role";
-import { ApprovalType } from "../../../types/approval";
+import { deny } from "../../middlewares/deny";
 import { approvalTransformQueryConfig } from "./query-config";
-import { StoreGetApprovals, StoreUpdateApproval } from "./validators";
+import { StoreGetApprovals } from "./validators";
 
-const ensureApprovalType = async (
-  req: AuthenticatedMedusaRequest,
-  res: MedusaResponse,
-  next: MedusaNextFunction
-) => {
-  const { id } = req.params;
-
-  const query = req.scope.resolve("query");
-
-  const {
-    data: [approval],
-  } = await query.graph({
-    entity: "approval",
-    fields: ["type"],
-    filters: { id },
-  });
-
-  if (!approval) {
-    res.status(404).json({ message: "Approval not found" });
-    return;
-  }
-
-  const approvalType = approval.type as unknown as ApprovalType;
-
-  if (approvalType !== ApprovalType.ADMIN) {
-    res.status(403).json({ message: "Forbidden" });
-    return;
-  }
-
-  next();
-};
-
+/*
+Vulnerabilidad #1 (docs/vulnerabilidades.md):
+- GET /store/approvals: cualquier colaborador logueado, pero solo ve sus
+  propios carritos en aprobación (filtro por customer_id en route.ts). Lo usa
+  el panel "Pending Approvals" de /account/orders.
+- POST /store/approvals/:id (aprobar/rechazar): bloqueado. Las aprobaciones
+  se resuelven solo desde el Admin (/admin/approvals).
+*/
 export const storeApprovalsMiddlewares: MiddlewareRoute[] = [
   {
     method: "ALL",
     matcher: "/store/approvals*",
-    middlewares: [
-      authenticate("customer", ["session", "bearer"]),
-      ensureRole("company_admin"),
-    ],
+    middlewares: [authenticate("customer", ["session", "bearer"])],
   },
   {
     method: ["GET"],
@@ -67,8 +32,7 @@ export const storeApprovalsMiddlewares: MiddlewareRoute[] = [
     method: ["POST"],
     matcher: "/store/approvals/:id",
     middlewares: [
-      ensureApprovalType,
-      validateAndTransformBody(StoreUpdateApproval),
+      deny("Las aprobaciones se gestionan desde el Admin."),
     ],
   },
 ];

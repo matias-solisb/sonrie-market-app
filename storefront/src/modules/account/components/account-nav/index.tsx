@@ -8,20 +8,16 @@ import MapPin from "@/modules/common/icons/map-pin"
 import Package from "@/modules/common/icons/package"
 import User from "@/modules/common/icons/user"
 import { B2BCustomer } from "@/types/global"
-import { ArrowRightOnRectangle, BuildingStorefront, DocumentText } from "@medusajs/icons"
+import { ArrowRightOnRectangle, DocumentText } from "@medusajs/icons"
 import { clx } from "@medusajs/ui"
 import { useParams, usePathname } from "next/navigation"
 
 // Cotizaciones del B2B Starter: apagadas en el backend salvo QUOTES_ENABLED=true.
 const QUOTES_ENABLED = process.env.NEXT_PUBLIC_QUOTES_ENABLED === "true"
 
-const AccountNav = ({
-  customer,
-  numPendingApprovals,
-}: {
-  customer: B2BCustomer | null
-  numPendingApprovals: number
-}) => {
+// Company y Approvals se eliminaron (vulnerabilidad #1): la empresa, sus
+// colaboradores y las aprobaciones se gestionan solo desde el Admin.
+const AccountNav = ({ customer }: { customer: B2BCustomer | null }) => {
   const route = usePathname()
 
   const { countryCode } = useParams() as { countryCode: string }
@@ -68,21 +64,6 @@ const AccountNav = ({
                 </li>
                 <li>
                   <LocalizedClientLink
-                    href="/account/company"
-                    className="flex items-center justify-between py-4 border-b border-gray-200 px-8"
-                    data-testid="company-link"
-                  >
-                    <>
-                      <div className="flex items-center gap-x-2">
-                        <BuildingStorefront width={20} />
-                        <span>Company</span>
-                      </div>
-                      <ChevronDown className="transform -rotate-90" />
-                    </>
-                  </LocalizedClientLink>
-                </li>
-                <li>
-                  <LocalizedClientLink
                     href="/account/addresses"
                     className="flex items-center justify-between py-4 border-b border-gray-200 px-8"
                     data-testid="addresses-link"
@@ -122,21 +103,6 @@ const AccountNav = ({
                     <ChevronDown className="transform -rotate-90" />
                   </LocalizedClientLink>
                 </li>
-                {customer?.employee?.is_admin && (
-                  <li>
-                    <LocalizedClientLink
-                      href="/account/approvals"
-                      className="flex items-center justify-between py-4 border-b border-gray-200 px-8"
-                      data-testid="approvals-link"
-                    >
-                      <div className="flex items-center gap-x-2">
-                        <FilePlus size={16} />
-                        <span>Approvals</span>
-                      </div>
-                      <ChevronDown className="transform -rotate-90" />
-                    </LocalizedClientLink>
-                  </li>
-                )}
                 {/* Cotizaciones desactivadas en el backend (quotes-disabled.ts) */}
                 {QUOTES_ENABLED && (
                 <li>
@@ -195,15 +161,6 @@ const AccountNav = ({
             </li>
             <li>
               <AccountNavLink
-                href="/account/company"
-                route={route!}
-                data-testid="company-link"
-              >
-                Company
-              </AccountNavLink>
-            </li>
-            <li>
-              <AccountNavLink
                 href="/account/addresses"
                 route={route!}
                 data-testid="addresses-link"
@@ -229,22 +186,6 @@ const AccountNav = ({
                 Documentos
               </AccountNavLink>
             </li>
-            {customer?.employee?.is_admin && (
-              <li>
-                <AccountNavLink
-                  href="/account/approvals"
-                  route={route!}
-                  data-testid="approvals-link"
-                >
-                  Approvals{" "}
-                  {numPendingApprovals > 0 && (
-                    <span className="bg-blue-500 text-white text-xs px-1.5 py-px rounded-full">
-                      {numPendingApprovals}
-                    </span>
-                  )}
-                </AccountNavLink>
-              </li>
-            )}
             {QUOTES_ENABLED && (
             <li>
               <AccountNavLink

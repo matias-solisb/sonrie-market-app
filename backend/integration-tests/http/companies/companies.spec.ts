@@ -14,17 +14,20 @@ jest.setTimeout(60 * 1000);
 
 La company desde la Store API (npm run test:integration:http).
 
-Reemplaza los tests originales del B2B Starter, que creaban, editaban y
-borraban companies desde la tienda con cualquier customer logueado. En
-Sonríe Market hay una sola company (src/utils/sonrie-company.ts) y un
-colaborador común (employee con is_admin: false) solo puede leerla:
+Vulnerabilidad #1 (docs/vulnerabilidades.md): las rutas /store/companies*
+exponían a cualquier colaborador los datos de todos los demás (nombre,
+correo, teléfono, cupo). En Sonríe Market la company se gestiona solo desde
+el Admin, así que toda la Store API de companies responde 403:
 
-- GET  /store/companies/:id                 → 200
-- POST /store/companies                     → 403 (nadie crea companies)
-- POST /store/companies/:id                 → 403 (solo company_admin)
-- DELETE /store/companies/:id               → 403 (nadie borra companies)
-- POST /store/companies/:id/employees       → 403 (solo company_admin)
-- POST /store/companies/:id/employees/:id   → 403 (no puede hacerse admin)
+- GET  /store/companies/:id                          → 403 (con o sin fields)
+- GET  /store/companies/:id/employees                → 403
+- GET  /store/companies/:id/employees/:id            → 403
+- POST /store/companies                              → 403
+- POST /store/companies/:id                          → 403
+- DELETE /store/companies/:id                        → 403
+- POST /store/companies/:id/employees                → 403
+- POST /store/companies/:id/employees/:id            → 403
+- POST /store/companies/:id/approval-settings        → 403
 
 */
 
@@ -64,19 +67,44 @@ medusaIntegrationTestRunner({
       employeeId = session.employee.id;
     });
 
-    it("GET /store/companies/:id devuelve la company", async () => {
-      const res = await api.get(`/store/companies/${company.id}`, storeHeaders);
+    it.each([
+      ["la company", () => `/store/companies/${company.id}`],
+      [
+        "la company con *employees.customer",
+        () => `/store/companies/${company.id}?fields=*employees.customer`,
+      ],
+      ["los employees", () => `/store/companies/${company.id}/employees`],
+      [
+        "un employee",
+        () => `/store/companies/${company.id}/employees/${employeeId}`,
+      ],
+      ["una company inexistente", () => `/store/companies/does-not-exist`],
+    ])("GET de %s responde 403", async (_label, url) => {
+      const res = await api.get(url(), storeHeaders).catch((e) => e.response);
 
-      expect(res.status).toBe(200);
-      expect(res.data.company.id).toBe(company.id);
+      expect(res.status).toBe(403);
+      expect(JSON.stringify(res.data)).not.toContain("juana.perez");
     });
 
-    it("GET de una company inexistente responde not_found", async () => {
-      const { response } = await api
-        .get(`/store/companies/does-not-exist`, storeHeaders)
-        .catch((e) => e);
+    it("sin sesión también responde 403", async () => {
+      const { Authorization, ...headers } = storeHeaders.headers;
+      const code = await status(
+        api.get(`/store/companies/${company.id}/employees`, { headers })
+      );
 
-      expect(response.data).toMatchObject({ type: "not_found" });
+      expect(code).toBe(403);
+    });
+
+    it("POST approval-settings: un colaborador no puede cambiarlas", async () => {
+      const code = await status(
+        api.post(
+          `/store/companies/${company.id}/approval-settings`,
+          { requires_admin_approval: true },
+          storeHeaders
+        )
+      );
+
+      expect(code).toBe(403);
     });
 
     it("POST /store/companies: un colaborador no puede crear companies", async () => {

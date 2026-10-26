@@ -16,7 +16,7 @@ mostrar ningún menú a la izquierda), así que el contenido ahora ocupa todo
 el ancho disponible tanto con sesión como sin ella.
 
 Nota: esto deja sin ningún link de navegación visible a las páginas
-Company/Addresses/Quotes/Approvals del B2B Starter original (antes solo
+Addresses/Quotes del B2B Starter original (antes solo
 alcanzables desde AccountNav) — siguen existiendo y son alcanzables por
 URL directa, pero no aparecen en ningún menú. Si en algún momento se
 vuelven a necesitar desde la UI, hay que agregarlas a `AccountMenu` o a

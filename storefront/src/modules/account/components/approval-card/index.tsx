@@ -1,6 +1,5 @@
 import { retrieveCart } from "@/lib/data/cart"
 import { convertToLocale } from "@/lib/util/money"
-import ApprovalCardActions from "@/modules/account/components/approval-card-actions"
 import CalendarIcon from "@/modules/common/icons/calendar"
 import DocumentIcon from "@/modules/common/icons/document"
 import { ApprovalStatusType } from "@/types/approval"
@@ -139,9 +138,6 @@ export default async function ApprovalCard({
           <span className="px-2">{`${numberOfLines} ${
             numberOfLines > 1 ? "items" : "item"
           }`}</span>
-          {type === "admin" && (
-            <ApprovalCardActions cartWithApprovals={cartWithApprovals} />
-          )}
         </div>
       </div>
     </Container>

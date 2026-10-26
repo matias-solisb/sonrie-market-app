@@ -199,8 +199,7 @@ const ProfileCard = ({ customer }: { customer: B2BCustomer }) => {
   const companyId = customer.employee?.company?.id
 
   // Solo un employee admin (`employee.is_admin`, el mismo campo que ya usa
-  // el resto del sitio para permisos — ver `account-nav`,
-  // `approval-settings-card`, `employees-card`, checkout) puede agregar o
+  // el resto del sitio para permisos — ver checkout) puede agregar o
   // editar la dirección de la empresa. Un cliente normal la ve de solo
   // lectura acá; si no hay dirección todavía, no ve un link para
   // agregarla (eso vive en `/account/addresses`, que también quedó
