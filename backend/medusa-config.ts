@@ -6,8 +6,13 @@ import { BENEFIT_BUDGET_MODULE } from "./src/modules/benefit-budget";
 import { PICKUP_SCHEDULING_MODULE } from "./src/modules/pickup-scheduling";
 import { loadEnv, defineConfig, Modules } from "@medusajs/framework/utils";
 import { emailProviderId } from "./src/utils/email-delivery";
+import { assertEnv } from "./src/utils/env-validation";
 
 loadEnv(process.env.NODE_ENV!, process.cwd());
+
+// Vulnerabilidades #4 y #9: en producción no arranca con secretos ausentes,
+// de ejemplo o cortos, ni sin CORS/DATABASE_URL (ver src/utils/env-validation.ts).
+assertEnv();
 
 /**
  * Provider de correo del Notification Module según NOTIFICATION_PROVIDER
@@ -47,8 +52,10 @@ module.exports = defineConfig({
       storeCors: process.env.STORE_CORS!,
       adminCors: process.env.ADMIN_CORS!,
       authCors: process.env.AUTH_CORS!,
-      jwtSecret: process.env.JWT_SECRET || "supersecret",
-      cookieSecret: process.env.COOKIE_SECRET || "supersecret",
+      // Sin fallback propio: assertEnv() exige valores fuertes en producción.
+      // En desarrollo, si faltan, Medusa usa su default y lo advierte.
+      jwtSecret: process.env.JWT_SECRET,
+      cookieSecret: process.env.COOKIE_SECRET,
       // Qué provider de auth puede usar cada actor (rut-auth, paso 3):
       // los colaboradores (customer) solo entran con RUT + clave; el Admin
       // (user) sigue con correo + clave. Con esto, POST
