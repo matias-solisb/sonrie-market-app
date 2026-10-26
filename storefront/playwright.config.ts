@@ -34,10 +34,14 @@ export default defineConfig({
         // Inicia sesión una vez y guarda la sesión en playwright/.auth/user.json
         // (ya ignorado por git). Los specs que la necesitan la cargan con test.use().
         { name: "setup", testMatch: /auth\.setup\.ts/ },
+        // Tests puros (*.unit.spec.ts): sin navegador, sin backend ni login.
+        //   npx playwright test --project=unit
+        { name: "unit", testMatch: /\.unit\.spec\.ts$/ },
         {
             name: "chromium",
             use: { ...devices["Desktop Chrome"] },
             dependencies: ["setup"],
+            testIgnore: /\.unit\.spec\.ts$/,
         },
     ],
 

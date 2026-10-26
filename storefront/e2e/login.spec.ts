@@ -256,9 +256,12 @@ test.describe("login exitoso", () => {
         await expect(page).toHaveURL(/\/cl\/(store|products)(\?|$)/, { timeout: 30_000 })
     })
 
-    // getSafeRedirect() solo acepta rutas internas: "/..." sin "//" ni "://"
-    // Estos dos los rechaza → no hay redirección y se llega al home.
-    for (const evil of ["https://evil.com", "//evil.com"]) {
+    // getSafeRedirect() (lib/util/safe-redirect.ts) solo acepta rutas internas.
+    // Todos estos los rechaza → no hay redirección y se llega al home.
+    // "/\\evil.com" y "/<tab>/evil.com" son la vulnerabilidad #5: el filtro
+    // anterior los aceptaba y el navegador los resuelve a https://evil.com/.
+    // Casos puros (sin navegador): safe-redirect.unit.spec.ts.
+    for (const evil of ["https://evil.com", "//evil.com", "/\\evil.com", "/\t/evil.com"]) {
         test(`no redirige fuera del sitio con redirect_to=${evil}`, async ({ page }) => {
             await login.goto(evil)
             await login.login(USER_RUT!, USER_PASSWORD!)
@@ -267,17 +270,6 @@ test.describe("login exitoso", () => {
             expect(new URL(page.url()).host).toBe("localhost:8000")
         })
     }
-
-    // "/\evil.com" SÍ pasa el filtro de getSafeRedirect (empieza con "/",
-    // no con "//", y no tiene "://"). Lo que importa es no terminar fuera del sitio.
-    test("redirect_to=/\\evil.com no saca al usuario del sitio", async ({ page }) => {
-        await login.goto("/\\evil.com")
-        await login.login(USER_RUT!, USER_PASSWORD!)
-
-        // Espera a que el action termine (el botón deja de decir "Ingresando...")
-        await expect(page.getByRole("button", { name: "Ingresando..." })).toHaveCount(0, { timeout: 30_000 })
-        expect(new URL(page.url()).host).toBe("localhost:8000")
-    })
 })
 
 // ─────────────────────────────────────────────────────────────

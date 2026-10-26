@@ -12,6 +12,7 @@ import { retrieveCart, updateCart } from "./cart"
 import { checkNewPassword } from "@/lib/util/password-policy"
 import { sessionClosedUrl } from "@/lib/util/session"
 import { forwardedForHeaders } from "@/lib/util/forwarded-for"
+import { getSafeRedirect } from "@/lib/util/safe-redirect"
 import {
   getAuthHeaders,
   getCacheOptions,
@@ -95,15 +96,6 @@ export const updateCustomer = async (body: HttpTypes.StoreUpdateCustomer) => {
   revalidateTag(cacheTag)
 
   return updateRes
-}
-
-// Evita open redirects: solo se sigue una ruta interna que empiece con "/"
-// (y no "//", que el navegador puede interpretar como otro host).
-function getSafeRedirect(value: FormDataEntryValue | null): string | null {
-  if (typeof value !== "string" || !value) return null
-  if (!value.startsWith("/") || value.startsWith("//")) return null
-  if (value.includes("://")) return null
-  return value
 }
 
 /*
@@ -284,10 +276,9 @@ export async function login(_currentState: unknown, formData: FormData) {
   // Si el middleware nos mandó acá por falta de sesión (home o catálogo
   // protegidos), volvemos a la página que se quería visitar. Si no, al home:
   // ahí la franja de perfil incompleto avisa si falta algún dato.
+  // getSafeRedirect: solo rutas internas (vulnerabilidad #5, open redirect).
   const redirectTo = getSafeRedirect(formData.get("redirect_to"))
-  console.log('redirectTo', redirectTo)
   redirect(redirectTo || `/${countryCode}`)
-  
 }
 
 // Estado que devuelven `requestPasswordReset` y `resetPassword` a
