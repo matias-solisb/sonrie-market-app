@@ -2,6 +2,8 @@ import type { MedusaRequest } from "@medusajs/framework";
 import { ContainerRegistrationKeys } from "@medusajs/framework/utils";
 import { EstadoBooking, EstadoRetiro } from "../../../../modules/pickup-scheduling/types";
 import { estadoRetiro } from "../../../../modules/pickup-scheduling/utils/estado-retiro";
+import { RUT_AUTH_PROVIDER_ID } from "../../../../modules/rut-auth/config";
+import { formatRut } from "../../../../utils/rut";
 
 /*
 
@@ -9,9 +11,11 @@ Arma las filas de "Retiros del día" (y del widget del pedido): el cupo +
 lo que el operador necesita para entregar sin equivocarse (n.º de pedido,
 nombre, RUT, productos).
 
-RUT: hoy no existe un campo propio (llega con rut-auth / employee-sync). Se
-lee de `customer.metadata.rut` si está; si no, la pantalla muestra el
-correo. Cuando exista el campo definitivo, cambiar solo `rutDe`.
+RUT: sale de la identidad `rut` del colaborador (`provider_identity.
+entity_id`, la que usa para entrar), NUNCA de `customer.metadata`: el
+colaborador puede editar su propia metadata desde la Store API y así
+hacerse pasar por otro en el mostrador (vulnerabilidad #6). Un customer sin
+identidad `rut` muestra el correo.
 
 */
 
@@ -60,7 +64,7 @@ const ORDER_FIELDS = [
   "customer.first_name",
   "customer.last_name",
   "customer.email",
-  "customer.metadata",
+  "customer.id",
   "shipping_address.first_name",
   "shipping_address.last_name",
   "items.id",
@@ -76,9 +80,43 @@ export const cantidadDe = (item: any): number => {
   return Number.isFinite(n) ? n : 0;
 };
 
-const rutDe = (order: any): string | null => {
-  const rut = order?.customer?.metadata?.rut;
-  return typeof rut === "string" && rut.trim() ? rut.trim() : null;
+/*
+Fragmento SQL: identidades `rut` vigentes con su customer. El vínculo
+customer ↔ identidad vive en `auth_identity.app_metadata.customer_id` (sin
+module link), igual que en utils/rut-identity.ts.
+*/
+const RUT_IDENTITY_JOIN = `
+  from provider_identity pi
+  join auth_identity ai on ai.id = pi.auth_identity_id
+ where pi.provider = ?
+   and pi.deleted_at is null
+   and ai.deleted_at is null`;
+
+/** RUT formateado ("12.345.678-5") por id de customer, desde la identidad `rut`. */
+const rutsPorCustomer = async (
+  req: MedusaRequest,
+  customerIds: string[]
+): Promise<Map<string, string>> => {
+  const ruts = new Map<string, string>();
+  if (!customerIds.length) {
+    return ruts;
+  }
+
+  const pg = req.scope.resolve(ContainerRegistrationKeys.PG_CONNECTION);
+  const { rows } = await pg.raw(
+    `select ai.app_metadata->>'customer_id' as customer_id, pi.entity_id
+     ${RUT_IDENTITY_JOIN}
+       and ai.app_metadata->>'customer_id' in (${customerIds.map(() => "?").join(", ")})`,
+    [RUT_AUTH_PROVIDER_ID, ...customerIds]
+  );
+
+  for (const r of rows as { customer_id: string; entity_id: string }[]) {
+    const rut = formatRut(r.entity_id);
+    if (rut) {
+      ruts.set(r.customer_id, rut);
+    }
+  }
+  return ruts;
 };
 
 const nombreDe = (order: any): string | null => {
@@ -114,6 +152,13 @@ export const toRetiros = async (
     req,
     bookings.map((b) => b.order_id).filter(Boolean) as string[]
   );
+  const ruts = await rutsPorCustomer(req, [
+    ...new Set(
+      [...orders.values()]
+        .map((o) => o?.customer?.id)
+        .filter(Boolean) as string[]
+    ),
+  ]);
 
   return bookings.map((b) => {
     const order = b.order_id ? orders.get(b.order_id) : null;
@@ -141,7 +186,7 @@ export const toRetiros = async (
       estado_retiro: estadoRetiro(b, hoy),
       colaborador: {
         nombre: nombreDe(order),
-        rut: rutDe(order),
+        rut: (order?.customer?.id && ruts.get(order.customer.id)) || null,
         email: order?.customer?.email ?? order?.email ?? null,
       },
       productos,
@@ -184,16 +229,16 @@ cargar cupos ni pedidos completos (eso se hace después, solo para la
 página que se muestra).
 
 - N.º de pedido ("1234" o "#1234"): directo por display_id.
-- RUT (desde 4 dígitos, con o sin puntos y guion): clientes cuyo
-  `metadata.rut`, sin puntos ni guion, empieza con lo escrito.
+- RUT (desde 4 dígitos, con o sin puntos y guion): clientes cuya identidad
+  `rut` (`provider_identity.entity_id`), sin guion, empieza con lo escrito.
+  No se usa `customer.metadata`: la edita el propio colaborador (#6).
 - Nombre o correo (desde 2 caracteres): clientes cuyo nombre completo o
   correo contiene lo escrito.
 
 Un texto solo de dígitos puede ser n.º de pedido o RUT sin puntos: se
 buscan ambos. Los clientes se buscan con SQL sobre la tabla `customer`
-(PG_CONNECTION) porque el RUT vive en metadata (JSON) y hay que compararlo
-sin puntos ni guion; cuando exista el campo definitivo (rut-auth), cambiar
-solo esta función.
+(PG_CONNECTION) porque el RUT vive en la identidad `rut` (Auth Module, sin
+module link al customer) y hay que compararlo sin puntos ni guion.
 
 */
 export const buscarPedidos = async (
@@ -229,12 +274,16 @@ export const buscarPedidos = async (
       `SELECT id FROM customer
         WHERE deleted_at IS NULL
           AND (
-            (? AND regexp_replace(lower(coalesce(metadata->>'rut', '')), '[^0-9k]', '', 'g') LIKE ?)
+            (? AND exists (
+              select 1 ${RUT_IDENTITY_JOIN}
+                 and ai.app_metadata->>'customer_id' = customer.id
+                 and regexp_replace(lower(pi.entity_id), '[^0-9k]', '', 'g') LIKE ?
+            ))
             OR (? AND lower(trim(coalesce(first_name, '') || ' ' || coalesce(last_name, ''))) LIKE ?)
             OR (? AND lower(coalesce(email, '')) LIKE ?)
           )
         LIMIT 200`,
-      [conRut, `${likeSeguro(rut)}%`, conTexto, patron, conTexto, patron]
+      [conRut, RUT_AUTH_PROVIDER_ID, `${likeSeguro(rut)}%`, conTexto, patron, conTexto, patron]
     );
     const clientes = (rows as { id: string }[]).map((r) => r.id);
 

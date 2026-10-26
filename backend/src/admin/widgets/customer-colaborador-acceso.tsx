@@ -13,6 +13,7 @@ import {
   useColaborador,
   useSetColaboradorHabilitacion,
 } from "../hooks/api/colaboradores";
+import { formatRut } from "../../utils/rut";
 
 /*
 
@@ -38,11 +39,6 @@ const fecha = (iso: string) =>
     timeStyle: "short",
     timeZone: "America/Santiago",
   }).format(new Date(iso));
-
-const formatRut = (rut: string) => {
-  const [body, dv] = rut.split("-");
-  return `${body.replace(/\B(?=(\d{3})+(?!\d))/g, ".")}-${dv}`;
-};
 
 const CustomerColaboradorAccesoWidget = ({
   data: customer,
@@ -114,7 +110,7 @@ const CustomerColaboradorAccesoWidget = ({
         <>
           <div className="grid grid-cols-2 gap-y-2 px-6 py-4">
             <Text size="small" weight="plus">RUT</Text>
-            <Text size="small" data-testid="colaborador-rut">{formatRut(colaborador.rut)}</Text>
+            <Text size="small" data-testid="colaborador-rut">{formatRut(colaborador.rut) ?? colaborador.rut}</Text>
 
             <Text size="small" weight="plus">Contraseña</Text>
             <Text size="small">

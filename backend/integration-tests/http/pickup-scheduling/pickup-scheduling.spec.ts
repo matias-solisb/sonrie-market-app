@@ -3,7 +3,8 @@ import { Modules } from "@medusajs/framework/utils";
 import { PICKUP_SCHEDULING_MODULE } from "../../../src/modules/pickup-scheduling";
 import PickupSchedulingModuleService from "../../../src/modules/pickup-scheduling/service";
 import { releasePickupBookingWorkflow } from "../../../src/workflows/pickup-scheduling/workflows";
-import { adminHeaders } from "../../utils/admin";
+import { adminHeaders, rutDePrueba } from "../../utils/admin";
+import { formatRut } from "../../../src/utils/rut";
 import {
   createPickupSite,
   getPickupSlots,
@@ -764,9 +765,13 @@ medusaIntegrationTestRunner({
         });
 
         it("busca por RUT con o sin puntos, nombre, correo o n.º de pedido, y pagina los resultados", async () => {
+          // El RUT es el de la identidad `rut` del colaborador (setupShop lo
+          // crea con rutDePrueba("test@email.com")), no customer.metadata.
+          const rut = formatRut(rutDePrueba("test@email.com"))!; // "13.924.737-X"
+          const cuerpo = rut.split("-")[0].replace(/\./g, "");
           await api.post(
             `/admin/customers/${shop.customerId}`,
-            { first_name: "Ana María", last_name: "Pérez", metadata: { rut: "12.345.678-5" } },
+            { first_name: "Ana María", last_name: "Pérez" },
             adminHeaders
           );
           const { order } = await pedidoAgendado(1);
@@ -778,11 +783,11 @@ medusaIntegrationTestRunner({
               )
             ).data;
 
-          for (const texto of ["12345678", "12.345.678-5", "12.345", "ana maría", "PÉREZ", order.email.slice(0, 6), `#${order.display_id}`]) {
+          for (const texto of [cuerpo, rut, rut.slice(0, 6), "ana maría", "PÉREZ", order.email.slice(0, 6), `#${order.display_id}`]) {
             const r = await buscar(texto);
             expect({ texto, ids: r.retiros.map((x: any) => x.order_id) }).toEqual({ texto, ids: [order.id] });
             expect(r.paginacion).toMatchObject({ pagina: 1, total: 1 });
-            expect(r.retiros[0].colaborador).toMatchObject({ rut: "12.345.678-5", nombre: "Ana María Pérez" });
+            expect(r.retiros[0].colaborador).toMatchObject({ rut, nombre: "Ana María Pérez" });
           }
 
           // Muy corto o sin coincidencias: vacío (el RUT necesita 4 dígitos)
@@ -794,6 +799,32 @@ medusaIntegrationTestRunner({
 
           // Un "%" no actúa como comodín
           expect((await buscar("%")).retiros).toEqual([]);
+        });
+
+        it("ignora customer.metadata.rut: no se busca ni se muestra (#6)", async () => {
+          const rut = formatRut(rutDePrueba("test@email.com"))!;
+          // Aunque la metadata tenga otro RUT (ahora solo el Admin puede
+          // escribirla), manda la identidad `rut`.
+          await api.post(
+            `/admin/customers/${shop.customerId}`,
+            { metadata: { rut: "12.345.678-5" } },
+            adminHeaders
+          );
+          const { order } = await pedidoAgendado(1);
+          const buscar = async (texto: string) =>
+            (
+              await api.get(
+                `/admin/pickup-scheduling/retiros?stock_location_id=${shop.site.id}&q=${encodeURIComponent(texto)}`,
+                adminHeaders
+              )
+            ).data;
+
+          for (const texto of ["12345678", "12.345.678-5"]) {
+            expect({ texto, n: (await buscar(texto)).retiros.length }).toEqual({ texto, n: 0 });
+          }
+
+          const r = await buscar(`#${order.display_id}`);
+          expect(r.retiros[0].colaborador.rut).toBe(rut);
         });
       });
     });

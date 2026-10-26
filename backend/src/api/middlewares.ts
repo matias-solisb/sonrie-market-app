@@ -8,6 +8,7 @@ import { adminMiddlewares } from "./admin/middlewares";
 import { quotesDisabledMiddlewares } from "./middlewares/quotes-disabled";
 import { approvalsDisabledMiddlewares } from "./middlewares/approvals-disabled";
 import { selfSignupDisabledMiddlewares } from "./middlewares/self-signup-disabled";
+import { customerMetadataLockedMiddlewares } from "./middlewares/customer-metadata-locked";
 import { adminInviteEmailMiddlewares } from "./middlewares/admin-invite-email";
 import { accountStateMiddlewares } from "./middlewares/account-state";
 import { resetPasswordRutMiddlewares } from "./middlewares/reset-password-rut";
@@ -21,6 +22,8 @@ export default defineMiddlewares({
     ...approvalsDisabledMiddlewares,
     // Sin autorregistro de clientes (ver self-signup-disabled.ts)
     ...selfSignupDisabledMiddlewares,
+    // El colaborador no edita su metadata (ver customer-metadata-locked.ts, #6)
+    ...customerMetadataLockedMiddlewares,
     // Correo válido en las invitaciones del Admin (ver admin-invite-email.ts)
     ...adminInviteEmailMiddlewares,
     // Recuperación de contraseña: RUT normalizado (rut-auth, paso 8)

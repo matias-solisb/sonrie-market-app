@@ -92,6 +92,22 @@ export const initialPasswordFromRut = (rut: string): string => {
 };
 
 /**
+ * RUT para mostrar: "12345678-5" → "12.345.678-5". Un valor que no es RUT
+ * válido devuelve null. Lo usan las pantallas del Admin (widget del
+ * colaborador y "Retiros del día").
+ */
+export const formatRut = (rut: unknown): string | null => {
+  const normalized = normalizeRut(rut);
+
+  if (!normalized) {
+    return null;
+  }
+
+  const [body, dv] = normalized.split("-");
+  return `${body.replace(/\B(?=(\d{3})+(?!\d))/g, ".")}-${dv}`;
+};
+
+/**
  * RUT enmascarado para logs: "12******-5". Deja ver los 2 primeros dígitos y
  * el DV, suficiente para orientarse sin exponer el RUT ni la clave inicial.
  * Un valor que no es RUT válido se reemplaza entero.
