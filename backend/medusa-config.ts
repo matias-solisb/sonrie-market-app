@@ -1,6 +1,7 @@
 import { QUOTE_MODULE } from "./src/modules/quote";
 import { APPROVAL_MODULE } from "./src/modules/approval";
 import { BANNERS_MODULE } from "./src/modules/banners";
+import { ANNOUNCEMENTS_MODULE } from "./src/modules/announcements";
 import { COMPANY_MODULE } from "./src/modules/company";
 import { BENEFIT_BUDGET_MODULE } from "./src/modules/benefit-budget";
 import { PICKUP_SCHEDULING_MODULE } from "./src/modules/pickup-scheduling";
@@ -78,6 +79,9 @@ module.exports = defineConfig({
     },
     [BANNERS_MODULE]: {
       resolve: "./modules/banners",
+    },
+    [ANNOUNCEMENTS_MODULE]: {
+      resolve: "./modules/announcements",
     },
     [BENEFIT_BUDGET_MODULE]: {
       resolve: "./modules/benefit-budget",

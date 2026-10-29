@@ -1,3 +1,4 @@
+import { listAnnouncements } from "@/lib/data/announcements"
 import { retrieveCart } from "@/lib/data/cart"
 import { isProfileBannerDismissed } from "@/lib/data/cookies"
 import {
@@ -6,6 +7,7 @@ import {
 } from "@/lib/data/customer"
 import { listCartFreeShippingPrices } from "@/lib/data/fulfillment"
 import { getBaseURL } from "@/lib/util/env"
+import AnnouncementBar from "@/modules/layout/components/announcement-bar"
 import CartMismatchBanner from "@/modules/layout/components/cart-mismatch-banner"
 import ProfileIncompleteBanner from "@/modules/layout/components/profile-incomplete-banner"
 import Footer from "@/modules/layout/templates/footer"
@@ -28,8 +30,11 @@ export default async function PageLayout(props: {
   const { countryCode } = await props.params
   await enforceAccountState(countryCode)
 
+  // La barra de anuncios no depende del carrito: se pide en paralelo.
+  const announcementsPromise = listAnnouncements()
   const customer = await retrieveCustomer().catch(() => null)
   const cart = await retrieveCart()
+  const announcements = await announcementsPromise
   let freeShippingPrices: StoreFreeShippingPrice[] = []
 
   if (cart) {
@@ -38,6 +43,10 @@ export default async function PageLayout(props: {
 
   return (
     <>
+      {/* Barra de anuncios del Admin: antes del header sticky, así se va
+          con el scroll (ver announcement-bar/index.tsx). */}
+      <AnnouncementBar data={announcements} isLoggedIn={!!customer} />
+
       <NavigationHeader />
 
       {/* La barra promocional de fábrica del B2B Starter ("Build your own

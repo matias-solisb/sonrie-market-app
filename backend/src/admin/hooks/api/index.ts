@@ -10,3 +10,4 @@ export * from "./banners";
 export * from "./benefit-budget";
 export * from "./pickup-scheduling";
 export * from "./colaboradores";
+export * from "./announcements";
